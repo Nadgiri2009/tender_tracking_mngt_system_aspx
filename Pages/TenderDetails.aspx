@@ -10,7 +10,7 @@
             <asp:HyperLink ID="EditTenderLink" runat="server" CssClass="button secondary" Visible="false">Edit draft</asp:HyperLink>
             <asp:Button ID="DeleteTenderButton" runat="server" Text="Delete draft" CssClass="button danger" Visible="false"
                 OnClick="DeleteTenderButton_Click" OnClientClick="return confirm('Delete this draft tender? This action cannot be undone.');" />
-            <a href="Tenders.aspx" class="button secondary">Back to tenders</a>
+            <asp:HyperLink ID="BackToTendersLink" runat="server" CssClass="button secondary">Back to tenders</asp:HyperLink>
         </div>
     </div>
     <asp:Literal ID="ApplicationMessage" runat="server" />
@@ -18,6 +18,9 @@
     <section class="card">
         <h2>Details</h2>
         <p><strong>Description</strong><br /><asp:Literal ID="Description" runat="server" /></p>
+        <asp:Panel ID="EligibilityCriteriaPanel" runat="server" Visible="false">
+            <p><strong>Eligibility criteria</strong><br /><asp:Literal ID="EligibilityCriteria" runat="server" /></p>
+        </asp:Panel>
         <div class="row">
             <p><strong>Tender Method</strong><br /><asp:Literal ID="TenderType" runat="server" /></p>
             <p><strong>Tender Category</strong><br /><asp:Literal ID="TenderCategory" runat="server" /></p>
@@ -32,6 +35,25 @@
             <p><strong>Status</strong><br /><span class="badge"><asp:Literal ID="CurrentStatus" runat="server" /></span></p>
         </div>
     </section>
+    <asp:Panel ID="ApplicationRequirementsPanel" runat="server" CssClass="card" Visible="false">
+        <h2>Application document requirements</h2>
+        <div class="table-wrap">
+            <asp:GridView ID="ApplicationRequirementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                EmptyDataText="No additional application documents are configured.">
+                <Columns>
+                    <asp:BoundField DataField="DocumentType" HeaderText="Document" />
+                    <asp:BoundField DataField="Description" HeaderText="Details" NullDisplayText="—" />
+                    <asp:TemplateField HeaderText="Required"><ItemTemplate>
+                        <%# Convert.ToBoolean(Eval("IsMandatory")) ? "Yes" : "Optional" %>
+                    </ItemTemplate></asp:TemplateField>
+                    <asp:BoundField DataField="AllowedExtensions" HeaderText="Accepted files" NullDisplayText="PDF, Office, JPEG, PNG" />
+                    <asp:TemplateField HeaderText="Maximum size"><ItemTemplate>
+                        <%# (Convert.ToInt32(Eval("MaxFileSizeBytes")) / 1000000.0).ToString("0.#") %> MB
+                    </ItemTemplate></asp:TemplateField>
+                </Columns>
+            </asp:GridView>
+        </div>
+    </asp:Panel>
     <section class="card">
         <h2>Bill of Quantities</h2>
         <div class="table-wrap">

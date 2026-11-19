@@ -32,6 +32,20 @@ namespace DepartmentModule.Pages
                 return;
             }
 
+            long shortfallSubmissionId = QueryLongId("shortfallSubmissionId");
+            if (shortfallSubmissionId > 0)
+            {
+                DownloadShortfallSubmission(shortfallSubmissionId);
+                return;
+            }
+
+            long generatedDocumentId = QueryLongId("generatedDocumentId");
+            if (generatedDocumentId > 0)
+            {
+                DownloadGeneratedDocument(generatedDocumentId);
+                return;
+            }
+
             int technicalBidDocumentId = QueryId("technicalBidDocumentId");
             if (technicalBidDocumentId > 0)
             {
@@ -241,7 +255,7 @@ namespace DepartmentModule.Pages
 
         private void DownloadTechnicalBidChildDocument(int documentId)
         {
-            bool isContractor = HasAnyRole("Contractor");
+            bool isContractor = HasAnyRole("ExternalBidder", "Contractor");
             bool isSystemAdministrator = HasPermission("system.admin");
             bool isAssignedReviewer = HasPermission("document.read.assigned");
             bool isLegacyReviewer = HasAnyRole("TenderSection", "TenderCommittee", "CAFOOfficer");
@@ -318,6 +332,141 @@ namespace DepartmentModule.Pages
             SendStoredFile(storedPath, fileName);
         }
 
+        private void DownloadShortfallSubmission(long submissionId)
+        {
+            bool isExternalBidder = HasAnyRole("ExternalBidder");
+            bool isSystemAdministrator = HasPermission("system.admin");
+            bool hasDocumentPermission = HasPermission("document.read.assigned");
+            if (CurrentUserId <= 0 ||
+                (!isExternalBidder && !isSystemAdministrator && !hasDocumentPermission))
+            {
+                NotFound();
+                return;
+            }
+
+            string storedPath, fileName;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT submission.FilePath,submission.FileName
+                      FROM dbo.TenderShortfallSubmissions submission
+                      INNER JOIN dbo.TenderShortfallItems item
+                        ON item.ShortfallItemId=submission.ShortfallItemId
+                      INNER JOIN dbo.TenderShortfalls shortfall
+                        ON shortfall.ShortfallId=item.ShortfallId
+                      INNER JOIN dbo.Tender t ON t.TenderId=shortfall.TenderId AND t.IsDeleted=0
+                      INNER JOIN dbo.Contractors c ON c.ContractorId=shortfall.ContractorId
+                      WHERE submission.ShortfallSubmissionId=@SubmissionId
+                        AND
+                        (
+                            @IsSystemAdministrator=1
+                            OR (@IsExternalBidder=1 AND c.UserId=@UserId)
+                            OR (@HasDocumentPermission=1 AND
+                                (@IsDepartmentScopedRole=0 OR
+                                 (@DepartmentId IS NOT NULL AND t.DepartmentId=@DepartmentId)))
+                        );", connection))
+                {
+                    ModuleDb.AddParameter(command, "@SubmissionId", SqlDbType.BigInt, submissionId);
+                    ModuleDb.AddParameter(command, "@IsSystemAdministrator", SqlDbType.Bit, isSystemAdministrator);
+                    ModuleDb.AddParameter(command, "@IsExternalBidder", SqlDbType.Bit, isExternalBidder);
+                    ModuleDb.AddParameter(command, "@HasDocumentPermission", SqlDbType.Bit, hasDocumentPermission);
+                    ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
+                        TenderFinalizedWorkflowService.IsJuniorEngineer(CurrentRoleCode) ||
+                        TenderFinalizedWorkflowService.IsTenderCell(CurrentRoleCode));
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
+                        CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (!reader.Read()) { NotFound(); return; }
+                        storedPath = Convert.ToString(reader["FilePath"]);
+                        fileName = TenderLifecycleFiles.SafeFileName(Convert.ToString(reader["FileName"]));
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Shortfall document metadata could not be read.", ex);
+                Response.StatusCode = 500;
+                Context.ApplicationInstance.CompleteRequest();
+                return;
+            }
+            SendStoredFile(storedPath, fileName);
+        }
+
+        private void DownloadGeneratedDocument(long generatedDocumentId)
+        {
+            bool isExternalBidder = HasAnyRole("ExternalBidder");
+            bool isSystemAdministrator = HasPermission("system.admin");
+            bool hasDocumentPermission = HasPermission("document.read.assigned");
+            if (CurrentUserId <= 0 ||
+                (!isExternalBidder && !isSystemAdministrator && !hasDocumentPermission))
+            {
+                NotFound();
+                return;
+            }
+
+            string storedPath, fileName;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT d.FilePath,d.FileName
+                      FROM dbo.TenderGeneratedDocuments d
+                      INNER JOIN dbo.Tender t ON t.TenderId=d.TenderId AND t.IsDeleted=0
+                      WHERE d.GeneratedDocumentId=@DocumentId
+                        AND
+                        (
+                            @IsSystemAdministrator=1
+                            OR (@IsExternalBidder=1 AND EXISTS
+                                (
+                                    SELECT 1
+                                    FROM dbo.Contractors c
+                                    WHERE c.UserId=@UserId AND c.IsActive=1
+                                      AND
+                                      (
+                                          (d.WorkOrderId IS NOT NULL AND EXISTS
+                                            (SELECT 1 FROM dbo.WorkOrder w
+                                             WHERE w.WorkOrderId=d.WorkOrderId AND w.ContractorId=c.ContractorId))
+                                          OR (d.AgreementId IS NOT NULL AND EXISTS
+                                            (SELECT 1 FROM dbo.Agreement a
+                                             WHERE a.AgreementId=d.AgreementId AND a.ContractorId=c.ContractorId))
+                                      )
+                                ))
+                            OR (@HasDocumentPermission=1 AND
+                                (@IsDepartmentScopedRole=0 OR
+                                 (@DepartmentId IS NOT NULL AND t.DepartmentId=@DepartmentId)))
+                        );", connection))
+                {
+                    ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.BigInt, generatedDocumentId);
+                    ModuleDb.AddParameter(command, "@IsSystemAdministrator", SqlDbType.Bit, isSystemAdministrator);
+                    ModuleDb.AddParameter(command, "@IsExternalBidder", SqlDbType.Bit, isExternalBidder);
+                    ModuleDb.AddParameter(command, "@HasDocumentPermission", SqlDbType.Bit, hasDocumentPermission);
+                    ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
+                        TenderFinalizedWorkflowService.IsJuniorEngineer(CurrentRoleCode) ||
+                        TenderFinalizedWorkflowService.IsTenderCell(CurrentRoleCode));
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
+                        CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (!reader.Read()) { NotFound(); return; }
+                        storedPath = Convert.ToString(reader["FilePath"]);
+                        fileName = TenderLifecycleFiles.SafeFileName(Convert.ToString(reader["FileName"]));
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Generated document metadata could not be read.", ex);
+                Response.StatusCode = 500;
+                Context.ApplicationInstance.CompleteRequest();
+                return;
+            }
+            SendStoredFile(storedPath, fileName);
+        }
+
         private void SendStoredFile(string storedPath, string fileName)
         {
             string normalized = (storedPath ?? String.Empty).Replace('\\', '/').TrimStart('/');
@@ -356,6 +505,15 @@ namespace DepartmentModule.Pages
                 String.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
                 String.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase) ||
                 String.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static long QueryLongId(string key)
+        {
+            long value;
+            return Int64.TryParse(HttpContext.Current.Request.QueryString[key],
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out value) && value > 0
+                ? value : 0;
         }
 
         private static string MimeType(string extension)

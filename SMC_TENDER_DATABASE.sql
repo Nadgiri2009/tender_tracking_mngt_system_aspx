@@ -150,6 +150,7 @@ BEGIN
 CREATE TABLE dbo.Roles (
     RoleId          INT IDENTITY(1,1) PRIMARY KEY,
     RoleName        NVARCHAR(50)  NOT NULL UNIQUE,
+    RoleCode        NVARCHAR(50)  NULL,
     Description     NVARCHAR(200) NULL,
     CreatedDate     DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
     IsActive        BIT           NOT NULL DEFAULT 1
@@ -1263,6 +1264,7 @@ BEGIN
             CONSTRAINT FK_TenderWorkflowHistory_User REFERENCES dbo.Users(UserId),
         RoleId INT NOT NULL
             CONSTRAINT FK_TenderWorkflowHistory_Role REFERENCES dbo.Roles(RoleId),
+        ActorRoleCode NVARCHAR(50) NULL,
         DepartmentId INT NOT NULL
             CONSTRAINT FK_TenderWorkflowHistory_Department REFERENCES dbo.Departments(DepartmentId),
         ActionAtUtc DATETIME2(0) NOT NULL
@@ -1514,6 +1516,8 @@ END;
 
 IF COL_LENGTH(N'dbo.WorkOrder', N'WorkDescription') IS NULL
     ALTER TABLE dbo.WorkOrder ADD WorkDescription NVARCHAR(2000) NULL;
+IF COL_LENGTH(N'dbo.WorkOrder', N'DocumentPath') IS NULL
+    ALTER TABLE dbo.WorkOrder ADD DocumentPath NVARCHAR(800) NULL;
 IF COL_LENGTH(N'dbo.WorkOrder', N'TermsAndConditions') IS NULL
     ALTER TABLE dbo.WorkOrder ADD TermsAndConditions NVARCHAR(4000) NULL;
 IF COL_LENGTH(N'dbo.WorkOrder', N'AuthorizedSignatory') IS NULL
@@ -1522,6 +1526,21 @@ IF COL_LENGTH(N'dbo.Agreement', N'ApprovedAmount') IS NULL
     ALTER TABLE dbo.Agreement ADD ApprovedAmount DECIMAL(18,2) NULL;
 IF COL_LENGTH(N'dbo.Agreement', N'TermsAndConditions') IS NULL
     ALTER TABLE dbo.Agreement ADD TermsAndConditions NVARCHAR(4000) NULL;
+IF COL_LENGTH(N'dbo.Agreement', N'AuthorizedSignatory') IS NULL
+    ALTER TABLE dbo.Agreement ADD AuthorizedSignatory NVARCHAR(200) NULL;
+IF COL_LENGTH(N'dbo.TenderFinancialApprovals', N'SelectedFinancialBidId') IS NULL
+    ALTER TABLE dbo.TenderFinancialApprovals ADD SelectedFinancialBidId INT NULL;
+IF COL_LENGTH(N'dbo.TenderWorkflowHistory', N'ActorRoleCode') IS NULL
+    ALTER TABLE dbo.TenderWorkflowHistory ADD ActorRoleCode NVARCHAR(50) NULL;
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.foreign_keys
+    WHERE parent_object_id=OBJECT_ID(N'dbo.TenderFinancialApprovals')
+      AND name=N'FK_TenderFinancialApprovals_SelectedFinancialBid'
+)
+    ALTER TABLE dbo.TenderFinancialApprovals
+        ADD CONSTRAINT FK_TenderFinancialApprovals_SelectedFinancialBid
+            FOREIGN KEY (SelectedFinancialBidId) REFERENCES dbo.FinancialBid(FinancialBidId);
 
 IF OBJECT_ID(N'dbo.TenderGeneratedDocuments', N'U') IS NULL
 BEGIN
@@ -1620,6 +1639,254 @@ BEGIN
 END;
 GO
 
+/* Migration 15: tender eligibility and application document requirements. */
+IF COL_LENGTH(N'dbo.Tender', N'EligibilityCriteria') IS NULL
+    ALTER TABLE dbo.Tender ADD EligibilityCriteria NVARCHAR(4000) NULL;
+
+IF COL_LENGTH(N'dbo.TenderRequiredBidDocuments', N'Description') IS NULL
+    ALTER TABLE dbo.TenderRequiredBidDocuments ADD Description NVARCHAR(1000) NULL;
+
+IF COL_LENGTH(N'dbo.TenderRequiredBidDocuments', N'IsMandatory') IS NULL
+BEGIN
+    ALTER TABLE dbo.TenderRequiredBidDocuments
+        ADD IsMandatory BIT NOT NULL
+            CONSTRAINT DF_TenderRequiredBidDocuments_IsMandatory DEFAULT (1) WITH VALUES;
+END;
+
+IF COL_LENGTH(N'dbo.TenderRequiredBidDocuments', N'AllowedExtensions') IS NULL
+    ALTER TABLE dbo.TenderRequiredBidDocuments ADD AllowedExtensions NVARCHAR(500) NULL;
+
+IF COL_LENGTH(N'dbo.TenderRequiredBidDocuments', N'MaxFileSizeBytes') IS NULL
+BEGIN
+    ALTER TABLE dbo.TenderRequiredBidDocuments
+        ADD MaxFileSizeBytes INT NOT NULL
+            CONSTRAINT DF_TenderRequiredBidDocuments_MaxFileSizeBytes DEFAULT (10000000) WITH VALUES;
+END;
+GO
+
+/* Migration 16: immutable contractor application history and remarks. */
+IF OBJECT_ID(N'dbo.ContractorApplicationHistory', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ContractorApplicationHistory
+    (
+        HistoryId BIGINT IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_ContractorApplicationHistory PRIMARY KEY,
+        TechnicalBidId INT NOT NULL
+            CONSTRAINT FK_ContractorApplicationHistory_TechnicalBid
+                REFERENCES dbo.TechnicalBid(TechnicalBidId) ON DELETE CASCADE,
+        EventType NVARCHAR(40) NOT NULL,
+        PreviousStatus NVARCHAR(30) NULL,
+        NewStatus NVARCHAR(30) NULL,
+        Remarks NVARCHAR(2000) NULL,
+        CreatedBy INT NOT NULL
+            CONSTRAINT FK_ContractorApplicationHistory_User REFERENCES dbo.Users(UserId),
+        RoleId INT NULL
+            CONSTRAINT FK_ContractorApplicationHistory_Role REFERENCES dbo.Roles(RoleId),
+        VisibleToContractor BIT NOT NULL
+            CONSTRAINT DF_ContractorApplicationHistory_VisibleToContractor DEFAULT (0),
+        CreatedAtUtc DATETIME2(7) NOT NULL
+            CONSTRAINT DF_ContractorApplicationHistory_CreatedAtUtc DEFAULT SYSUTCDATETIME()
+    );
+    CREATE INDEX IX_ContractorApplicationHistory_TechnicalBidId_CreatedAtUtc
+        ON dbo.ContractorApplicationHistory(TechnicalBidId,CreatedAtUtc);
+END;
+
+IF OBJECT_ID(N'dbo.ContractorApplicationRemarks', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ContractorApplicationRemarks
+    (
+        RemarkId BIGINT IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_ContractorApplicationRemarks PRIMARY KEY,
+        TechnicalBidId INT NOT NULL
+            CONSTRAINT FK_ContractorApplicationRemarks_TechnicalBid
+                REFERENCES dbo.TechnicalBid(TechnicalBidId) ON DELETE CASCADE,
+        RemarkType NVARCHAR(30) NOT NULL,
+        Message NVARCHAR(2000) NOT NULL,
+        CreatedBy INT NOT NULL
+            CONSTRAINT FK_ContractorApplicationRemarks_User REFERENCES dbo.Users(UserId),
+        RoleId INT NULL
+            CONSTRAINT FK_ContractorApplicationRemarks_Role REFERENCES dbo.Roles(RoleId),
+        VisibleToContractor BIT NOT NULL,
+        CreatedAtUtc DATETIME2(7) NOT NULL
+            CONSTRAINT DF_ContractorApplicationRemarks_CreatedAtUtc DEFAULT SYSUTCDATETIME()
+    );
+    CREATE INDEX IX_ContractorApplicationRemarks_TechnicalBidId_CreatedAtUtc
+        ON dbo.ContractorApplicationRemarks(TechnicalBidId,CreatedAtUtc);
+END;
+GO
+
+/* Migration 17: role codes used by role-aware Web Forms authorization. */
+IF COL_LENGTH(N'dbo.Roles', N'RoleCode') IS NULL
+    ALTER TABLE dbo.Roles ADD RoleCode NVARCHAR(50) NULL;
+GO
+
+/* Migration 18: configure the complete four-role version-2 transition map. */
+IF EXISTS
+(
+    SELECT 1 FROM dbo.Roles
+    WHERE RoleCode IN (N'JE',N'TENDER_CELL',N'CHAIRMAN',N'DIRECTOR_AUDITOR')
+      AND IsActive=1
+)
+BEGIN
+    IF
+    (
+        SELECT COUNT(DISTINCT RoleCode) FROM dbo.Roles
+        WHERE RoleCode IN (N'JE',N'TENDER_CELL',N'CHAIRMAN',N'DIRECTOR_AUDITOR')
+          AND IsActive=1
+    ) <> 4
+        THROW 51009, 'Migration 18 requires all four active canonical workflow roles.', 1;
+
+    SET XACT_ABORT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+    IF EXISTS
+    (
+        SELECT 1 FROM dbo.Tender t
+        WHERE t.WorkflowVersion=2 AND
+        (
+            t.IsDeleted=1
+            OR t.CurrentStatus<>N'Draft'
+            OR (SELECT COUNT(*) FROM dbo.TenderWorkflowAssignments a
+                WHERE a.TenderId=t.TenderId AND a.IsCurrent=1)<>1
+            OR NOT EXISTS
+            (
+                SELECT 1
+                FROM dbo.TenderWorkflowAssignments a
+                INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                INNER JOIN dbo.Roles r ON r.RoleId=a.AssignedRoleId
+                WHERE a.TenderId=t.TenderId AND a.IsCurrent=1 AND a.ShortfallId IS NULL
+                  AND a.DepartmentId=t.DepartmentId AND s.WorkflowVersion=2
+                  AND s.StageOrder=101 AND s.StageName=N'Final_JE_SubmitTender'
+                  AND r.RoleCode=N'JE' AND r.IsActive=1
+            )
+        )
+    )
+    OR EXISTS
+    (
+        SELECT 1 FROM dbo.TenderWorkflowHistory
+        WHERE WorkflowVersion=2
+    )
+    OR EXISTS
+    (
+        SELECT 1 FROM dbo.TenderWorkflowAssignments a
+        INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.WorkflowVersion=2
+        INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+        WHERE a.IsCurrent=0 OR s.StageOrder<>101
+    )
+    OR EXISTS
+    (
+        SELECT 1 FROM dbo.TechnicalBid b
+        INNER JOIN dbo.Tender t ON t.TenderId=b.TenderId AND t.WorkflowVersion=2
+    )
+        THROW 51010, 'Migration 18 can only remap untouched version-2 drafts still assigned to the initial JE stage. Rehearse any active workflow transition separately.', 1;
+
+    IF EXISTS
+    (
+        SELECT StageOrder FROM dbo.WorkflowStages
+        WHERE WorkflowVersion=2 GROUP BY StageOrder HAVING COUNT(*)>1
+    )
+        THROW 51011, 'Migration 18 found duplicate version-2 stage orders.', 1;
+
+    CREATE TABLE #ExpectedWorkflowStages
+    (
+        StageOrder INT NOT NULL PRIMARY KEY,
+        StageName NVARCHAR(80) NOT NULL,
+        StatusOnPending NVARCHAR(50) NOT NULL,
+        StatusOnApprove NVARCHAR(50) NOT NULL,
+        StatusOnReject NVARCHAR(50) NOT NULL,
+        RoleCode NVARCHAR(50) NOT NULL
+    );
+    INSERT INTO #ExpectedWorkflowStages
+        (StageOrder,StageName,StatusOnPending,StatusOnApprove,StatusOnReject,RoleCode)
+    VALUES
+        (101,N'Final_JE_SubmitTender',N'Draft',N'Submitted',N'Draft',N'JE'),
+        (102,N'Final_JE_PublishTender',N'Submitted',N'Tender Published',N'Submitted',N'JE'),
+        (103,N'Final_JE_OpenTechnicalBids',N'Tender Published',N'Primary Verification Pending',N'Tender Published',N'JE'),
+        (104,N'Final_JE_CompletePrimaryVerification',N'Primary Verification Pending',N'Primary Verification Completed',N'Primary Verification Pending',N'JE'),
+        (105,N'Final_JE_ForwardToTenderCell',N'Primary Verification Completed',N'Tender Cell Verification Pending',N'Primary Verification Completed',N'JE'),
+        (106,N'Final_Cell_CompleteSecondaryVerification',N'Tender Cell Verification Pending',N'Financial Bid Opening Approval Pending',N'Shortfall Generation Pending',N'TENDER_CELL'),
+        (107,N'Final_Cell_CreateShortfall',N'Shortfall Generation Pending',N'Shortfall Pending JE Approval',N'Tender Cell Verification Pending',N'TENDER_CELL'),
+        (108,N'Final_JE_ApproveShortfall',N'Shortfall Pending JE Approval',N'Awaiting Contractor Submission',N'Shortfall Generation Pending',N'JE'),
+        (109,N'Final_Contractor_SubmitShortfall',N'Awaiting Contractor Submission',N'Shortfall Documents Submitted',N'Awaiting Contractor Submission',N'TENDER_CELL'),
+        (110,N'Final_Cell_ClearShortfall',N'Shortfall Documents Submitted',N'Shortfall Cleared',N'Awaiting Contractor Submission',N'TENDER_CELL'),
+        (111,N'Final_Cell_ResumeVerification',N'Shortfall Cleared',N'Tender Cell Verification Pending',N'Shortfall Cleared',N'TENDER_CELL'),
+        (112,N'Final_Samiti_ApproveFinancialOpening',N'Financial Bid Opening Approval Pending',N'Financial Bid Opening Approved',N'Financial Bid Opening Rejected',N'CHAIRMAN'),
+        (113,N'Final_Cell_ReverifyRejectedOpening',N'Financial Bid Opening Rejected',N'Financial Bid Opening Approval Pending',N'Tender Cell Verification Pending',N'TENDER_CELL'),
+        (114,N'Final_JE_OpenFinancialBids',N'Financial Bid Opening Approved',N'Final Financial Approval Pending',N'Financial Bid Opening Approved',N'JE'),
+        (115,N'Final_Auditor_ApproveFinancialBids',N'Final Financial Approval Pending',N'Final Financial Approval Completed',N'Final Financial Approval Rejected',N'DIRECTOR_AUDITOR'),
+        (116,N'Final_JE_ResubmitFinancialApproval',N'Final Financial Approval Rejected',N'Final Financial Approval Pending',N'Final Financial Approval Rejected',N'JE'),
+        (117,N'Final_JE_StartWorkOrder',N'Final Financial Approval Completed',N'Work Order Pending',N'Final Financial Approval Completed',N'JE'),
+        (118,N'Final_JE_GenerateWorkOrder',N'Work Order Pending',N'Work Order Generated',N'Work Order Pending',N'JE'),
+        (119,N'Final_JE_StartAgreement',N'Work Order Generated',N'Tender Agreement Pending',N'Work Order Generated',N'JE'),
+        (120,N'Final_JE_GenerateAgreement',N'Tender Agreement Pending',N'Tender Agreement Generated',N'Tender Agreement Pending',N'JE'),
+        (121,N'Final_JE_CompleteTender',N'Tender Agreement Generated',N'Completed',N'Tender Agreement Generated',N'JE');
+
+    UPDATE dbo.WorkflowStages
+    SET StageName=N'__M18_' + CONVERT(NVARCHAR(20),StageId),IsActive=0
+    WHERE WorkflowVersion=2;
+
+    UPDATE stage
+    SET StageOrder=expected.StageOrder,StageName=expected.StageName,
+        StatusOnPending=expected.StatusOnPending,StatusOnApprove=expected.StatusOnApprove,
+        StatusOnReject=expected.StatusOnReject,ApproverRoleId=role.RoleId,IsActive=1
+    FROM dbo.WorkflowStages stage
+    INNER JOIN #ExpectedWorkflowStages expected ON expected.StageOrder=stage.StageOrder
+    INNER JOIN dbo.Roles role ON role.RoleCode=expected.RoleCode AND role.IsActive=1
+    WHERE stage.WorkflowVersion=2;
+
+    INSERT INTO dbo.WorkflowStages
+        (StageOrder,StageName,StatusOnPending,StatusOnApprove,StatusOnReject,ApproverRoleId,IsActive,WorkflowVersion)
+    SELECT expected.StageOrder,expected.StageName,expected.StatusOnPending,expected.StatusOnApprove,
+           expected.StatusOnReject,role.RoleId,1,2
+    FROM #ExpectedWorkflowStages expected
+    INNER JOIN dbo.Roles role ON role.RoleCode=expected.RoleCode AND role.IsActive=1
+    WHERE NOT EXISTS
+    (
+        SELECT 1 FROM dbo.WorkflowStages stage
+        WHERE stage.WorkflowVersion=2 AND stage.StageOrder=expected.StageOrder
+    );
+
+    DECLARE @JeRoleId INT, @CellRoleId INT, @PrimaryVerifyPermissionId INT,
+            @ShortfallApprovePermissionId INT;
+    SELECT @JeRoleId=RoleId FROM dbo.Roles WHERE RoleCode=N'JE' AND IsActive=1;
+    SELECT @CellRoleId=RoleId FROM dbo.Roles WHERE RoleCode=N'TENDER_CELL' AND IsActive=1;
+    SELECT @PrimaryVerifyPermissionId=PermissionId FROM dbo.Permissions
+        WHERE PermissionKey=N'tender.primary.verify' AND IsActive=1;
+    SELECT @ShortfallApprovePermissionId=PermissionId FROM dbo.Permissions
+        WHERE PermissionKey=N'shortfall.approve' AND IsActive=1;
+    IF @JeRoleId IS NULL OR @CellRoleId IS NULL OR
+       @PrimaryVerifyPermissionId IS NULL OR @ShortfallApprovePermissionId IS NULL
+        THROW 51012, 'Migration 18 requires the JE/Tender Cell roles and primary-verification/shortfall-approval permissions.', 1;
+
+    IF NOT EXISTS
+    (
+        SELECT 1 FROM dbo.RolePermissions
+        WHERE RoleId=@JeRoleId AND PermissionId=@PrimaryVerifyPermissionId
+    )
+        INSERT INTO dbo.RolePermissions(RoleId,PermissionId)
+        VALUES(@JeRoleId,@PrimaryVerifyPermissionId);
+
+    IF NOT EXISTS
+    (
+        SELECT 1 FROM dbo.RolePermissions
+        WHERE RoleId=@JeRoleId AND PermissionId=@ShortfallApprovePermissionId
+    )
+        INSERT INTO dbo.RolePermissions(RoleId,PermissionId)
+        VALUES(@JeRoleId,@ShortfallApprovePermissionId);
+
+    DELETE FROM dbo.RolePermissions
+    WHERE RoleId=@CellRoleId AND PermissionId=@ShortfallApprovePermissionId;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH;
+END;
+GO
+
 /* Complete the setup ledger only after every schema/data stage succeeded. */
 INSERT INTO dbo.TenderSchemaMigrations(MigrationId,Description)
 SELECT v.MigrationId,v.Description
@@ -1632,7 +1899,11 @@ FROM (VALUES
     (N'09',N'Tender lifecycle tables and immutability triggers'),
     (N'10',N'RBAC, version-2 workflow, verification, shortfall, financial, and generated-document schema'),
     (N'11',N'Technical bid document metadata'),
-    (N'12',N'Per-tender required bidder document types')
+    (N'12',N'Per-tender required bidder document types'),
+    (N'15',N'Tender eligibility and application document requirements'),
+    (N'16',N'Immutable contractor application history and remarks'),
+    (N'17',N'Role codes used by role-aware authorization'),
+    (N'18',N'Complete four-role version-2 workflow transitions')
 ) v(MigrationId,Description)
 WHERE NOT EXISTS
 (
@@ -1655,10 +1926,22 @@ IF N'$(InstallMode)'=N'Fresh' AND EXISTS
 )
     THROW 51002, 'Post-install validation failed: Fresh mode must not seed business or reference data.', 1;
 IF N'$(InstallMode)'=N'Fresh' AND
-   (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0)<>57
-    THROW 51003, 'Post-install validation failed: expected 56 application tables plus the migration ledger.', 1;
-IF (SELECT COUNT(*) FROM dbo.TenderSchemaMigrations)<>9
-    THROW 51005, 'Post-install validation failed: migration ledger is incomplete.', 1;
+   (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0)<>59
+    THROW 51003, 'Post-install validation failed: expected 58 application tables plus the migration ledger.', 1;
+IF EXISTS
+(
+    SELECT required.MigrationId
+    FROM (VALUES
+        (N'00-CORE'),(N'04'),(N'05'),(N'06'),(N'08'),(N'09'),(N'10'),
+        (N'11'),(N'12'),(N'15'),(N'16'),(N'17'),(N'18')
+    ) required(MigrationId)
+    WHERE NOT EXISTS
+    (
+        SELECT 1 FROM dbo.TenderSchemaMigrations m
+        WHERE m.MigrationId=required.MigrationId
+    )
+)
+    THROW 51005, 'Post-install validation failed: one or more required migrations are missing from the ledger.', 1;
 IF EXISTS (SELECT 1 FROM sys.procedures WHERE is_ms_shipped=0)
     THROW 51006, 'Post-install validation failed: stored procedures are not permitted in this application database.', 1;
 IF EXISTS

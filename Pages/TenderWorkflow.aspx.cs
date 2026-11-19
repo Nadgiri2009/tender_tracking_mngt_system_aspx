@@ -14,16 +14,41 @@ namespace DepartmentModule.Pages
     {
         protected Literal Message, TenderNumber, TenderTitle, DepartmentName, StageName, CurrentStatus, EstimatedAmount;
         protected Panel QueuePanel, DetailPanel, SubmitDraftPanel, PublishPanel, PrimaryOpeningPanel,
-            PrimaryVerificationPanel, PrimaryForwardPanel;
-        protected GridView WorkflowQueue, HistoryGrid, PrimaryBidderGrid, PrimaryDocumentGrid;
+            PrimaryVerificationPanel, PrimaryForwardPanel, SecondaryVerificationPanel,
+            RejectedOpeningReverificationPanel,
+            ShortfallCreationPanel, ShortfallApprovalPanel, FinancialOpeningApprovalPanel,
+            FinancialBidEntryPanel, AuditorFinancialReviewPanel, FinancialResubmitPanel,
+            WorkOrderCreatePanel, WorkOrderGeneratePanel, AgreementCreatePanel,
+            AgreementGeneratePanel, CompleteTenderPanel, ShortfallClearancePanel;
+        protected GridView WorkflowQueue, HistoryGrid, PrimaryBidderGrid, PrimaryDocumentGrid,
+            SecondaryApplicationsGrid, ShortfallItemsGrid, FinancialEntryGrid, FinancialReviewGrid,
+            GeneratedDocumentsGrid, ShortfallClearanceGrid, ShortfallApplicationsGrid;
+        protected HyperLink ApplicationRequirementsLink;
         protected TextBox SubmitRemarksText, PublicationStartText, PublicationCloseText, PublishRemarksText,
             PrimaryOpenRemarksText, PrimaryCompletionRemarksText, PrimaryForwardRemarksText,
-            RequiredBidDocumentsText;
+            RequiredBidDocumentsText, SecondaryRemarksText, ShortfallRemarksText, ShortfallDecisionRemarksText,
+            FinancialOpeningRemarksText, FinancialEntryRemarksText, FinancialDecisionRemarksText,
+            FinancialResubmissionRemarksText, WorkOrderNumberText, WorkOrderIssueDateText,
+            WorkDescriptionText, WorkOrderTermsText, WorkOrderSignatoryText, AgreementNumberText,
+            AgreementDateText, AgreementTermsText, AgreementSignatoryText;
+        protected DropDownList SelectedFinancialBidSelect;
+        protected Literal WorkOrderBidderName, WorkOrderBidAmount,
+            AgreementBidderName, AgreementBidAmount;
         protected Button SubmitDraftButton, PublishButton, OpenTechnicalBidsButton,
-            CompletePrimaryVerificationButton, ForwardToTenderCellButton;
+            CompletePrimaryVerificationButton, ForwardToTenderCellButton,
+            CompleteSecondaryVerificationButton, SendToShortfallCreationButton,
+            ApproveShortfallButton, ReturnShortfallButton, ApproveFinancialOpeningButton,
+            RejectFinancialOpeningButton, SaveFinancialBidsButton, ApproveFinancialReviewButton,
+            ReturnFinancialReviewButton, ResubmitFinancialReviewButton, CreateWorkOrderButton,
+            GenerateWorkOrderButton, CreateAgreementButton, GenerateAgreementButton,
+            CompleteTenderButton;
+        protected Button ReverifiedOpeningToChairmanButton, ReverifiedOpeningToShortfallButton;
 
         private int TenderId { get { return QueryId("id"); } }
         private bool IsSystemAdministrator { get { return HasPermission("system.admin"); } }
+        private bool IsTenderCell { get { return TenderFinalizedWorkflowService.IsTenderCell(CurrentRoleCode); } }
+        private string CurrentWorkflowStage { get; set; }
+        private long? CurrentShortfallId { get; set; }
 
         protected void Page_Load(object sender, EventArgs e)
         {
@@ -52,17 +77,22 @@ namespace DepartmentModule.Pages
                       INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0
                       INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId AND s.WorkflowVersion=2
                       INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
+                      LEFT JOIN dbo.TenderShortfalls sf ON sf.ShortfallId=a.ShortfallId
                       WHERE a.IsCurrent=1
                         AND (@IsAdmin=1 OR
-                             (a.AssignedRoleId=@RoleId AND
-                              ((@IsContractor=1 AND a.AssignedUserId=@UserId)
-                               OR (@IsContractor=0 AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                                   AND (@IsDepartmentScopedRole=0 OR
-                                        (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))))))
+                             ((a.AssignedRoleId=@RoleId AND
+                               ((@IsContractor=1 AND a.AssignedUserId=@UserId)
+                                OR (@IsContractor=0 AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
+                                    AND (@IsDepartmentScopedRole=0 OR
+                                         (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId)))))
+                              OR (@IsTenderCell=1 AND s.StageName=N'Final_Contractor_SubmitShortfall'
+                                  AND @DepartmentId=t.DepartmentId
+                                  AND sf.SubmissionDeadlineUtc<=SYSUTCDATETIME())))
                       ORDER BY a.AssignedAtUtc,t.TenderId;", connection))
                 {
                     ModuleDb.AddParameter(command, "@IsAdmin", SqlDbType.Bit, IsSystemAdministrator);
-                    ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("Contractor"));
+                    ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("ExternalBidder"));
+                    ModuleDb.AddParameter(command, "@IsTenderCell", SqlDbType.Bit, IsTenderCell);
                     ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                     ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                     ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
@@ -89,11 +119,15 @@ namespace DepartmentModule.Pages
         {
             try
             {
+                if (IsTenderCell && CurrentDepartmentId.HasValue)
+                    TenderFinalizedWorkflowService.ExpireOverdueShortfall(TenderId, CurrentUserId,
+                        CurrentRoleId, CurrentRoleCode, CurrentDepartmentId, Request.UserHostAddress);
+
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 {
                     using (SqlCommand command = new SqlCommand(
                         @"SELECT t.TenderNumber,t.Title,t.CurrentStatus,t.EstimatedAmount,d.DepartmentName,
-                                 s.StageName,s.StageOrder,a.AssignedRoleId,a.AssignedUserId,a.DepartmentId
+                                 s.StageName,s.StageOrder,a.AssignedRoleId,a.AssignedUserId,a.DepartmentId,a.ShortfallId
                           FROM dbo.TenderWorkflowAssignments a
                           INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0
                           INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId AND s.WorkflowVersion=2
@@ -108,7 +142,7 @@ namespace DepartmentModule.Pages
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                         ModuleDb.AddParameter(command, "@IsAdmin", SqlDbType.Bit, IsSystemAdministrator);
-                        ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("Contractor"));
+                        ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("ExternalBidder"));
                         ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
@@ -130,6 +164,9 @@ namespace DepartmentModule.Pages
                                 .ToString("N2", CultureInfo.CurrentCulture);
                             StageName.Text = ModuleDb.Html(reader["StageName"]);
                             string stageName = Convert.ToString(reader["StageName"]);
+                            CurrentWorkflowStage = stageName;
+                            CurrentShortfallId = reader["ShortfallId"] == DBNull.Value
+                                ? (long?)null : Convert.ToInt64(reader["ShortfallId"], CultureInfo.InvariantCulture);
                             bool assignedToCurrentRole = Convert.ToInt32(reader["AssignedRoleId"]) == CurrentRoleId;
                             bool assignedToCurrentUser = reader["AssignedUserId"] == DBNull.Value ||
                                 Convert.ToInt32(reader["AssignedUserId"]) == CurrentUserId;
@@ -149,12 +186,74 @@ namespace DepartmentModule.Pages
                                 HasPermission("tender.primary.verify");
                             PrimaryForwardPanel.Visible = canAct && stageName == "Final_JE_ForwardToTenderCell" &&
                                 HasPermission("tender.primary.verify");
+                            SecondaryVerificationPanel.Visible = canAct &&
+                                (stageName == "Final_Cell_CompleteSecondaryVerification" ||
+                                 stageName == "Final_Cell_ReverifyRejectedOpening") &&
+                                HasPermission("tender.cell.verify");
+                            RejectedOpeningReverificationPanel.Visible = canAct &&
+                                stageName == "Final_Cell_ReverifyRejectedOpening" &&
+                                HasPermission("tender.cell.verify");
+                            ShortfallCreationPanel.Visible = canAct &&
+                                stageName == "Final_Cell_CreateShortfall" && HasPermission("shortfall.create");
+                            ShortfallApprovalPanel.Visible = canAct &&
+                                stageName == "Final_JE_ApproveShortfall" && HasPermission("shortfall.approve");
+                            ShortfallClearancePanel.Visible = canAct &&
+                                stageName == "Final_Cell_ClearShortfall" && HasPermission("shortfall.clear");
+                            FinancialOpeningApprovalPanel.Visible = canAct &&
+                                stageName == "Final_Samiti_ApproveFinancialOpening" &&
+                                HasPermission("financial.open.approve");
+                            FinancialBidEntryPanel.Visible = canAct &&
+                                stageName == "Final_JE_OpenFinancialBids" &&
+                                HasPermission("financial.open.execute");
+                            AuditorFinancialReviewPanel.Visible = canAct &&
+                                stageName == "Final_Auditor_ApproveFinancialBids" &&
+                                HasPermission("financial.approve.final");
+                            FinancialResubmitPanel.Visible = canAct &&
+                                stageName == "Final_JE_ResubmitFinancialApproval" &&
+                                HasPermission("financial.open.execute");
+                            WorkOrderCreatePanel.Visible = canAct && stageName == "Final_JE_StartWorkOrder" &&
+                                HasPermission("workorder.manage");
+                            WorkOrderGeneratePanel.Visible = canAct && stageName == "Final_JE_GenerateWorkOrder" &&
+                                HasPermission("workorder.manage");
+                            AgreementCreatePanel.Visible = canAct && stageName == "Final_JE_StartAgreement" &&
+                                HasPermission("agreement.manage");
+                            AgreementGeneratePanel.Visible = canAct && stageName == "Final_JE_GenerateAgreement" &&
+                                HasPermission("agreement.manage");
+                            CompleteTenderPanel.Visible = canAct && stageName == "Final_JE_CompleteTender" &&
+                                HasPermission("agreement.manage");
                         }
                     }
                     if (SubmitDraftPanel.Visible)
+                    {
+                        ApplicationRequirementsLink.NavigateUrl = "~/Pages/ApplicationRequirements.aspx?tenderId=" +
+                            TenderId.ToString(CultureInfo.InvariantCulture);
                         LoadRequiredBidDocumentTypes(connection);
+                    }
                     if (PrimaryVerificationPanel.Visible)
                         BindPrimaryVerification(connection);
+                    if (SecondaryVerificationPanel.Visible || ShortfallCreationPanel.Visible)
+                        BindSecondaryApplications(connection);
+                    CompleteSecondaryVerificationButton.Visible =
+                        CurrentWorkflowStage == "Final_Cell_CompleteSecondaryVerification";
+                    SendToShortfallCreationButton.Visible =
+                        CurrentWorkflowStage == "Final_Cell_CompleteSecondaryVerification";
+                    ReverifiedOpeningToChairmanButton.Visible =
+                        CurrentWorkflowStage == "Final_Cell_ReverifyRejectedOpening";
+                    ReverifiedOpeningToShortfallButton.Visible =
+                        CurrentWorkflowStage == "Final_Cell_ReverifyRejectedOpening";
+                    if (ShortfallApprovalPanel.Visible)
+                        BindShortfallItems(connection);
+                    if (ShortfallClearancePanel.Visible)
+                        BindShortfallClearanceItems(connection);
+                    if (FinancialBidEntryPanel.Visible)
+                        BindFinancialEntryGrid(connection);
+                    if (AuditorFinancialReviewPanel.Visible)
+                        BindFinancialReview(connection);
+                    if (WorkOrderCreatePanel.Visible)
+                        BindApprovedBidder(connection);
+                    if (AgreementCreatePanel.Visible)
+                        BindApprovedBidder(connection);
+                    BindGeneratedDocuments(connection);
                     BindHistory(connection);
                 }
                 QueuePanel.Visible = false;
@@ -202,6 +301,207 @@ namespace DepartmentModule.Pages
             RequiredBidDocumentsText.Text = String.Join(Environment.NewLine, documentTypes.ToArray());
         }
 
+        private void BindSecondaryApplications(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT b.TechnicalBidId,b.ContractorId,c.Name AS ContractorName,c.RegistrationNo,
+                         b.SubmittedDate,COALESCE(latest.Decision,N'Pending') AS SecondaryDecision,
+                         COALESCE(latest.Remarks,N'') AS SecondaryRemarks
+                  FROM dbo.TechnicalBid b
+                  INNER JOIN dbo.Contractors c ON c.ContractorId=b.ContractorId
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) r.Decision,r.Remarks
+                      FROM dbo.TenderVerificationReviews r
+                      WHERE r.TenderId=b.TenderId AND r.ContractorId=b.ContractorId
+                        AND r.ReviewStage=N'Secondary'
+                      ORDER BY r.ReviewedAtUtc DESC,r.VerificationReviewId DESC
+                  ) latest
+                  WHERE b.TenderId=@TenderId AND b.Status=N'Submitted'
+                    AND (@DeficientOnly=0 OR latest.Decision=N'Shortfall')
+                  ORDER BY b.SubmittedDate,b.TechnicalBidId;",
+                connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                ModuleDb.AddParameter(command, "@DeficientOnly", SqlDbType.Bit,
+                    CurrentWorkflowStage == "Final_Cell_CreateShortfall");
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                SecondaryApplicationsGrid.DataSource = data;
+                SecondaryApplicationsGrid.DataBind();
+                ShortfallApplicationsGrid.DataSource = data;
+                ShortfallApplicationsGrid.DataBind();
+            }
+        }
+
+        private void BindShortfallItems(SqlConnection connection)
+        {
+            if (!CurrentShortfallId.HasValue)
+                throw new InvalidOperationException("The assigned shortfall was not found. Refresh the workflow queue.");
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT i.ShortfallItemId,i.RequiredDocumentType,i.ShortfallDescription,
+                         i.CorrectiveAction,i.ClearanceStatus,i.Remarks,
+                         latest.FileName,latest.ShortfallSubmissionId
+                  FROM dbo.TenderShortfallItems i
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) s.FileName,s.ShortfallSubmissionId
+                      FROM dbo.TenderShortfallSubmissions s
+                      WHERE s.ShortfallItemId=i.ShortfallItemId
+                      ORDER BY s.SubmittedAtUtc DESC,s.ShortfallSubmissionId DESC
+                  ) latest
+                  WHERE i.ShortfallId=@ShortfallId
+                  ORDER BY i.ShortfallItemId;", connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, CurrentShortfallId.Value);
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                ShortfallItemsGrid.DataSource = data;
+                ShortfallItemsGrid.DataBind();
+            }
+        }
+
+        private void BindShortfallClearanceItems(SqlConnection connection)
+        {
+            if (!CurrentShortfallId.HasValue)
+                throw new InvalidOperationException("The assigned shortfall was not found. Refresh the workflow queue.");
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT i.ShortfallItemId,i.RequiredDocumentType,i.ShortfallDescription,
+                         i.CorrectiveAction,i.ClearanceStatus,i.Remarks,
+                         latest.FileName,latest.ShortfallSubmissionId
+                  FROM dbo.TenderShortfallItems i
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) s.FileName,s.ShortfallSubmissionId
+                      FROM dbo.TenderShortfallSubmissions s
+                      WHERE s.ShortfallItemId=i.ShortfallItemId
+                      ORDER BY s.SubmittedAtUtc DESC,s.ShortfallSubmissionId DESC
+                  ) latest
+                  WHERE i.ShortfallId=@ShortfallId
+                  ORDER BY i.ShortfallItemId;", connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, CurrentShortfallId.Value);
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                ShortfallClearanceGrid.DataSource = data;
+                ShortfallClearanceGrid.DataBind();
+            }
+        }
+
+        private void BindFinancialEntryGrid(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT b.ContractorId,c.Name AS ContractorName,c.RegistrationNo,
+                         COALESCE(existing.BidAmount,0) AS ExistingAmount
+                  FROM dbo.TechnicalBid b
+                  INNER JOIN dbo.Contractors c ON c.ContractorId=b.ContractorId
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) r.Decision
+                      FROM dbo.TenderVerificationReviews r
+                      WHERE r.TenderId=b.TenderId AND r.ContractorId=b.ContractorId
+                        AND r.ReviewStage=N'Secondary'
+                      ORDER BY r.ReviewedAtUtc DESC,r.VerificationReviewId DESC
+                  ) latest
+                  LEFT JOIN dbo.FinancialBid existing
+                    ON existing.TenderId=b.TenderId AND existing.ContractorId=b.ContractorId
+                  WHERE b.TenderId=@TenderId AND b.Status=N'Submitted'
+                    AND latest.Decision=N'Approved'
+                  ORDER BY c.Name,b.TechnicalBidId;", connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                FinancialEntryGrid.DataSource = data;
+                FinancialEntryGrid.DataBind();
+            }
+        }
+
+        private void BindFinancialReview(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT fb.FinancialBidId,fb.ContractorId,c.Name AS ContractorName,
+                         c.RegistrationNo,d.QuotedAmount,d.Remarks
+                  FROM dbo.TenderFinancialBidOpeningDetails d
+                  INNER JOIN dbo.TenderFinancialBidOpening o ON o.FinancialBidOpeningId=d.FinancialBidOpeningId
+                  INNER JOIN dbo.FinancialBid fb ON fb.FinancialBidId=d.FinancialBidId
+                  INNER JOIN dbo.Contractors c ON c.ContractorId=fb.ContractorId
+                  WHERE o.TenderId=@TenderId
+                  ORDER BY d.QuotedAmount,fb.FinancialBidId;", connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                FinancialReviewGrid.DataSource = data;
+                FinancialReviewGrid.DataBind();
+                SelectedFinancialBidSelect.Items.Clear();
+                SelectedFinancialBidSelect.Items.Add(new ListItem("Select winning bid", String.Empty));
+                foreach (DataRow row in data.Rows)
+                {
+                    SelectedFinancialBidSelect.Items.Add(new ListItem(
+                        Convert.ToString(row["ContractorName"]) + " — ₹" +
+                        Convert.ToDecimal(row["QuotedAmount"], CultureInfo.InvariantCulture)
+                            .ToString("N2", CultureInfo.CurrentCulture),
+                        Convert.ToString(row["FinancialBidId"], CultureInfo.InvariantCulture)));
+                }
+            }
+        }
+
+        private void BindApprovedBidder(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT c.Name AS ContractorName,a.ApprovedAmount
+                  FROM dbo.TenderFinancialApprovals a
+                  INNER JOIN dbo.FinancialBid b ON b.FinancialBidId=a.SelectedFinancialBidId
+                    AND b.TenderId=a.TenderId
+                  INNER JOIN dbo.Contractors c ON c.ContractorId=b.ContractorId
+                  WHERE a.TenderId=@TenderId AND a.Decision=N'Approved'
+                    AND a.FinancialApprovalId=(SELECT TOP (1) f.FinancialApprovalId
+                      FROM dbo.TenderFinancialApprovals f WHERE f.TenderId=@TenderId
+                      ORDER BY f.ApprovedAtUtc DESC,f.FinancialApprovalId DESC);",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        throw new InvalidOperationException("The latest auditor-approved bidder could not be found.");
+                    string bidder = ModuleDb.Html(reader["ContractorName"]);
+                    string amount = ModuleDb.Html(
+                        Convert.ToDecimal(reader["ApprovedAmount"], CultureInfo.InvariantCulture)
+                            .ToString("N2", CultureInfo.CurrentCulture));
+                    WorkOrderBidderName.Text = bidder;
+                    WorkOrderBidAmount.Text = amount;
+                    AgreementBidderName.Text = bidder;
+                    AgreementBidAmount.Text = amount;
+                }
+            }
+        }
+
+        private void BindGeneratedDocuments(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT GeneratedDocumentId,DocumentKind,VersionNumber,FileName,GeneratedAtUtc
+                  FROM dbo.TenderGeneratedDocuments
+                  WHERE TenderId=@TenderId ORDER BY GeneratedAtUtc DESC,GeneratedDocumentId DESC;",
+                connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                GeneratedDocumentsGrid.DataSource = data;
+                GeneratedDocumentsGrid.DataBind();
+            }
+        }
+
         protected void SubmitDraftButton_Click(object sender, EventArgs e)
         {
             ProcessStage("Final_JE_SubmitTender", "tender.create.department", "Submitted",
@@ -238,6 +538,365 @@ namespace DepartmentModule.Pages
         {
             ProcessStage("Final_JE_ForwardToTenderCell", "tender.primary.verify",
                 "Tender Cell Verification Pending", PrimaryForwardRemarksText.Text, null, null);
+        }
+
+        protected void CompleteSecondaryVerificationButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_Cell_CompleteSecondaryVerification", "tender.cell.verify",
+                "Financial Bid Opening Approval Pending", SecondaryRemarksText.Text,
+                null, (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.EnsureSecondaryVerificationComplete(
+                        connection, transaction, TenderId, newStatus);
+                    return new WorkflowTransitionMetadata { ActionName = "CompleteSecondaryVerification" };
+                });
+        }
+
+        protected void SendToShortfallCreationButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_Cell_CompleteSecondaryVerification", "tender.cell.verify",
+                "Shortfall Generation Pending", SecondaryRemarksText.Text,
+                null, (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.EnsureSecondaryVerificationComplete(
+                        connection, transaction, TenderId, newStatus);
+                    return new WorkflowTransitionMetadata { ActionName = "RequireStructuredShortfall" };
+                });
+        }
+
+        protected void ReverifiedOpeningToChairmanButton_Click(object sender, EventArgs e)
+        {
+            CompleteRejectedOpeningReverification("Financial Bid Opening Approval Pending");
+        }
+
+        protected void ReverifiedOpeningToShortfallButton_Click(object sender, EventArgs e)
+        {
+            CompleteRejectedOpeningReverification("Shortfall Generation Pending");
+        }
+
+        private void CompleteRejectedOpeningReverification(string targetStatus)
+        {
+            ProcessFinalizedStage("Final_Cell_ReverifyRejectedOpening", "tender.cell.verify",
+                targetStatus, SecondaryRemarksText.Text, null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.EnsureSecondaryVerificationComplete(
+                        connection, transaction, TenderId, newStatus);
+                    return new WorkflowTransitionMetadata
+                    {
+                        ActionName = targetStatus == "Shortfall Generation Pending"
+                            ? "RequireShortfallAfterFinancialOpeningReturn"
+                            : "CompleteFinancialOpeningReverification"
+                    };
+                });
+        }
+
+        protected void ReturnShortfallButton_Click(object sender, EventArgs e)
+        {
+            long shortfallId = GetAssignedShortfallId("Final_JE_ApproveShortfall");
+            ProcessFinalizedStage("Final_JE_ApproveShortfall", "shortfall.approve",
+                "Shortfall Generation Pending", ShortfallDecisionRemarksText.Text, shortfallId,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.DecideStructuredShortfall(connection, transaction,
+                        TenderId, shortfallId, CurrentUserId, departmentId,
+                        false, ShortfallDecisionRemarksText.Text));
+        }
+
+        protected void ApproveShortfallButton_Click(object sender, EventArgs e)
+        {
+            long shortfallId = GetAssignedShortfallId("Final_JE_ApproveShortfall");
+            ProcessFinalizedStage("Final_JE_ApproveShortfall", "shortfall.approve",
+                "Awaiting Contractor Submission", ShortfallDecisionRemarksText.Text, shortfallId,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.DecideStructuredShortfall(connection, transaction,
+                        TenderId, shortfallId, CurrentUserId, departmentId,
+                        true, ShortfallDecisionRemarksText.Text));
+        }
+
+        protected void ApproveFinancialOpeningButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_Samiti_ApproveFinancialOpening", "financial.open.approve",
+                "Financial Bid Opening Approved", FinancialOpeningRemarksText.Text, null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.RecordFinancialOpeningDecision(connection, transaction,
+                        TenderId, departmentId, true, FinancialOpeningRemarksText.Text));
+        }
+
+        protected void RejectFinancialOpeningButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_Samiti_ApproveFinancialOpening", "financial.open.approve",
+                "Financial Bid Opening Rejected", FinancialOpeningRemarksText.Text, null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.RecordFinancialOpeningDecision(connection, transaction,
+                        TenderId, departmentId, false, FinancialOpeningRemarksText.Text));
+        }
+
+        protected void SaveFinancialBidsButton_Click(object sender, EventArgs e)
+        {
+            List<FinancialBidInput> bids = new List<FinancialBidInput>();
+            foreach (GridViewRow row in FinancialEntryGrid.Rows)
+            {
+                if (row.RowType != DataControlRowType.DataRow) continue;
+                int contractorId;
+                decimal amount;
+                TextBox amountInput = row.FindControl("FinancialBidAmountText") as TextBox;
+                TextBox remarksInput = row.FindControl("FinancialBidRemarksText") as TextBox;
+                if (!Int32.TryParse(Convert.ToString(FinancialEntryGrid.DataKeys[row.RowIndex].Value),
+                        NumberStyles.None, CultureInfo.InvariantCulture, out contractorId) ||
+                    amountInput == null ||
+                    !Decimal.TryParse(amountInput.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out amount))
+                {
+                    ShowMessage("Enter a valid financial amount for every qualified bidder.");
+                    return;
+                }
+                bids.Add(new FinancialBidInput
+                {
+                    ContractorId = contractorId,
+                    Amount = amount,
+                    Remarks = remarksInput == null ? String.Empty : remarksInput.Text
+                });
+            }
+
+            ProcessFinalizedStage("Final_JE_OpenFinancialBids", "financial.open.execute",
+                "Final Financial Approval Pending", FinancialEntryRemarksText.Text, null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.EnterFinancialBids(connection, transaction,
+                        TenderId, CurrentUserId, bids, FinancialEntryRemarksText.Text);
+                    return new WorkflowTransitionMetadata { ActionName = "OpenFinancialBids" };
+                });
+        }
+
+        protected void ApproveFinancialReviewButton_Click(object sender, EventArgs e)
+        {
+            int financialBidId;
+            if (!Int32.TryParse(SelectedFinancialBidSelect.SelectedValue, NumberStyles.None,
+                    CultureInfo.InvariantCulture, out financialBidId))
+            {
+                ShowMessage("Select a financial bid to approve.");
+                return;
+            }
+            ProcessFinancialReview("Approved", financialBidId);
+        }
+
+        protected void ReturnFinancialReviewButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinancialReview("Returned", null);
+        }
+
+        private void ProcessFinancialReview(string decision, int? selectedFinancialBidId)
+        {
+            ProcessFinalizedStage("Final_Auditor_ApproveFinancialBids", "financial.approve.final",
+                decision == "Approved" ? "Final Financial Approval Completed" : "Final Financial Approval Rejected",
+                FinancialDecisionRemarksText.Text, null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.RecordAuditorFinancialDecision(connection, transaction,
+                        TenderId, CurrentUserId, decision, selectedFinancialBidId,
+                        FinancialDecisionRemarksText.Text);
+                    return new WorkflowTransitionMetadata { ActionName = "AuditorFinancial" + decision };
+                });
+        }
+
+        protected void ResubmitFinancialReviewButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_JE_ResubmitFinancialApproval", "financial.open.execute",
+                "Final Financial Approval Pending", FinancialResubmissionRemarksText.Text, null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.ResubmitFinancialReview(connection, transaction,
+                        TenderId, CurrentUserId, FinancialResubmissionRemarksText.Text));
+        }
+
+        protected void CreateWorkOrderButton_Click(object sender, EventArgs e)
+        {
+            DateTime issueDateUtc;
+            if (!TryParseIndiaDateTime(WorkOrderIssueDateText.Text, out issueDateUtc))
+            {
+                ShowMessage("Enter a valid work order issue date and time in India Standard Time.");
+                return;
+            }
+            ProcessFinalizedStage("Final_JE_StartWorkOrder", "workorder.manage", "Work Order Pending",
+                WorkOrderNumberText.Text, null, (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.CreateWorkOrder(connection, transaction, TenderId,
+                        WorkOrderNumberText.Text, issueDateUtc, WorkDescriptionText.Text,
+                        WorkOrderTermsText.Text, WorkOrderSignatoryText.Text);
+                    return new WorkflowTransitionMetadata { ActionName = "CreateWorkOrder" };
+                });
+        }
+
+        protected void GenerateWorkOrderButton_Click(object sender, EventArgs e)
+        {
+            ProcessGeneratedDocument("Final_JE_GenerateWorkOrder", "workorder.manage",
+                "Work Order Generated", "WorkOrder");
+        }
+
+        protected void CreateAgreementButton_Click(object sender, EventArgs e)
+        {
+            DateTime agreementDateUtc;
+            if (!TryParseIndiaDateTime(AgreementDateText.Text, out agreementDateUtc))
+            {
+                ShowMessage("Enter a valid agreement date and time in India Standard Time.");
+                return;
+            }
+            ProcessFinalizedStage("Final_JE_StartAgreement", "agreement.manage", "Tender Agreement Pending",
+                AgreementNumberText.Text, null, (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.CreateAgreement(connection, transaction, TenderId,
+                        AgreementNumberText.Text, agreementDateUtc,
+                        AgreementTermsText.Text, AgreementSignatoryText.Text);
+                    return new WorkflowTransitionMetadata { ActionName = "CreateTenderAgreement" };
+                });
+        }
+
+        protected void GenerateAgreementButton_Click(object sender, EventArgs e)
+        {
+            ProcessGeneratedDocument("Final_JE_GenerateAgreement", "agreement.manage",
+                "Tender Agreement Generated", "Agreement");
+        }
+
+        protected void CompleteTenderButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_JE_CompleteTender", "agreement.manage",
+                "Completed", "Tender documents completed.", null,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.EnsureFinalAgreementGenerated(
+                        connection, transaction, TenderId);
+                    return new WorkflowTransitionMetadata { ActionName = "CompleteTender" };
+                });
+        }
+
+        protected void ShortfallClearanceGrid_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (!String.Equals(e.CommandName, "ReviewShortfallItem", StringComparison.Ordinal))
+                return;
+            int rowIndex;
+            if (!Int32.TryParse(Convert.ToString(e.CommandArgument), NumberStyles.None,
+                    CultureInfo.InvariantCulture, out rowIndex) ||
+                rowIndex < 0 || rowIndex >= ShortfallClearanceGrid.Rows.Count ||
+                rowIndex >= ShortfallClearanceGrid.DataKeys.Count)
+            {
+                ShowMessage("The selected shortfall item is invalid. Refresh and retry.");
+                return;
+            }
+
+            long itemId;
+            if (!Int64.TryParse(Convert.ToString(ShortfallClearanceGrid.DataKeys[rowIndex].Value),
+                    NumberStyles.None, CultureInfo.InvariantCulture, out itemId))
+            {
+                ShowMessage("The selected shortfall item could not be read.");
+                return;
+            }
+            DropDownList decisionInput = ShortfallClearanceGrid.Rows[rowIndex]
+                .FindControl("ShortfallClearanceDecisionSelect") as DropDownList;
+            TextBox remarksInput = ShortfallClearanceGrid.Rows[rowIndex]
+                .FindControl("ShortfallClearanceRemarksText") as TextBox;
+            if (decisionInput == null || remarksInput == null)
+            {
+                ShowMessage("The shortfall decision controls could not be read.");
+                return;
+            }
+
+            long shortfallId = GetAssignedShortfallId("Final_Cell_ClearShortfall");
+            string decision = decisionInput.SelectedValue;
+            string remarks = remarksInput.Text;
+            ProcessFinalizedStage("Final_Cell_ClearShortfall", "shortfall.clear",
+                "Shortfall Documents Submitted", remarks, shortfallId,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.ReviewShortfallItem(connection, transaction,
+                        TenderId, shortfallId, itemId, CurrentUserId, CurrentRoleId,
+                        decision, remarks));
+        }
+
+        private void ProcessGeneratedDocument(string stageName, string permission,
+            string newStatus, string kind)
+        {
+            string storedPath = null;
+            try
+            {
+                TenderFinalizedWorkflowService.Transition(TenderId, CurrentUserId, CurrentRoleId,
+                    CurrentRoleCode, CurrentDepartmentId, stageName, newStatus,
+                    "Generate " + kind + " PDF.", null, permission, Request.UserHostAddress,
+                    (connection, transaction, departmentId, previousStatus, targetStatus) =>
+                    {
+                        WorkflowTransitionMetadata metadata =
+                            TenderFinalizedWorkflowService.GenerateFinalDocument(this, connection,
+                                transaction, TenderId, CurrentUserId, kind);
+                        storedPath = metadata.RelatedDocumentPath;
+                        return metadata;
+                    });
+                Response.Redirect("~/Pages/TenderWorkflow.aspx?id=" +
+                    TenderId.ToString(CultureInfo.InvariantCulture), false);
+                Context.ApplicationInstance.CompleteRequest();
+            }
+            catch (SqlException ex)
+            {
+                if (!String.IsNullOrWhiteSpace(storedPath))
+                    TenderLifecycleFiles.DeleteStoredGeneratedTenderDocument(this, storedPath);
+                Trace.Warn("DepartmentModule", "Final tender document generation failed.", ex);
+                ShowMessage("The PDF could not be generated and recorded. Please retry or contact support.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!String.IsNullOrWhiteSpace(storedPath))
+                    TenderLifecycleFiles.DeleteStoredGeneratedTenderDocument(this, storedPath);
+                ShowMessage(ModuleDb.Html(ex.Message));
+            }
+        }
+
+        private long GetAssignedShortfallId(string stageName)
+        {
+            using (SqlConnection connection = ModuleDb.OpenConnection())
+            using (SqlCommand command = new SqlCommand(
+                String.Empty, connection))
+            {
+                command.CommandText =
+                    @"SELECT a.ShortfallId
+                      FROM dbo.TenderWorkflowAssignments a
+                      INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                        AND s.WorkflowVersion=2 AND s.IsActive=1
+                      WHERE a.TenderId=@TenderId AND a.IsCurrent=1
+                        AND a.AssignedRoleId=@RoleId AND s.StageName=@StageName
+                        AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
+                        AND a.ShortfallId IS NOT NULL
+                        AND (@IsJE=0 OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId));";
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
+                ModuleDb.AddParameter(command, "@StageName", SqlDbType.NVarChar, stageName, 80);
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit,
+                    TenderFinalizedWorkflowService.IsJuniorEngineer(CurrentRoleCode));
+                ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
+                    CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                object value = command.ExecuteScalar();
+                if (value == null || value == DBNull.Value)
+                    throw new InvalidOperationException("The assigned shortfall was not found. Refresh the workflow queue.");
+                return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            }
+        }
+
+        private void ProcessFinalizedStage(string stageName, string permission, string newStatus,
+            string remarks, long? shortfallId, TenderFinalizedWorkflowService.StageAction action)
+        {
+            try
+            {
+                TenderFinalizedWorkflowService.Transition(TenderId, CurrentUserId, CurrentRoleId,
+                    CurrentRoleCode, CurrentDepartmentId, stageName, newStatus, remarks,
+                    shortfallId, permission, Request.UserHostAddress, action);
+                Response.Redirect("~/Pages/TenderWorkflow.aspx?id=" +
+                    TenderId.ToString(CultureInfo.InvariantCulture), false);
+                Context.ApplicationInstance.CompleteRequest();
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Finalized tender workflow action failed.", ex);
+                ShowMessage("The workflow action could not be saved. Please retry or contact support.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowMessage(ModuleDb.Html(ex.Message));
+            }
         }
 
         private void BindPrimaryVerification(SqlConnection connection)
@@ -999,21 +1658,36 @@ namespace DepartmentModule.Pages
                     throw new InvalidOperationException("Required document types cannot be duplicated.");
                 documentTypes.Add(documentType);
             }
-            if (documentTypes.Count == 0)
-                throw new InvalidOperationException("Enter at least one required bidder document type, one per line.");
+            if (documentTypes.Count == 0 || documentTypes.Count > 30)
+                throw new InvalidOperationException("Enter between 1 and 30 required bidder document types, one per line.");
 
-            using (SqlCommand command = new SqlCommand(
-                "DELETE FROM dbo.TenderRequiredBidDocuments WHERE TenderId=@TenderId;",
-                connection, transaction))
+            List<string> documentTypeParameters = new List<string>();
+            using (SqlCommand command = new SqlCommand())
             {
+                command.Connection = connection;
+                command.Transaction = transaction;
+                for (int i = 0; i < documentTypes.Count; i++)
+                {
+                    string parameterName = "@DocumentType" + i.ToString(CultureInfo.InvariantCulture);
+                    documentTypeParameters.Add(parameterName);
+                    AddText(command, parameterName, SqlDbType.NVarChar, documentTypes[i], 160);
+                }
+                command.CommandText =
+                    "DELETE FROM dbo.TenderRequiredBidDocuments WHERE TenderId=@TenderId AND DocumentType NOT IN (" +
+                    String.Join(",", documentTypeParameters.ToArray()) + ");";
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                 command.ExecuteNonQuery();
             }
             foreach (string documentType in documentTypes)
             {
                 using (SqlCommand command = new SqlCommand(
-                    @"INSERT INTO dbo.TenderRequiredBidDocuments(TenderId,DocumentType,CreatedBy)
-                      VALUES(@TenderId,@DocumentType,@UserId);", connection, transaction))
+                    @"IF NOT EXISTS
+                      (
+                          SELECT 1 FROM dbo.TenderRequiredBidDocuments WITH (UPDLOCK,HOLDLOCK)
+                          WHERE TenderId=@TenderId AND DocumentType=@DocumentType
+                      )
+                          INSERT INTO dbo.TenderRequiredBidDocuments(TenderId,DocumentType,CreatedBy)
+                          VALUES(@TenderId,@DocumentType,@UserId);", connection, transaction))
                 {
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                     AddText(command, "@DocumentType", SqlDbType.NVarChar, documentType, 160);

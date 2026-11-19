@@ -27,8 +27,9 @@
         <asp:Panel ID="SubmitDraftPanel" runat="server" CssClass="card" Visible="false">
             <h2>Submit tender for publication processing</h2>
             <p class="help">Submission is blocked until a BOQ item and all four required tender document categories are present.</p>
+            <asp:HyperLink ID="ApplicationRequirementsLink" runat="server" CssClass="button secondary">Manage application requirements</asp:HyperLink>
             <div class="field"><label for="RequiredBidDocumentsText">Required bidder technical documents</label>
-                <span class="help">Enter one required document type per line. Contractors will see this checklist before submitting bids.</span>
+                <span class="help">Enter one document name per line. Use the requirements manager to set descriptions, optional items, accepted formats, and file-size limits.</span>
                 <asp:TextBox ID="RequiredBidDocumentsText" runat="server" TextMode="MultiLine" MaxLength="8000" Rows="6" /></div>
             <div class="field"><label for="SubmitRemarksText">Remarks</label><asp:TextBox ID="SubmitRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
             <asp:Button ID="SubmitDraftButton" runat="server" Text="Submit tender" OnClick="SubmitDraftButton_Click" />
@@ -123,6 +124,233 @@
             <asp:Button ID="ForwardToTenderCellButton" runat="server" Text="Forward for secondary verification"
                 OnClick="ForwardToTenderCellButton_Click" />
         </asp:Panel>
+        <asp:Panel ID="SecondaryVerificationPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Tender Cell secondary verification</h2>
+            <p class="help">Open each submitted application, record a decision for every uploaded document and missing mandatory document, then record the bidder decision. The tender can advance only when every bidder is reviewed.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="SecondaryApplicationsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    EmptyDataText="No submitted applications are available for secondary review.">
+                    <Columns>
+                        <asp:HyperLinkField DataTextField="ContractorName" DataNavigateUrlFields="TechnicalBidId"
+                            DataNavigateUrlFormatString="ApplicationDetails.aspx?id={0}" HeaderText="Application" />
+                        <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
+                        <asp:BoundField DataField="SubmittedDate" HeaderText="Submitted" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                        <asp:BoundField DataField="SecondaryDecision" HeaderText="Secondary decision" />
+                        <asp:BoundField DataField="SecondaryRemarks" HeaderText="Remarks" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+            <div class="field"><label for="SecondaryRemarksText">Tender Cell completion remarks</label>
+                <asp:TextBox ID="SecondaryRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="2" /></div>
+            <div class="row">
+                <asp:Button ID="CompleteSecondaryVerificationButton" runat="server" Text="Complete verified review"
+                    OnClick="CompleteSecondaryVerificationButton_Click" />
+                <asp:Button ID="SendToShortfallCreationButton" runat="server" Text="Create required shortfall"
+                    CssClass="button secondary" OnClick="SendToShortfallCreationButton_Click" />
+                <asp:Button ID="ReverifiedOpeningToChairmanButton" runat="server" Text="Return verified review to Chairman"
+                    OnClick="ReverifiedOpeningToChairmanButton_Click" />
+                <asp:Button ID="ReverifiedOpeningToShortfallButton" runat="server" Text="Create required shortfall"
+                    CssClass="button secondary" OnClick="ReverifiedOpeningToShortfallButton_Click" />
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="RejectedOpeningReverificationPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Financial opening return — Tender Cell re-verification</h2>
+            <p class="help">Recheck every submitted application and document. Open each application below to update its bidder and document decisions before returning the verified result to the Chairman or creating a shortfall.</p>
+        </asp:Panel>
+        <asp:Panel ID="ShortfallCreationPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Shortfall requests requiring correction</h2>
+            <p class="help">Open a bidder marked Shortfall, select each deficient item, and describe the deficiency and corrective action. A request is not sent until the Junior Engineer approves it.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="ShortfallApplicationsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    EmptyDataText="No bidder has a secondary review marked Shortfall.">
+                    <Columns>
+                        <asp:HyperLinkField DataTextField="ContractorName" DataNavigateUrlFields="TechnicalBidId"
+                            DataNavigateUrlFormatString="ApplicationDetails.aspx?id={0}" HeaderText="Application" />
+                        <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
+                        <asp:BoundField DataField="SecondaryRemarks" HeaderText="Tender Cell remarks" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="ShortfallApprovalPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Junior Engineer shortfall approval</h2>
+            <p class="help">Approval starts the fixed three-calendar-day response period. Returning the request sends it back to Tender Cell for correction.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="ShortfallItemsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    EmptyDataText="This shortfall does not contain any items.">
+                    <Columns>
+                        <asp:BoundField DataField="RequiredDocumentType" HeaderText="Requirement" />
+                        <asp:BoundField DataField="ShortfallDescription" HeaderText="Deficiency" />
+                        <asp:BoundField DataField="CorrectiveAction" HeaderText="Corrective action" />
+                        <asp:BoundField DataField="ClearanceStatus" HeaderText="Status" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+            <div class="field"><label for="ShortfallDecisionRemarksText">Decision remarks</label>
+                <asp:TextBox ID="ShortfallDecisionRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="2" /></div>
+            <div class="row">
+                <asp:Button ID="ApproveShortfallButton" runat="server" Text="Approve and notify contractor"
+                    OnClick="ApproveShortfallButton_Click" />
+                <asp:Button ID="ReturnShortfallButton" runat="server" Text="Return to Tender Cell"
+                    CssClass="button secondary" OnClick="ReturnShortfallButton_Click" />
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="ShortfallClearancePanel" runat="server" CssClass="card" Visible="false">
+            <h2>Tender Cell shortfall clearance</h2>
+            <p class="help">Review the latest corrected file for each item. A continued deficiency may be returned while the original deadline remains open; expired requests disqualify that application.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="ShortfallClearanceGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    DataKeyNames="ShortfallItemId" OnRowCommand="ShortfallClearanceGrid_RowCommand"
+                    EmptyDataText="No submitted items are waiting for clearance.">
+                    <Columns>
+                        <asp:BoundField DataField="RequiredDocumentType" HeaderText="Requirement" />
+                        <asp:BoundField DataField="ShortfallDescription" HeaderText="Deficiency" />
+                        <asp:HyperLinkField DataTextField="FileName" DataNavigateUrlFields="ShortfallSubmissionId"
+                            DataNavigateUrlFormatString="DocumentDownload.aspx?shortfallSubmissionId={0}" HeaderText="Latest corrected document" />
+                        <asp:BoundField DataField="ClearanceStatus" HeaderText="Status" />
+                        <asp:TemplateField HeaderText="Decision"><ItemTemplate>
+                            <asp:DropDownList ID="ShortfallClearanceDecisionSelect" runat="server">
+                                <asp:ListItem Value="">Select decision</asp:ListItem>
+                                <asp:ListItem Value="Cleared">Cleared</asp:ListItem>
+                                <asp:ListItem Value="Continued Deficiency">Continued deficiency</asp:ListItem>
+                            </asp:DropDownList>
+                            <asp:TextBox ID="ShortfallClearanceRemarksText" runat="server" TextMode="MultiLine"
+                                MaxLength="2000" Rows="2" />
+                            <asp:Button ID="ReviewShortfallItemButton" runat="server" Text="Record item decision"
+                                CommandName="ReviewShortfallItem" CommandArgument='<%# Container.DataItemIndex %>' />
+                        </ItemTemplate></asp:TemplateField>
+                    </Columns>
+                </asp:GridView>
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="FinancialOpeningApprovalPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Chairman financial-opening decision</h2>
+            <p class="help">Financial bid amounts remain hidden until this approval is recorded.</p>
+            <div class="field"><label for="FinancialOpeningRemarksText">Decision remarks</label>
+                <asp:TextBox ID="FinancialOpeningRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
+            <div class="row">
+                <asp:Button ID="ApproveFinancialOpeningButton" runat="server" Text="Approve financial opening"
+                    OnClick="ApproveFinancialOpeningButton_Click" />
+                <asp:Button ID="RejectFinancialOpeningButton" runat="server" Text="Return to Tender Cell"
+                    CssClass="button secondary" OnClick="RejectFinancialOpeningButton_Click" />
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="FinancialBidEntryPanel" runat="server" CssClass="card" Visible="false">
+            <h2>JE financial bid opening and data entry</h2>
+            <p class="help">Enter the amount for every technically approved bidder. This entry is available only after Chairman approval.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="FinancialEntryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    DataKeyNames="ContractorId" EmptyDataText="No approved bidders are available for financial opening.">
+                    <Columns>
+                        <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
+                        <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
+                        <asp:TemplateField HeaderText="Quoted amount (₹)"><ItemTemplate>
+                            <asp:TextBox ID="FinancialBidAmountText" runat="server" TextMode="Number"
+                                Text="" />
+                        </ItemTemplate></asp:TemplateField>
+                        <asp:TemplateField HeaderText="Remarks"><ItemTemplate>
+                            <asp:TextBox ID="FinancialBidRemarksText" runat="server" MaxLength="1000" />
+                        </ItemTemplate></asp:TemplateField>
+                    </Columns>
+                </asp:GridView>
+            </div>
+            <div class="field"><label for="FinancialEntryRemarksText">Opening remarks</label>
+                <asp:TextBox ID="FinancialEntryRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="2" /></div>
+            <asp:Button ID="SaveFinancialBidsButton" runat="server" Text="Record financial opening and submit for audit"
+                OnClick="SaveFinancialBidsButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="AuditorFinancialReviewPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Director Auditor financial review</h2>
+            <div class="table-wrap">
+                <asp:GridView ID="FinancialReviewGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    EmptyDataText="No opened financial bids are available for review.">
+                    <Columns>
+                        <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
+                        <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
+                        <asp:BoundField DataField="QuotedAmount" HeaderText="Quoted amount" DataFormatString="{0:N2}" />
+                        <asp:BoundField DataField="Remarks" HeaderText="JE remarks" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+            <div class="field"><label for="SelectedFinancialBidSelect">Selected bid</label>
+                <asp:DropDownList ID="SelectedFinancialBidSelect" runat="server" /></div>
+            <div class="field"><label for="FinancialDecisionRemarksText">Audit decision remarks</label>
+                <asp:TextBox ID="FinancialDecisionRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
+            <div class="row">
+                <asp:Button ID="ApproveFinancialReviewButton" runat="server" Text="Approve selected bid"
+                    OnClick="ApproveFinancialReviewButton_Click" />
+                <asp:Button ID="ReturnFinancialReviewButton" runat="server" Text="Return to JE"
+                    CssClass="button secondary" OnClick="ReturnFinancialReviewButton_Click" />
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="FinancialResubmitPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Resubmit financial review</h2>
+            <p class="help">Review the Auditor's return remarks in the workflow history and provide the Junior Engineer's response.</p>
+            <div class="field"><label for="FinancialResubmissionRemarksText">Resubmission remarks</label>
+                <asp:TextBox ID="FinancialResubmissionRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
+            <asp:Button ID="ResubmitFinancialReviewButton" runat="server" Text="Resubmit to Director Auditor"
+                OnClick="ResubmitFinancialReviewButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="WorkOrderCreatePanel" runat="server" CssClass="card" Visible="false">
+            <h2>Create work order</h2>
+            <p>Approved contractor: <strong><asp:Literal ID="WorkOrderBidderName" runat="server" /></strong></p>
+            <p>Auditor-approved amount: ₹<strong><asp:Literal ID="WorkOrderBidAmount" runat="server" /></strong></p>
+            <div class="row">
+                <div class="field"><label for="WorkOrderNumberText">Work order number</label><asp:TextBox ID="WorkOrderNumberText" runat="server" MaxLength="50" /></div>
+                <div class="field"><label for="WorkOrderIssueDateText">Issue date and time (IST)</label><asp:TextBox ID="WorkOrderIssueDateText" runat="server" TextMode="DateTimeLocal" /></div>
+            </div>
+            <div class="field"><label for="WorkDescriptionText">Work description</label><asp:TextBox ID="WorkDescriptionText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
+            <div class="field"><label for="WorkOrderTermsText">Terms and conditions</label><asp:TextBox ID="WorkOrderTermsText" runat="server" TextMode="MultiLine" MaxLength="4000" Rows="4" /></div>
+            <div class="field"><label for="WorkOrderSignatoryText">Authorized signatory</label><asp:TextBox ID="WorkOrderSignatoryText" runat="server" MaxLength="200" /></div>
+            <asp:Button ID="CreateWorkOrderButton" runat="server" Text="Create work order record"
+                OnClick="CreateWorkOrderButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="WorkOrderGeneratePanel" runat="server" CssClass="card" Visible="false">
+            <h2>Generate work order PDF</h2>
+            <p class="help">The PDF uses the approved contractor and amount and records a versioned copy in the tender history.</p>
+            <asp:Button ID="GenerateWorkOrderButton" runat="server" Text="Generate Work Order PDF"
+                OnClick="GenerateWorkOrderButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="AgreementCreatePanel" runat="server" CssClass="card" Visible="false">
+            <h2>Create tender agreement</h2>
+            <p>Approved contractor: <strong><asp:Literal ID="AgreementBidderName" runat="server" /></strong></p>
+            <p>Auditor-approved amount: ₹<strong><asp:Literal ID="AgreementBidAmount" runat="server" /></strong></p>
+            <div class="row">
+                <div class="field"><label for="AgreementNumberText">Agreement number</label><asp:TextBox ID="AgreementNumberText" runat="server" MaxLength="50" /></div>
+                <div class="field"><label for="AgreementDateText">Agreement date and time (IST)</label><asp:TextBox ID="AgreementDateText" runat="server" TextMode="DateTimeLocal" /></div>
+            </div>
+            <div class="field"><label for="AgreementTermsText">Terms and conditions</label><asp:TextBox ID="AgreementTermsText" runat="server" TextMode="MultiLine" MaxLength="4000" Rows="4" /></div>
+            <div class="field"><label for="AgreementSignatoryText">Authorized signatory</label><asp:TextBox ID="AgreementSignatoryText" runat="server" MaxLength="200" /></div>
+            <asp:Button ID="CreateAgreementButton" runat="server" Text="Create agreement record"
+                OnClick="CreateAgreementButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="AgreementGeneratePanel" runat="server" CssClass="card" Visible="false">
+            <h2>Generate tender agreement PDF</h2>
+            <p class="help">The versioned PDF includes the approved contractor, amount, terms, and authorized signatory.</p>
+            <asp:Button ID="GenerateAgreementButton" runat="server" Text="Generate Agreement PDF"
+                OnClick="GenerateAgreementButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="CompleteTenderPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Complete tender workflow</h2>
+            <p class="help">Completion is enabled after the agreement PDF is generated and recorded.</p>
+            <asp:Button ID="CompleteTenderButton" runat="server" Text="Complete tender"
+                OnClick="CompleteTenderButton_Click" />
+        </asp:Panel>
+        <section class="card">
+            <h2>Versioned generated documents</h2>
+            <div class="table-wrap">
+                <asp:GridView ID="GeneratedDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    EmptyDataText="No generated work order or agreement documents have been recorded.">
+                    <Columns>
+                        <asp:BoundField DataField="DocumentKind" HeaderText="Document" />
+                        <asp:BoundField DataField="VersionNumber" HeaderText="Version" />
+                        <asp:HyperLinkField DataTextField="FileName" DataNavigateUrlFields="GeneratedDocumentId"
+                            DataNavigateUrlFormatString="DocumentDownload.aspx?generatedDocumentId={0}" HeaderText="PDF" />
+                        <asp:BoundField DataField="GeneratedAtUtc" HeaderText="Generated" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+        </section>
         <section class="card">
             <h2>Immutable workflow history</h2>
             <div class="table-wrap">

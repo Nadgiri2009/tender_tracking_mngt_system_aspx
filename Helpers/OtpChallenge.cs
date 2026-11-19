@@ -65,6 +65,26 @@ namespace DepartmentModule.Helpers
             return true;
         }
 
+        public static bool IsValidLoginMobile(string mobile)
+        {
+            if (IsValidIndianMobile(mobile)) return true;
+
+            HttpContext context = HttpContext.Current;
+            string configuredMode = GetSetting("OtpDeliveryMode")
+                ?? GetSetting("LoginOtpDeliveryMode")
+                ?? "Auto";
+            if (context == null || context.Request == null || !context.Request.IsLocal ||
+                !String.Equals(configuredMode, "Console", StringComparison.OrdinalIgnoreCase) ||
+                mobile == null || mobile.Length != 10)
+                return false;
+
+            for (int i = 0; i < mobile.Length; i++)
+            {
+                if (mobile[i] < '0' || mobile[i] > '9') return false;
+            }
+            return true;
+        }
+
         public static string CreateCode()
         {
             byte[] buffer = new byte[4];
@@ -130,8 +150,10 @@ namespace DepartmentModule.Helpers
             return difference == 0;
         }
 
-        public static bool TryDeliver(string purpose, string code, string mobile, out string deliveryMode)
+        public static bool TryDeliver(string purpose, string code, string mobile,
+            out string deliveryMode, out string developmentCode)
         {
+            developmentCode = String.Empty;
             string configuredMode = GetSetting("OtpDeliveryMode")
                 ?? GetSetting("LoginOtpDeliveryMode")
                 ?? "Auto";
@@ -154,7 +176,11 @@ namespace DepartmentModule.Helpers
                 String.Equals(configuredMode, "Auto", StringComparison.OrdinalIgnoreCase))
             {
                 deliveryMode = "Console";
-                return WriteToDevelopmentOtpLog(purpose, code);
+                bool delivered = WriteToDevelopmentOtpLog(purpose, code);
+                if (delivered && HttpContext.Current != null &&
+                    HttpContext.Current.Request != null && HttpContext.Current.Request.IsLocal)
+                    developmentCode = code;
+                return delivered;
             }
 
             deliveryMode = String.Empty;

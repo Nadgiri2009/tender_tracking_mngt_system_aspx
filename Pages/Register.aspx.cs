@@ -3,6 +3,7 @@ using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Text.RegularExpressions;
+using System.Web.Security;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 using DepartmentModule.Helpers;
@@ -78,8 +79,9 @@ namespace DepartmentModule.Pages
                 }
 
                 string code = OtpChallenge.CreateCode();
-                string deliveryMode;
-                if (!OtpChallenge.TryDeliver("registration", code, mobile, out deliveryMode))
+                string deliveryMode, developmentCode;
+                if (!OtpChallenge.TryDeliver("registration", code, mobile,
+                        out deliveryMode, out developmentCode))
                 {
                     Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
                         ? "<div class=\"message\">The SMS gateway could not send the OTP. Please retry later or contact support.</div>"
@@ -96,7 +98,8 @@ namespace DepartmentModule.Pages
                 OtpPanel.Visible = true;
                 Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
                     ? "<div class=\"message success\">A registration OTP has been sent to your mobile number.</div>"
-                    : String.Empty;
+                    : "<div class=\"message success\">Development OTP (local only): <strong>" +
+                      ModuleDb.Html(developmentCode) + "</strong></div>";
             }
             catch (SqlException ex)
             {
@@ -247,6 +250,7 @@ namespace DepartmentModule.Pages
             Session[roleKey] = role;
             Session[departmentKey] = departmentId.HasValue ? (object)departmentId.Value : null;
             Session["FullName"] = fullName;
+            FormsAuthentication.SetAuthCookie(userId.ToString(), false);
         }
 
         private void ClearOtpChallenge()

@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Web;
+using System.Web.Security;
 using System.Web.UI;
 
 namespace DepartmentModule.Helpers
@@ -31,6 +32,14 @@ namespace DepartmentModule.Helpers
             bool hasSessionIdentity = Session != null &&
                 Int32.TryParse(Convert.ToString(Session[userKey]), out userId) && userId > 0;
 
+            if (!hasSessionIdentity && User != null && User.Identity != null &&
+                User.Identity.IsAuthenticated &&
+                Int32.TryParse(User.Identity.Name, out userId) && userId > 0)
+            {
+                Session[userKey] = userId;
+                hasSessionIdentity = true;
+            }
+
             if (!hasSessionIdentity && RequiresAuthentication)
             {
                 string loginUrl = ConfigurationManager.AppSettings["DepartmentPanelLoginUrl"] ?? "~/Pages/Error.aspx?code=401";
@@ -43,6 +52,7 @@ namespace DepartmentModule.Helpers
                 LoadIdentityAndPermissions(userId);
                 if (CurrentUserId == 0)
                 {
+                    FormsAuthentication.SignOut();
                     Session.Clear();
                     Session.Abandon();
                     if (RequiresAuthentication)
@@ -56,6 +66,16 @@ namespace DepartmentModule.Helpers
 
             CurrentUserId = CurrentUserId > 0 &&
                 (CurrentRoleId > 0 || CurrentAccountType == "ExternalBidder") ? CurrentUserId : 0;
+            if (CurrentUserId > 0)
+            {
+                string roleKey = ConfigurationManager.AppSettings["SessionRoleKey"] ?? "RoleName";
+                string departmentKey = ConfigurationManager.AppSettings["SessionDepartmentIdKey"] ?? "DepartmentId";
+                Session[userKey] = CurrentUserId;
+                Session[roleKey] = CurrentRole;
+                Session[departmentKey] = CurrentDepartmentId.HasValue
+                    ? (object)CurrentDepartmentId.Value
+                    : null;
+            }
             ViewStateUserKey = Session == null ? null : Session.SessionID;
             base.OnInit(e);
         }
@@ -132,7 +152,7 @@ namespace DepartmentModule.Helpers
                 string requestedRole = role.Trim();
                 if (String.Equals(requestedRole, "Junior Engineer (JE)", StringComparison.OrdinalIgnoreCase) ||
                     String.Equals(requestedRole, "DepartmentOfficer", StringComparison.OrdinalIgnoreCase))
-                    if (CurrentRoleCode == "Junior Engineer (JE)") return true;
+                    if (CurrentRoleCode == "Junior Engineer (JE)" || CurrentRoleCode == "JE") return true;
 
                 if (String.Equals(requestedRole, "Tender Cell", StringComparison.OrdinalIgnoreCase) ||
                     String.Equals(requestedRole, "TenderSection", StringComparison.OrdinalIgnoreCase) ||

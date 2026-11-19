@@ -1,6 +1,7 @@
 using System;
 using System.Configuration;
 using System.Web;
+using System.Web.Security;
 using System.Web.UI;
 using System.Web.UI.HtmlControls;
 using System.Web.UI.WebControls;
@@ -12,8 +13,9 @@ namespace DepartmentModule.Pages
         protected HtmlGenericControl AppLayout, AdminSidebar, PublicNavigation;
         protected HyperLink AdminDashboardLink, AdminUsersLink, AdminTendersLink, AdminCreateTenderLink,
             ApprovalsLink, AdminWorkflowLink, TenderLifecycleLink, TenderEvaluationLink, AdminRolesLink, AdminMasterDataLink, AdminDepartmentsLink, AdminAnnouncementsLink,
-            AdminReportsLink, AdminAuditLink, DashboardLink, PublicApprovalsLink, PublicWorkflowLink, PublicTenderLifecycleLink,
-            PublicTenderEvaluationLink, PublicAdminLink, LoginLink, RegisterLink, MyApplicationsLink, ProfileLink;
+            AdminApplicationsLink, AdminReportsLink, AdminAuditLink, DashboardLink, PublicApprovalsLink, PublicApplicationsLink, PublicWorkflowLink, PublicTenderLifecycleLink,
+            PublicTenderEvaluationLink, PublicAdminLink, LoginLink, RegisterLink, MyApplicationsLink, ProfileLink,
+            TendersLink;
         protected Literal CurrentUser, PublicCurrentUser;
         protected LinkButton SignOutLink, PublicSignOutLink;
 
@@ -28,6 +30,9 @@ namespace DepartmentModule.Pages
                 "~/Pages/Login.aspx", StringComparison.OrdinalIgnoreCase);
             string path = Request.AppRelativeCurrentExecutionFilePath;
             bool isAdmin = String.Equals(role, "Junior Engineer (JE)", StringComparison.OrdinalIgnoreCase);
+            TendersLink.NavigateUrl = signedIn && !HasRole(role, "Contractor", "Contractor / Vendor", "ExternalBidder")
+                ? "~/Pages/Tenders.aspx"
+                : "~/Pages/Home.aspx#published-tenders";
             bool isAdminWorkspace = signedIn && isAdmin &&
                 (path.StartsWith("~/Pages/Admin", StringComparison.OrdinalIgnoreCase) ||
                  String.Equals(path, "~/Pages/Approvals.aspx", StringComparison.OrdinalIgnoreCase) ||
@@ -37,7 +42,9 @@ namespace DepartmentModule.Pages
                  String.Equals(path, "~/Pages/WorkManagement.aspx", StringComparison.OrdinalIgnoreCase) ||
                  String.Equals(path, "~/Pages/TenderLifecycle.aspx", StringComparison.OrdinalIgnoreCase) ||
                  String.Equals(path, "~/Pages/TenderEvaluation.aspx", StringComparison.OrdinalIgnoreCase) ||
-                 String.Equals(path, "~/Pages/TenderWorkflow.aspx", StringComparison.OrdinalIgnoreCase));
+                 String.Equals(path, "~/Pages/TenderWorkflow.aspx", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(path, "~/Pages/Applications.aspx", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(path, "~/Pages/ApplicationDetails.aspx", StringComparison.OrdinalIgnoreCase));
 
             AppLayout.Attributes["class"] = isAdminWorkspace
                 ? "app-shell admin-layout"
@@ -51,6 +58,7 @@ namespace DepartmentModule.Pages
             AdminTendersLink.Visible = isAdminWorkspace;
             AdminCreateTenderLink.Visible = isAdminWorkspace;
             ApprovalsLink.Visible = isAdminWorkspace;
+            AdminApplicationsLink.Visible = isAdminWorkspace;
             AdminWorkflowLink.Visible = isAdminWorkspace;
             TenderLifecycleLink.Visible = isAdminWorkspace;
             TenderEvaluationLink.Visible = isAdminWorkspace;
@@ -60,12 +68,14 @@ namespace DepartmentModule.Pages
             AdminAuditLink.Visible = isAdminWorkspace;
             DashboardLink.Visible = signedIn && !isAdminWorkspace;
             PublicApprovalsLink.Visible = signedIn && !isAdminWorkspace;
+            PublicApplicationsLink.Visible = signedIn && !isAdminWorkspace &&
+                HasRole(role, "Tender Cell", "Nivida Kaksh (Tender Cell)");
             PublicWorkflowLink.Visible = signedIn && !isAdminWorkspace &&
                 HasRole(role, "Tender Cell", "Tender Committee Chairman (Nivida Samiti Adhyaksha)", "Director Auditor");
             PublicTenderLifecycleLink.Visible = false;
             PublicTenderEvaluationLink.Visible = false;
             PublicAdminLink.Visible = signedIn && isAdmin && !isAdminWorkspace;
-            MyApplicationsLink.Visible = signedIn && HasRole(role, "Contractor", "Contractor / Vendor");
+            MyApplicationsLink.Visible = signedIn && HasRole(role, "Contractor", "Contractor / Vendor", "ExternalBidder");
             ProfileLink.Visible = signedIn;
             MyApplicationsLink.CssClass = String.Equals(path, "~/Pages/MyApplications.aspx", StringComparison.OrdinalIgnoreCase) ? "is-current" : String.Empty;
             ProfileLink.CssClass = String.Equals(path, "~/Pages/Profile.aspx", StringComparison.OrdinalIgnoreCase) ? "is-current" : String.Empty;
@@ -108,6 +118,14 @@ namespace DepartmentModule.Pages
                 ? "is-current"
                 : String.Empty;
             AdminWorkflowLink.CssClass = String.Equals(path, "~/Pages/TenderWorkflow.aspx", StringComparison.OrdinalIgnoreCase)
+                ? "is-current"
+                : String.Empty;
+            AdminApplicationsLink.CssClass = String.Equals(path, "~/Pages/Applications.aspx", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(path, "~/Pages/ApplicationDetails.aspx", StringComparison.OrdinalIgnoreCase)
+                ? "is-current"
+                : String.Empty;
+            PublicApplicationsLink.CssClass = String.Equals(path, "~/Pages/Applications.aspx", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(path, "~/Pages/ApplicationDetails.aspx", StringComparison.OrdinalIgnoreCase)
                 ? "is-current"
                 : String.Empty;
             PublicWorkflowLink.CssClass = String.Equals(path, "~/Pages/TenderWorkflow.aspx", StringComparison.OrdinalIgnoreCase)
@@ -165,6 +183,7 @@ namespace DepartmentModule.Pages
 
         protected void SignOutLink_Click(object sender, EventArgs e)
         {
+            FormsAuthentication.SignOut();
             if (Session != null)
             {
                 Session.Clear();

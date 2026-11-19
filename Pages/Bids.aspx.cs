@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
+using System.IO;
 using System.Web;
 using System.Web.UI.HtmlControls;
 using System.Web.UI.WebControls;
@@ -16,19 +18,24 @@ namespace DepartmentModule.Pages
         protected HyperLink BackLink;
         protected GridView TechnicalGrid, FinancialGrid, RequiredBidDocumentsGrid;
         protected Panel EvaluatePanel, SelectPanel, TechnicalSubmissionPanel, FinancialSubmissionPanel;
-        protected DropDownList TechnicalBidSelect, TechnicalStatus, FinancialBidSelect, TechnicalContractorSelect, FinancialContractorSelect;
+        protected Panel ApplicationSubmissionPanel, LegacyDocumentTypeField;
+        protected DropDownList TechnicalBidSelect, TechnicalStatus, FinancialBidSelect, TechnicalContractorSelect,
+            FinancialContractorSelect, ApplicationDocumentTypeSelect;
         protected TextBox TechnicalRemarks, SelectionRemarks, TechnicalDocumentPathText, FinancialBidAmountText,
             TechnicalDocumentTypeText;
         protected Button EvaluateButton, SelectContractorButton, SubmitTechnicalButton, SubmitFinancialButton,
-            UploadTechnicalDocumentButton;
-        protected Literal ContractorProfileMessage;
+            UploadTechnicalDocumentButton, SaveApplicationDraftButton, SubmitApplicationButton;
+        protected CheckBox ApplicationTermsAccepted;
+        protected HyperLink ApplicationDetailsLink;
+        protected Literal ContractorProfileMessage, ApplicationProfileMessage, ApplicationStatusMessage;
         protected System.Web.UI.HtmlControls.HtmlGenericControl TechnicalContractorField, FinancialContractorField;
         protected System.Web.UI.HtmlControls.HtmlGenericControl LegacyDocumentPathField;
-        protected FileUpload TechnicalDocumentUpload;
+        protected FileUpload TechnicalDocumentUpload, ApplicationDocumentUpload;
         protected GridView TechnicalDocumentsGrid;
         private int TenderId { get { return QueryId("tenderId"); } }
-        private bool IsReviewer { get { return HasAnyRole("TenderSection", "TenderCommittee", "CAFOOfficer", "Admin"); } }
-        private bool IsContractor { get { return HasAnyRole("Contractor"); } }
+        private bool IsReviewer { get { return HasAnyRole("Junior Engineer (JE)", "TENDER_CELL", "CHAIRMAN",
+            "DIRECTOR_AUDITOR", "TenderSection", "TenderCommittee", "CAFOOfficer", "Admin"); } }
+        private bool IsContractor { get { return HasAnyRole("ExternalBidder", "Contractor"); } }
 
         protected void Page_Load(object sender, EventArgs e)
         {
@@ -77,6 +84,7 @@ namespace DepartmentModule.Pages
                         }
                     }
                     BindRequiredBidDocumentTypes(connection, workflowVersion);
+                    LegacyDocumentTypeField.Visible = workflowVersion < 2;
                     if (!IsBidStageOrLater(currentStatus))
                     {
                         Response.Redirect("~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture), false);
@@ -91,12 +99,13 @@ namespace DepartmentModule.Pages
                         openingComplete = Convert.ToInt32(command.ExecuteScalar()) == 1;
                     }
                     bool financialOpening = IsFinancialOpeningOrLater(currentStatus);
+                    bool finalWorkflow = workflowVersion >= 2;
                     bool isAuthorizedReviewer = IsReviewer && openingComplete;
                     bool canSubmit = IsContractor && IsBidWindowOpen(connection, null);
                     TechnicalBidsSection.Visible = (IsContractor || isAuthorizedReviewer) &&
                         (!IsReviewer || openingComplete);
-                    FinancialBidsSection.Visible = IsContractor && canSubmit ||
-                        (isAuthorizedReviewer && financialOpening);
+                    FinancialBidsSection.Visible = !finalWorkflow && (IsContractor && canSubmit ||
+                        (isAuthorizedReviewer && financialOpening));
                     if (IsReviewer && !openingComplete)
                     {
                         Message.Text = "<div class=\"message\">Bid contents remain confidential until the authorized bid opening has been recorded.</div>";
@@ -106,7 +115,7 @@ namespace DepartmentModule.Pages
                         Message.Text = "<div class=\"message\">Bid submission is available only during the approved publication period.</div>";
                     }
                     BindTechnical(connection);
-                    if (financialOpening && isAuthorizedReviewer || IsContractor)
+                    if (!finalWorkflow && ((financialOpening && isAuthorizedReviewer) || IsContractor))
                         BindFinancial(connection);
                     else
                     {
@@ -207,10 +216,19 @@ namespace DepartmentModule.Pages
             FinancialBidAmountText.Attributes["step"] = "0.01";
             FinancialBidAmountText.Attributes["min"] = "0.01";
             bool isAdmin = HasAnyRole("Admin");
-            TechnicalSubmissionPanel.Visible = (IsContractor || isAdmin) && canSubmit;
-            FinancialSubmissionPanel.Visible = (IsContractor || isAdmin) && canSubmit;
+            int workflowVersion = GetWorkflowVersion(connection);
+            bool isFinalWorkflow = workflowVersion >= 2;
+            TechnicalSubmissionPanel.Visible = (IsContractor || isAdmin) && canSubmit && !isFinalWorkflow;
+            ApplicationSubmissionPanel.Visible = IsContractor && canSubmit && isFinalWorkflow;
+            FinancialSubmissionPanel.Visible = (IsContractor || isAdmin) && canSubmit && !isFinalWorkflow;
             TechnicalContractorField.Visible = isAdmin;
             FinancialContractorField.Visible = isAdmin;
+            ApplicationProfileMessage.Text = String.Empty;
+            ApplicationStatusMessage.Text = String.Empty;
+            ApplicationDetailsLink.Visible = false;
+            SubmitApplicationButton.Visible = false;
+            ApplicationTermsAccepted.Visible = false;
+            SaveApplicationDraftButton.Visible = ApplicationSubmissionPanel.Visible;
 
             if (isAdmin)
             {
@@ -228,25 +246,66 @@ namespace DepartmentModule.Pages
             if (!contractorId.HasValue)
             {
                 ContractorProfileMessage.Text = "<div class=\"message\">No active contractor profile is linked to this account. Contact an administrator to link your contractor record.</div>";
+                ApplicationProfileMessage.Text = ContractorProfileMessage.Text;
                 SubmitTechnicalButton.Enabled = false;
                 SubmitFinancialButton.Enabled = false;
+                SaveApplicationDraftButton.Enabled = false;
+                SubmitApplicationButton.Enabled = false;
                 return;
             }
 
-            string technicalStatus;
-            using (SqlCommand command = new SqlCommand(
-                "SELECT Status FROM dbo.TechnicalBid WHERE TenderId=@TenderId AND ContractorId=@ContractorId;", connection))
+            if (isFinalWorkflow)
             {
-                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                ModuleDb.AddParameter(command, "@ContractorId", SqlDbType.Int, contractorId.Value);
-                technicalStatus = Convert.ToString(command.ExecuteScalar());
+                int? applicationId = ContractorApplicationRules.GetApplicationId(connection, null, TenderId, contractorId.Value);
+                if (applicationId.HasValue)
+                {
+                    ApplicationSubmissionPanel.Visible = true;
+                    string applicationStatus = ContractorApplicationRules.GetStatus(connection, null, applicationId.Value);
+                    ApplicationDetailsLink.Visible = true;
+                    ApplicationDetailsLink.NavigateUrl = "~/Pages/ApplicationDetails.aspx?id=" +
+                        applicationId.Value.ToString(CultureInfo.InvariantCulture);
+                    DateTime submittedDate;
+                    using (SqlCommand command = new SqlCommand(
+                        "SELECT SubmittedDate FROM dbo.TechnicalBid WHERE TechnicalBidId=@ApplicationId;", connection))
+                    {
+                        ModuleDb.AddParameter(command, "@ApplicationId", SqlDbType.Int, applicationId.Value);
+                        submittedDate = Convert.ToDateTime(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+                    }
+                    ApplicationStatusMessage.Text = "<div class=\"message\">Application " +
+                        HttpUtility.HtmlEncode(ContractorApplicationRules.GetReference(applicationId.Value, submittedDate)) +
+                        " is " + HttpUtility.HtmlEncode(applicationStatus) + ".</div>";
+                    bool canEditApplication = applicationStatus == "Shortfall" ||
+                        (canSubmit && applicationStatus == "Draft");
+                    SaveApplicationDraftButton.Text = applicationStatus == "Draft" ? "Save draft documents" : "Upload corrected documents";
+                    SaveApplicationDraftButton.Visible = canEditApplication;
+                    SubmitApplicationButton.Visible = canEditApplication;
+                    ApplicationTermsAccepted.Visible = canEditApplication;
+                }
+                else
+                {
+                    ApplicationSubmissionPanel.Visible = canSubmit;
+                    SaveApplicationDraftButton.Text = "Save application draft";
+                    ApplicationStatusMessage.Text = "<div class=\"help\">You can save a draft now and submit it after completing the tender's mandatory documents.</div>";
+                }
             }
 
-            if (!String.IsNullOrEmpty(technicalStatus))
+            if (!isFinalWorkflow)
             {
-                SubmitTechnicalButton.Enabled = false;
-                UploadTechnicalDocumentButton.Visible = canSubmit;
-                ContractorProfileMessage.Text = "<div class=\"message\">Your technical bid status is " + HttpUtility.HtmlEncode(technicalStatus) + ".</div>";
+                string technicalStatus;
+                using (SqlCommand command = new SqlCommand(
+                    "SELECT Status FROM dbo.TechnicalBid WHERE TenderId=@TenderId AND ContractorId=@ContractorId;", connection))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                    ModuleDb.AddParameter(command, "@ContractorId", SqlDbType.Int, contractorId.Value);
+                    technicalStatus = Convert.ToString(command.ExecuteScalar());
+                }
+
+                if (!String.IsNullOrEmpty(technicalStatus))
+                {
+                    SubmitTechnicalButton.Enabled = false;
+                    UploadTechnicalDocumentButton.Visible = canSubmit;
+                    ContractorProfileMessage.Text = "<div class=\"message\">Your technical bid status is " + HttpUtility.HtmlEncode(technicalStatus) + ".</div>";
+                }
             }
 
             using (SqlCommand command = new SqlCommand(
@@ -260,6 +319,112 @@ namespace DepartmentModule.Pages
                     ContractorProfileMessage.Text = "<div class=\"message\">Your financial bid has already been submitted.</div>";
                 }
             }
+        }
+
+        protected void SaveApplicationDraftButton_Click(object sender, EventArgs e)
+        {
+            if (!IsContractor)
+            {
+                ShowError("Only a contractor may save an application draft.");
+                return;
+            }
+
+            try
+            {
+                if (GetWorkflowVersionForApplicationAction() < 2)
+                    throw new InvalidOperationException("Draft applications are available only for version-2 tenders.");
+                int applicationId = ContractorApplicationService.SaveDraft(this, TenderId,
+                    CurrentUserId, CurrentRoleId, ApplicationDocumentTypeSelect.SelectedValue,
+                    ApplicationDocumentUpload.PostedFiles, Request.UserHostAddress);
+                ApplicationDetailsLink.NavigateUrl = "~/Pages/ApplicationDetails.aspx?id=" +
+                    applicationId.ToString(CultureInfo.InvariantCulture);
+                Message.Text = "<div class=\"message success\">Application draft saved.</div>";
+                LoadPage();
+            }
+            catch (InvalidOperationException ex) { ShowError(ex.Message); }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Contractor application draft could not be saved.", ex);
+                ShowError("The application draft could not be saved. Please retry or contact support.");
+            }
+            catch (IOException ex)
+            {
+                Trace.Warn("DepartmentModule", "Application draft document storage failed.", ex);
+                ShowError("The application documents could not be stored. Please retry or contact support.");
+            }
+        }
+
+        protected void SubmitApplicationButton_Click(object sender, EventArgs e)
+        {
+            if (!IsContractor)
+            {
+                ShowError("Only a contractor may submit an application.");
+                return;
+            }
+            if (!ApplicationTermsAccepted.Checked)
+            {
+                ShowError("Accept the Terms & Conditions before submitting.");
+                return;
+            }
+
+            try
+            {
+                if (GetWorkflowVersionForApplicationAction() < 2)
+                    throw new InvalidOperationException("Applications are available only for version-2 tenders.");
+
+                int? contractorId = GetCurrentContractorIdForApplicationAction();
+                if (!contractorId.HasValue)
+                    throw new InvalidOperationException("An active contractor profile linked to this account is required.");
+
+                int applicationId;
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                {
+                    int? existingId = ContractorApplicationRules.GetApplicationId(
+                        connection, null, TenderId, contractorId.Value);
+                    if (existingId.HasValue)
+                    {
+                        applicationId = existingId.Value;
+                        if (ApplicationDocumentUpload.PostedFiles.Count > 0)
+                        {
+                            ContractorApplicationService.AddDocuments(this, applicationId,
+                                CurrentUserId, CurrentRoleId, ApplicationDocumentTypeSelect.SelectedValue,
+                                ApplicationDocumentUpload.PostedFiles, Request.UserHostAddress);
+                        }
+                    }
+                    else
+                    {
+                        applicationId = ContractorApplicationService.SaveDraft(this, TenderId,
+                            CurrentUserId, CurrentRoleId, ApplicationDocumentTypeSelect.SelectedValue,
+                            ApplicationDocumentUpload.PostedFiles, Request.UserHostAddress);
+                    }
+                }
+
+                ContractorApplicationService.Submit(applicationId, CurrentUserId, CurrentRoleId,
+                    true, ContractorApplicationRules.TermsVersion, Request.UserHostAddress);
+                Message.Text = "<div class=\"message success\">Application submitted successfully.</div>";
+                LoadPage();
+            }
+            catch (InvalidOperationException ex) { ShowError(ex.Message); }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Contractor application could not be submitted.", ex);
+                ShowError("The application could not be submitted. Please retry or contact support.");
+            }
+            catch (IOException ex)
+            {
+                Trace.Warn("DepartmentModule", "Application submission document storage failed.", ex);
+                ShowError("The application documents could not be stored. Please retry or contact support.");
+            }
+        }
+
+        private int GetWorkflowVersionForApplicationAction()
+        {
+            using (SqlConnection connection = ModuleDb.OpenConnection()) return GetWorkflowVersion(connection);
+        }
+
+        private int? GetCurrentContractorIdForApplicationAction()
+        {
+            using (SqlConnection connection = ModuleDb.OpenConnection()) return GetCurrentContractorId(connection);
         }
 
         private void BindTechnicalDocuments(SqlConnection connection)
@@ -520,21 +685,20 @@ namespace DepartmentModule.Pages
         }
 
         private void BindRequiredBidDocumentTypes(SqlConnection connection, int workflowVersion)
+        {
+            DataTable data = workflowVersion >= 2
+                ? ContractorApplicationRules.GetRequirements(connection, null, TenderId)
+                : new DataTable();
+            RequiredBidDocumentsGrid.DataSource = data;
+            RequiredBidDocumentsGrid.DataBind();
+            ApplicationDocumentTypeSelect.Items.Clear();
+            ApplicationDocumentTypeSelect.Items.Add(new ListItem("Select document requirement", ""));
+            foreach (DataRow row in data.Rows)
             {
-                DataTable data = new DataTable();
-                if (workflowVersion >= 2)
-                {
-                    using (SqlCommand command = new SqlCommand(
-                        @"SELECT DocumentType FROM dbo.TenderRequiredBidDocuments
-                          WHERE TenderId=@TenderId ORDER BY DocumentType;", connection))
-                    {
-                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                        using (SqlDataAdapter adapter = new SqlDataAdapter(command)) adapter.Fill(data);
-                    }
-                }
-                RequiredBidDocumentsGrid.DataSource = data;
-                RequiredBidDocumentsGrid.DataBind();
+                string documentType = Convert.ToString(row["DocumentType"]);
+                ApplicationDocumentTypeSelect.Items.Add(new ListItem(documentType, documentType));
             }
+        }
 
         private bool IsRequiredBidDocumentType(SqlConnection connection, string documentType)
             {

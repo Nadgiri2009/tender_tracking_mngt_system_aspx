@@ -16,7 +16,7 @@ namespace DepartmentModule.Pages
         protected Literal Message;
         protected Literal FormTitle, FormHeading, FormDescription;
         protected TextBox TitleText;
-        protected TextBox DescriptionText;
+        protected TextBox DescriptionText, EligibilityCriteriaText;
         protected TextBox BudgetInformationText, TechnicalSanctionNumberText, TechnicalSanctionAuthorityText,
             TechnicalSanctionDateText, PreBidMeetingText, PreBidLocationText, PreBidDetailsText,
             TechnicalBidOpeningText;
@@ -111,7 +111,7 @@ namespace DepartmentModule.Pages
         {
             using (SqlConnection connection = ModuleDb.OpenConnection())
             using (SqlCommand command = new SqlCommand(
-                @"SELECT Title,Description,EstimatedAmount,TenderType,TenderCategory,SubmissionStartDate,SubmissionDeadline,CurrentStatus
+                @"SELECT Title,Description,EligibilityCriteria,EstimatedAmount,TenderType,TenderCategory,SubmissionStartDate,SubmissionDeadline,CurrentStatus
                   FROM dbo.Tender t
                   WHERE TenderId=@TenderId AND IsDeleted=0 AND WorkflowVersion=1
                     AND (@Role=N'Admin'
@@ -150,6 +150,7 @@ namespace DepartmentModule.Pages
 
                     TitleText.Text = Convert.ToString(reader["Title"]);
                     DescriptionText.Text = Convert.ToString(reader["Description"] == DBNull.Value ? String.Empty : reader["Description"]);
+                    EligibilityCriteriaText.Text = Convert.ToString(reader["EligibilityCriteria"] == DBNull.Value ? String.Empty : reader["EligibilityCriteria"]);
                     AmountText.Text = Convert.ToDecimal(reader["EstimatedAmount"]).ToString(CultureInfo.InvariantCulture);
                     string tenderType = Convert.ToString(reader["TenderType"]);
                     if (TenderTypeSelect.Items.FindByValue(tenderType) == null)
@@ -217,9 +218,10 @@ namespace DepartmentModule.Pages
                 ShowError("Select an active department, tender method, tender category, and positive estimated amount.");
                 return;
             }
-            if (DescriptionText.Text != null && DescriptionText.Text.Length > 4000)
+            if ((DescriptionText.Text != null && DescriptionText.Text.Length > 4000) ||
+                (EligibilityCriteriaText.Text != null && EligibilityCriteriaText.Text.Length > 4000))
             {
-                ShowError("Description cannot exceed 4,000 characters.");
+                ShowError("Description and eligibility criteria cannot exceed 4,000 characters each.");
                 return;
             }
             if ((BudgetInformationText.Text != null && BudgetInformationText.Text.Length > 2000) ||
@@ -332,12 +334,12 @@ namespace DepartmentModule.Pages
 
                     using (SqlCommand command = new SqlCommand(
                         @"INSERT INTO dbo.Tender
-                            (TenderNumber,TrackingId,Title,Description,DepartmentId,EstimatedAmount,TenderType,TenderCategory,
+                            (TenderNumber,TrackingId,Title,Description,EligibilityCriteria,DepartmentId,EstimatedAmount,TenderType,TenderCategory,
                              CurrentStatus,SubmissionStartDate,SubmissionDeadline,CreatedBy,WorkflowVersion,
                              BudgetInformation,TechnicalSanctionNumber,TechnicalSanctionAuthority,TechnicalSanctionDate,
                              PreBidMeetingUtc,PreBidLocation,PreBidDetails,TechnicalBidOpeningScheduledUtc)
                           VALUES
-                            (@TenderNumber,@TrackingId,@Title,@Description,@DepartmentId,@Amount,@TenderType,@TenderCategory,
+                            (@TenderNumber,@TrackingId,@Title,@Description,@EligibilityCriteria,@DepartmentId,@Amount,@TenderType,@TenderCategory,
                              N'Draft',@StartDate,@Deadline,@CreatedBy,2,@BudgetInformation,@SanctionNumber,
                              @SanctionAuthority,@SanctionDate,@PreBidMeetingUtc,@PreBidLocation,@PreBidDetails,
                              @TechnicalBidOpeningUtc);
@@ -347,6 +349,7 @@ namespace DepartmentModule.Pages
                         AddText(command, "@TrackingId", SqlDbType.NVarChar, Guid.NewGuid().ToString(), 100);
                         AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), 250);
                         AddText(command, "@Description", SqlDbType.NVarChar, DescriptionText.Text, -1);
+                        AddText(command, "@EligibilityCriteria", SqlDbType.NVarChar, EligibilityCriteriaText.Text, 4000);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
                         ModuleDb.AddParameter(command, "@Amount", SqlDbType.Decimal, amount);
                         AddText(command, "@TenderType", SqlDbType.NVarChar, TenderTypeSelect.SelectedValue, 50);
@@ -543,7 +546,8 @@ namespace DepartmentModule.Pages
 
                     using (SqlCommand command = new SqlCommand(
                         @"UPDATE dbo.Tender
-                          SET Title=@Title,Description=@Description,EstimatedAmount=@Amount,TenderType=@TenderType,
+                          SET Title=@Title,Description=@Description,EligibilityCriteria=@EligibilityCriteria,
+                              EstimatedAmount=@Amount,TenderType=@TenderType,
                               TenderCategory=@TenderCategory,
                               SubmissionStartDate=@StartDate,SubmissionDeadline=@Deadline,
                               ModifiedBy=@ModifiedBy,ModifiedDate=SYSUTCDATETIME()
@@ -552,6 +556,7 @@ namespace DepartmentModule.Pages
                     {
                         AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), 250);
                         AddText(command, "@Description", SqlDbType.NVarChar, DescriptionText.Text, -1);
+                        AddText(command, "@EligibilityCriteria", SqlDbType.NVarChar, EligibilityCriteriaText.Text, 4000);
                         ModuleDb.AddParameter(command, "@Amount", SqlDbType.Decimal, amount);
                         AddText(command, "@TenderType", SqlDbType.NVarChar, TenderTypeSelect.SelectedValue, 50);
                         AddText(command, "@TenderCategory", SqlDbType.NVarChar, TenderCategorySelect.SelectedValue, 50);

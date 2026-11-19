@@ -9,6 +9,8 @@
             <asp:RequiredFieldValidator ID="TitleRequired" runat="server" ControlToValidate="TitleText" ErrorMessage="Title is required." CssClass="validation" />
             <asp:CustomValidator ID="TitleLength" runat="server" ControlToValidate="TitleText" OnServerValidate="TitleLength_ServerValidate" ErrorMessage="Title must be 5 to 250 characters." CssClass="validation" /></div>
         <div class="field"><label for="DescriptionText">Description</label><asp:TextBox ID="DescriptionText" runat="server" TextMode="MultiLine" Rows="4" MaxLength="4000" /></div>
+        <div class="field"><label for="EligibilityCriteriaText">Eligibility criteria</label><asp:TextBox ID="EligibilityCriteriaText" runat="server" TextMode="MultiLine" Rows="3" MaxLength="4000" />
+            <span class="help">Describe the tender-specific eligibility requirements contractors must review before applying.</span></div>
         <div class="row">
             <asp:Panel ID="DepartmentPanel" runat="server" CssClass="field"><label for="DepartmentSelect">Department</label><asp:DropDownList ID="DepartmentSelect" runat="server" />
                 <asp:RequiredFieldValidator ID="DepartmentRequired" runat="server" ControlToValidate="DepartmentSelect" InitialValue="" ErrorMessage="A valid Department must be selected." CssClass="validation" /></asp:Panel>

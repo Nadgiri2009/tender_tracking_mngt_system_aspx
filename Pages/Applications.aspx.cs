@@ -1,0 +1,124 @@
+using System;
+using System.Data;
+using System.Data.SqlClient;
+using System.Globalization;
+using System.Web.UI.WebControls;
+using DepartmentModule.Helpers;
+
+namespace DepartmentModule.Pages
+{
+    public partial class Applications : ModulePage
+    {
+        protected Literal Message;
+        protected GridView ApplicationsGrid, NotificationsGrid;
+        protected HyperLink WorkflowLink;
+
+        protected void Page_Init(object sender, EventArgs e)
+        {
+            bool isJe = HasAnyRole("Junior Engineer (JE)");
+            if (!RequireRoles("Junior Engineer (JE)", "Tender Cell")) return;
+            if (!RequirePermission(isJe ? "tender.primary.verify" : "tender.cell.verify")) return;
+            BindApplications();
+        }
+
+        private void BindApplications()
+        {
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT b.TechnicalBidId,b.TenderId,t.TenderNumber,t.Title AS TenderTitle,c.Name AS ContractorName,
+                             N'TAPP-' + CONVERT(nvarchar(4),YEAR(b.SubmittedDate)) + N'-' +
+                                 RIGHT(N'000000' + CONVERT(nvarchar(20),b.TechnicalBidId),6) AS ApplicationReference,
+                             COALESCE(latest.NewStatus,b.Status) AS ApplicationStatus,b.SubmittedDate,
+                             (SELECT COUNT(1) FROM dbo.TechnicalBidDocuments d
+                              WHERE d.TechnicalBidId=b.TechnicalBidId) AS DocumentCount,
+                             (SELECT COUNT(1) FROM dbo.TenderRequiredBidDocuments r
+                              WHERE r.TenderId=t.TenderId AND r.IsMandatory=1
+                                AND NOT EXISTS
+                                (
+                                    SELECT 1 FROM dbo.TechnicalBidDocuments d
+                                    WHERE d.TechnicalBidId=b.TechnicalBidId AND d.DocumentType=r.DocumentType
+                                )) AS PendingMandatoryDocumentCount
+                      FROM dbo.TechnicalBid b
+                      INNER JOIN dbo.Tender t ON t.TenderId=b.TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0
+                      INNER JOIN dbo.Contractors c ON c.ContractorId=b.ContractorId
+                      OUTER APPLY
+                      (
+                          SELECT TOP (1) h.NewStatus
+                          FROM dbo.ContractorApplicationHistory h
+                          WHERE h.TechnicalBidId=b.TechnicalBidId AND h.NewStatus IS NOT NULL
+                          ORDER BY h.HistoryId DESC
+                      ) latest
+                      WHERE COALESCE(latest.NewStatus,b.Status)<>N'Draft'
+                        AND EXISTS
+                        (
+                            SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                            WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                              AND a.AssignedRoleId=@RoleId
+                              AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
+                              AND a.DepartmentId=t.DepartmentId
+                              AND (@IsJE=0 OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))
+                        )
+                      ORDER BY b.SubmittedDate DESC,b.TechnicalBidId DESC;", connection))
+                {
+                    ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                    ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit, HasAnyRole("Junior Engineer (JE)"));
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
+                        CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                    DataTable data = new DataTable();
+                    using (SqlDataAdapter adapter = new SqlDataAdapter(command)) adapter.Fill(data);
+                    ApplicationsGrid.DataSource = data;
+                    ApplicationsGrid.DataBind();
+                    NotificationsGrid.DataSource = ContractorApplicationRules.GetApplicationNotifications(connection, CurrentUserId);
+                    NotificationsGrid.DataBind();
+                }
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Assigned contractor applications could not be loaded.", ex);
+                Message.Text = "<div class=\"message\">The application queue could not be loaded. Please retry or contact support.</div>";
+            }
+        }
+
+        protected void ApplicationsGrid_PageIndexChanging(object sender, GridViewPageEventArgs e)
+        {
+            ApplicationsGrid.PageIndex = e.NewPageIndex;
+            BindApplications();
+        }
+
+        protected void NotificationsGrid_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (!String.Equals(e.CommandName, "MarkNotificationRead", StringComparison.Ordinal)) return;
+            int rowIndex;
+            long notificationId;
+            if (!Int32.TryParse(Convert.ToString(e.CommandArgument, CultureInfo.InvariantCulture), out rowIndex) ||
+                rowIndex < 0 || rowIndex >= NotificationsGrid.Rows.Count ||
+                !Int64.TryParse(Convert.ToString(NotificationsGrid.DataKeys[rowIndex].Value, CultureInfo.InvariantCulture),
+                    NumberStyles.None, CultureInfo.InvariantCulture, out notificationId))
+            {
+                Message.Text = "<div class=\"message\">The selected notification could not be verified. Refresh the page and try again.</div>";
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                {
+                    if (!ContractorApplicationRules.MarkApplicationNotificationRead(
+                        connection, notificationId, CurrentUserId))
+                    {
+                        Message.Text = "<div class=\"message\">The notification is no longer unread.</div>";
+                    }
+                }
+                BindApplications();
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Application notification could not be marked read.", ex);
+                Message.Text = "<div class=\"message\">The notification could not be updated. Please retry.</div>";
+            }
+        }
+    }
+}

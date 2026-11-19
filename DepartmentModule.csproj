@@ -33,11 +33,23 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="System.Runtime.CompilerServices.Unsafe">
-      <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\6.0.0\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System.Numerics.Vectors">
       <HintPath>$(NuGetPackageRoot)system.numerics.vectors\4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="MigraDoc.DocumentObjectModel">
+      <HintPath>$(NuGetPackageRoot)pdfsharp-migradoc-gdi\6.2.2\lib\net462\MigraDoc.DocumentObjectModel.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="MigraDoc.Rendering-gdi">
+      <HintPath>$(NuGetPackageRoot)pdfsharp-migradoc-gdi\6.2.2\lib\net462\MigraDoc.Rendering-gdi.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="PdfSharp-gdi">
+      <HintPath>$(NuGetPackageRoot)pdfsharp-gdi\6.2.2\lib\net462\PdfSharp-gdi.dll</HintPath>
       <Private>True</Private>
     </Reference>
   </ItemGroup>
@@ -45,14 +57,19 @@
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
     <PackageReference Include="System.Buffers" Version="4.5.1" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.3" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+    <PackageReference Include="PDFsharp-MigraDoc-GDI" Version="6.2.2" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Global.asax.cs"><DependentUpon>Global.asax</DependentUpon></Compile>
     <Compile Include="Helpers\ModuleDb.cs" />
     <Compile Include="Helpers\ModulePage.cs" />
     <Compile Include="Helpers\OtpChallenge.cs" />
+    <Compile Include="Helpers\ContractorApplicationRules.cs" />
+    <Compile Include="Helpers\ContractorApplicationService.cs" />
+    <Compile Include="Helpers\TenderFinalizedWorkflowService.cs" />
+    <Compile Include="Helpers\TenderDocumentGenerator.cs" />
     <Compile Include="Helpers\TenderLifecycleFiles.cs" />
     <Compile Include="Helpers\WorkflowRules.cs" />
     <Compile Include="Pages\Site.Master.cs"><DependentUpon>Site.Master</DependentUpon></Compile>
@@ -74,6 +91,9 @@
     <Compile Include="Pages\TenderDetails.aspx.cs"><DependentUpon>TenderDetails.aspx</DependentUpon></Compile>
     <Compile Include="Pages\Approvals.aspx.cs"><DependentUpon>Approvals.aspx</DependentUpon></Compile>
     <Compile Include="Pages\Bids.aspx.cs"><DependentUpon>Bids.aspx</DependentUpon></Compile>
+    <Compile Include="Pages\ApplicationRequirements.aspx.cs"><DependentUpon>ApplicationRequirements.aspx</DependentUpon></Compile>
+    <Compile Include="Pages\Applications.aspx.cs"><DependentUpon>Applications.aspx</DependentUpon></Compile>
+    <Compile Include="Pages\ApplicationDetails.aspx.cs"><DependentUpon>ApplicationDetails.aspx</DependentUpon></Compile>
     <Compile Include="Pages\TenderLifecycle.aspx.cs"><DependentUpon>TenderLifecycle.aspx</DependentUpon></Compile>
     <Compile Include="Pages\TenderEvaluation.aspx.cs"><DependentUpon>TenderEvaluation.aspx</DependentUpon></Compile>
     <Compile Include="Pages\WorkManagement.aspx.cs"><DependentUpon>WorkManagement.aspx</DependentUpon></Compile>
@@ -105,6 +125,9 @@
     <Content Include="Pages\TenderDetails.aspx" />
     <Content Include="Pages\Approvals.aspx" />
     <Content Include="Pages\Bids.aspx" />
+    <Content Include="Pages\ApplicationRequirements.aspx" />
+    <Content Include="Pages\Applications.aspx" />
+    <Content Include="Pages\ApplicationDetails.aspx" />
     <Content Include="Pages\TenderLifecycle.aspx" />
     <Content Include="Pages\TenderEvaluation.aspx" />
     <Content Include="Pages\WorkManagement.aspx" />

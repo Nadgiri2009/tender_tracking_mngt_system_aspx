@@ -7,7 +7,7 @@
         <div class="stat"><span class="muted">Tenders published</span><strong><asp:Literal ID="PublishedTenders" runat="server" /></strong></div>
         <div class="stat"><span class="muted">Registered contractors</span><strong><asp:Literal ID="RegisteredContractors" runat="server" /></strong></div>
     </section>
-    <section class="card">
+    <section class="card" id="published-tenders">
         <div class="page-heading"><div><h2>Published tenders</h2><p class="muted">View tender details and check whether applications are open.</p></div></div>
         <div class="table-wrap tender-list-wrap">
         <asp:GridView ID="TendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="tender-list" EmptyDataText="No published tenders are currently available.">

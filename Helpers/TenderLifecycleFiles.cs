@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
@@ -75,6 +77,77 @@ namespace DepartmentModule.Helpers
             return SaveUpload(page, upload, tenderId, "bid", "tender-bids");
         }
 
+        public static string SaveTenderApplicationUpload(Page page, HttpPostedFile file, int tenderId,
+            int contractorId, int maxFileSizeBytes, string allowedExtensions)
+        {
+            if (page == null || file == null || file.ContentLength <= 0 ||
+                maxFileSizeBytes < 1 || maxFileSizeBytes > 10 * 1024 * 1024 ||
+                file.ContentLength > maxFileSizeBytes)
+            {
+                throw new InvalidOperationException("Choose a non-empty document within the requirement's file-size limit.");
+            }
+
+            string fileName = SafeFileName(file.FileName);
+            string extension = Path.GetExtension(fileName).ToLowerInvariant();
+            HashSet<string> allowed = ParseAllowedExtensions(allowedExtensions);
+            if (fileName.Length == 0 || fileName.Length > 260 || !allowed.Contains(extension) ||
+                !HasAllowedContentSignature(file.InputStream, extension))
+            {
+                throw new InvalidOperationException("The selected document has an invalid name, file type, or content.");
+            }
+
+            string storedName = Guid.NewGuid().ToString("N") + extension;
+            string relativeFolder = "tender-applications/" +
+                tenderId.ToString(CultureInfo.InvariantCulture) + "/" +
+                contractorId.ToString(CultureInfo.InvariantCulture);
+            string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
+            string folder = page.Server.MapPath(uploadRoot.TrimEnd('/', '\\') + "/" + relativeFolder);
+            Directory.CreateDirectory(folder);
+            file.SaveAs(Path.Combine(folder, storedName));
+            return "Uploads/" + relativeFolder + "/" + storedName;
+        }
+
+        public static string SaveTenderFinancialUpload(Page page, HttpPostedFile file, int tenderId,
+            int contractorId, int maxFileSizeBytes)
+        {
+            if (page == null || file == null || file.ContentLength <= 0 ||
+                maxFileSizeBytes < 1 || maxFileSizeBytes > 10 * 1024 * 1024 ||
+                file.ContentLength > maxFileSizeBytes)
+                throw new InvalidOperationException("Choose a non-empty supporting document within the 10 MB limit.");
+
+            string fileName = SafeFileName(file.FileName);
+            string extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (fileName.Length == 0 || fileName.Length > 260 ||
+                Array.IndexOf(AllowedExtensions, extension) < 0 ||
+                !HasAllowedContentSignature(file.InputStream, extension))
+                throw new InvalidOperationException("The selected supporting document has an invalid name, type, or content.");
+
+            return SavePrivateFile(page, "tender-financial/" +
+                tenderId.ToString(CultureInfo.InvariantCulture) + "/" +
+                contractorId.ToString(CultureInfo.InvariantCulture),
+                Guid.NewGuid().ToString("N") + extension, file.InputStream, file.ContentLength);
+        }
+
+        public static string SaveGeneratedTenderDocument(Page page, int tenderId,
+            string fileName, byte[] content)
+        {
+            if (page == null || tenderId <= 0 || content == null || content.Length == 0 ||
+                content.Length > 20 * 1024 * 1024)
+                throw new InvalidOperationException("The generated document is empty or exceeds the storage limit.");
+            string safeName = SafeFileName(fileName);
+            if (safeName.Length == 0 || safeName.Length > 260 ||
+                !String.Equals(Path.GetExtension(safeName), ".pdf", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The generated file name is invalid.");
+
+            string relativeFolder = "tender-generated/" + tenderId.ToString(CultureInfo.InvariantCulture);
+            string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
+            string folder = page.Server.MapPath(uploadRoot.TrimEnd('/', '\\') + "/" + relativeFolder);
+            Directory.CreateDirectory(folder);
+            string storedName = Guid.NewGuid().ToString("N") + ".pdf";
+            File.WriteAllBytes(Path.Combine(folder, storedName), content);
+            return "Uploads/" + relativeFolder + "/" + storedName;
+        }
+
         private static string SaveUpload(Page page, FileUpload upload, int tenderId, string uploadKind,
             string relativeFolderName)
         {
@@ -109,6 +182,44 @@ namespace DepartmentModule.Helpers
             DeleteStoredUpload(page, relativePath, "tender-bids");
         }
 
+        public static void DeleteStoredApplicationUpload(Page page, string relativePath)
+        {
+            DeleteStoredUpload(page, relativePath, "tender-applications");
+        }
+
+        public static void DeleteStoredFinancialUpload(Page page, string relativePath)
+        {
+            DeleteStoredUpload(page, relativePath, "tender-financial");
+        }
+
+        public static void DeleteStoredGeneratedTenderDocument(Page page, string relativePath)
+        {
+            DeleteStoredUpload(page, relativePath, "tender-generated");
+        }
+
+        private static string SavePrivateFile(Page page, string relativeFolder, string storedName,
+            Stream source, int contentLength)
+        {
+            string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
+            string folder = page.Server.MapPath(uploadRoot.TrimEnd('/', '\\') + "/" + relativeFolder);
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, storedName);
+            using (FileStream destination = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                byte[] buffer = new byte[81920];
+                int read;
+                int remaining = contentLength;
+                while (remaining > 0 && (read = source.Read(buffer, 0, Math.Min(buffer.Length, remaining))) > 0)
+                {
+                    destination.Write(buffer, 0, read);
+                    remaining -= read;
+                }
+                if (remaining != 0)
+                    throw new IOException("The uploaded document could not be stored completely.");
+            }
+            return "Uploads/" + relativeFolder + "/" + storedName;
+        }
+
         private static void DeleteStoredUpload(Page page, string relativePath, string relativeFolderName)
         {
             if (String.IsNullOrWhiteSpace(relativePath)) return;
@@ -126,6 +237,37 @@ namespace DepartmentModule.Helpers
             {
                 File.Delete(path);
             }
+        }
+
+        public static string NormalizeAllowedApplicationExtensions(string value)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            HashSet<string> extensions = ParseAllowedExtensions(value);
+            if (extensions.Count == 0)
+                throw new InvalidOperationException("Select at least one supported file extension.");
+            return String.Join(",", Array.ConvertAll(AllowedExtensions,
+                extension => extensions.Contains(extension) ? extension : null)
+                .Where(extension => extension != null).ToArray());
+        }
+
+        private static HashSet<string> ParseAllowedExtensions(string value)
+        {
+            HashSet<string> supported = new HashSet<string>(AllowedExtensions, StringComparer.OrdinalIgnoreCase);
+            if (String.IsNullOrWhiteSpace(value)) return supported;
+
+            HashSet<string> parsed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string[] requested = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string item in requested)
+            {
+                string extension = item.Trim();
+                if (!extension.StartsWith(".", StringComparison.Ordinal)) extension = "." + extension;
+                if (!supported.Contains(extension))
+                    throw new InvalidOperationException("Allowed extensions must be selected from PDF, Office, JPEG, or PNG formats.");
+                parsed.Add(extension);
+            }
+            if (parsed.Count == 0)
+                throw new InvalidOperationException("Select at least one supported file extension.");
+            return parsed;
         }
 
         private static bool HasAllowedContentSignature(Stream stream, string extension)

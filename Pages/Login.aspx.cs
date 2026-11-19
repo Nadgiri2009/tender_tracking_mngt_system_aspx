@@ -2,6 +2,7 @@ using System;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Web.Security;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 using DepartmentModule.Helpers;
@@ -40,7 +41,7 @@ namespace DepartmentModule.Pages
 
         protected void Mobile_ServerValidate(object source, ServerValidateEventArgs args)
         {
-            args.IsValid = OtpChallenge.IsValidIndianMobile(args.Value);
+            args.IsValid = OtpChallenge.IsValidLoginMobile(args.Value);
         }
 
         protected void RequestOtpButton_Click(object sender, EventArgs e)
@@ -49,6 +50,7 @@ namespace DepartmentModule.Pages
             if (!Page.IsValid) return;
 
             ClearOtpChallenge();
+            OtpText.Text = String.Empty;
             OtpPanel.Visible = false;
             string normalizedMobile = OtpChallenge.NormalizeMobile(MobileText.Text);
             try
@@ -65,9 +67,21 @@ namespace DepartmentModule.Pages
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 using (SqlCommand command = new SqlCommand(
                         @"SELECT TOP (2) u.UserId
-                          FROM dbo.Users u INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
+                          FROM dbo.Users u
+                          LEFT JOIN dbo.Roles r ON r.RoleId=u.RoleId
                           WHERE " + OtpChallenge.IndianMobileMatchSql + @"
-                            AND u.IsActive=1 AND r.IsActive=1
+                            AND u.IsActive=1
+                            AND
+                            (
+                                (u.AccountType=N'Internal' AND r.IsActive=1)
+                                OR
+                                (u.AccountType=N'ExternalBidder' AND u.RoleId IS NULL
+                                 AND EXISTS
+                                 (
+                                     SELECT 1 FROM dbo.Contractors c
+                                     WHERE c.UserId=u.UserId AND c.IsActive=1
+                                 ))
+                            )
                           ORDER BY u.UserId;", connection))
                 {
                     ModuleDb.AddParameter(command, "@Mobile", SqlDbType.NVarChar, normalizedMobile, 20);
@@ -94,8 +108,9 @@ namespace DepartmentModule.Pages
                 }
 
                 string otp = OtpChallenge.CreateCode();
-                string deliveryMode;
-                if (!OtpChallenge.TryDeliver("login", otp, normalizedMobile, out deliveryMode))
+                string deliveryMode, developmentCode;
+                if (!OtpChallenge.TryDeliver("login", otp, normalizedMobile,
+                        out deliveryMode, out developmentCode))
                 {
                     Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
                         ? "<div class=\"message\">The SMS gateway could not send the OTP. Please retry later or contact support.</div>"
@@ -113,7 +128,8 @@ namespace DepartmentModule.Pages
                 OtpPanel.Visible = true;
                 Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
                     ? "<div class=\"message success\">A login OTP has been sent to your registered mobile number.</div>"
-                    : String.Empty;
+                    : "<div class=\"message success\">Development OTP (local only): <strong>" +
+                      ModuleDb.Html(developmentCode) + "</strong></div>";
             }
             catch (SqlException ex)
             {
@@ -141,7 +157,7 @@ namespace DepartmentModule.Pages
                 !String.Equals(pendingMobile, OtpChallenge.NormalizeMobile(MobileText.Text), StringComparison.Ordinal))
             {
                 ClearOtpChallenge();
-                Message.Text = "<div class=\"message\">Request a new login OTP.</div>";
+                Message.Text = "<div class=\"message\">Your login OTP request is no longer active. Send a new login OTP to continue.</div>";
                 OtpPanel.Visible = false;
                 return;
             }
@@ -167,8 +183,9 @@ namespace DepartmentModule.Pages
                 }
                 else
                 {
+                    OtpText.Text = String.Empty;
                     OtpPanel.Visible = true;
-                    Message.Text = "<div class=\"message\">Invalid OTP.</div>";
+                    Message.Text = "<div class=\"message\">Invalid OTP. Use the latest code displayed above, or request a new one.</div>";
                 }
                 return;
             }
@@ -188,10 +205,23 @@ namespace DepartmentModule.Pages
                 using (SqlTransaction transaction = connection.BeginTransaction())
                 {
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT u.UserId,u.FullName,u.DepartmentId,r.RoleName
-                          FROM dbo.Users u INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
+                            @"SELECT u.UserId,u.FullName,u.DepartmentId,
+                                     COALESCE(r.RoleName,N'Contractor') AS RoleName
+                              FROM dbo.Users u
+                              LEFT JOIN dbo.Roles r ON r.RoleId=u.RoleId
                           WHERE u.UserId=@UserId AND " + OtpChallenge.IndianMobileMatchSql + @"
-                            AND u.IsActive=1 AND r.IsActive=1;", connection, transaction))
+                                AND u.IsActive=1
+                                AND
+                                (
+                                    (u.AccountType=N'Internal' AND r.IsActive=1)
+                                    OR
+                                    (u.AccountType=N'ExternalBidder' AND u.RoleId IS NULL
+                                     AND EXISTS
+                                     (
+                                         SELECT 1 FROM dbo.Contractors c
+                                         WHERE c.UserId=u.UserId AND c.IsActive=1
+                                     ))
+                                );", connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
                         ModuleDb.AddParameter(command, "@Mobile", SqlDbType.NVarChar, verifiedMobile, 20);
@@ -221,6 +251,7 @@ namespace DepartmentModule.Pages
                 Session[roleKey] = role;
                 Session[departmentKey] = departmentId.HasValue ? (object)departmentId.Value : null;
                 Session["FullName"] = fullName;
+                FormsAuthentication.SetAuthCookie(userId.ToString(), false);
 
                 int applyTenderId = GetApplyTenderId();
                 string destination = String.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
@@ -229,7 +260,6 @@ namespace DepartmentModule.Pages
                         ? "~/Pages/Bids.aspx?tenderId=" + applyTenderId.ToString()
                         : "~/Pages/Default.aspx";
                 Response.Redirect(ResolveUrl(destination), false);
-                Context.ApplicationInstance.CompleteRequest();
             }
             catch (SqlException ex)
             {

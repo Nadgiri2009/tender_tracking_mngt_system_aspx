@@ -17,12 +17,14 @@ namespace DepartmentModule.Pages
             get { return false; }
         }
 
-        protected Literal PageTitle, TenderTitle, TenderNumber, DepartmentName, Description, TenderType, TenderCategory, EstimatedAmount;
+        protected Literal PageTitle, TenderTitle, TenderNumber, DepartmentName, Description, EligibilityCriteria,
+            TenderType, TenderCategory, EstimatedAmount;
         protected Literal PublicationDate, SubmissionStartDate, SubmissionDeadline, CreatedBy, CreatedDate,
             CurrentStatus, Message, ApplicationMessage, PublicationPeriod, ExtensionCount;
-        protected GridView BoqGrid, DocumentsGrid, HistoryGrid;
+        protected GridView BoqGrid, DocumentsGrid, HistoryGrid, ApplicationRequirementsGrid;
         protected GridView BudgetOpinionsGrid;
-        protected Panel AddBoqPanel, UploadPanel, AuthenticatedWorkflowPanel;
+        protected Panel AddBoqPanel, UploadPanel, AuthenticatedWorkflowPanel, EligibilityCriteriaPanel,
+            ApplicationRequirementsPanel;
         protected Panel BudgetOpinionPanel, BudgetOpinionHistoryPanel;
         protected DropDownList DocumentTypeSelect;
         protected TextBox ItemName, ItemDescription, Quantity, Unit, Rate, Remarks;
@@ -30,7 +32,8 @@ namespace DepartmentModule.Pages
         protected FileUpload DocumentFile;
         protected Button AddBoqButton, UploadButton, SubmitWorkflowButton, ApproveButton, RejectButton;
         protected Button DeleteTenderButton;
-        protected HyperLink BidsLink, WorkLink, EditTenderLink, ApplyTenderLink, FinalWorkflowLink;
+        protected HyperLink BidsLink, WorkLink, EditTenderLink, ApplyTenderLink, FinalWorkflowLink,
+            BackToTendersLink;
         private int TenderId { get { return QueryId("id"); } }
         private string TenderStatus { get; set; }
         private int TenderDepartmentId { get; set; }
@@ -58,7 +61,7 @@ namespace DepartmentModule.Pages
                 {
                     if (!IsPostBack) BindDocumentTypes(connection);
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT t.TenderId,t.TenderNumber,t.Title,t.Description,t.TenderType,t.TenderCategory,t.EstimatedAmount,t.CurrentStatus,
+                        @"SELECT t.TenderId,t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,t.TenderType,t.TenderCategory,t.EstimatedAmount,t.CurrentStatus,
                                  t.WorkflowVersion,t.DepartmentId,
                                  COALESCE((SELECT MIN(ah.ApprovalDate) FROM dbo.ApprovalHistory ah
                                            WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published'),
@@ -118,6 +121,9 @@ namespace DepartmentModule.Pages
                             TenderTitle.Text = ModuleDb.Html(reader["Title"]);
                             DepartmentName.Text = ModuleDb.Html(reader["DepartmentName"]);
                             Description.Text = ModuleDb.Html(reader["Description"]);
+                            EligibilityCriteria.Text = ModuleDb.Html(reader["EligibilityCriteria"]);
+                            EligibilityCriteriaPanel.Visible = reader["EligibilityCriteria"] != DBNull.Value &&
+                                !String.IsNullOrWhiteSpace(Convert.ToString(reader["EligibilityCriteria"]));
                             TenderType.Text = ModuleDb.Html(reader["TenderType"]);
                             TenderCategory.Text = ModuleDb.Html(reader["TenderCategory"]);
                             EstimatedAmount.Text = Convert.ToDecimal(reader["EstimatedAmount"]).ToString("N2", CultureInfo.CurrentCulture);
@@ -143,12 +149,17 @@ namespace DepartmentModule.Pages
                 }
                 IsDraft = String.Equals(TenderStatus, "Draft", StringComparison.OrdinalIgnoreCase);
                 bool isBudgetRevision = String.Equals(TenderStatus, "Budget Revision Required", StringComparison.OrdinalIgnoreCase);
+                BackToTendersLink.NavigateUrl = CurrentUserId == 0 || HasAnyRole("Contractor")
+                    ? "~/Pages/Home.aspx#published-tenders"
+                    : "~/Pages/Tenders.aspx";
                 AuthenticatedWorkflowPanel.Visible = CurrentUserId > 0;
                 FinalWorkflowLink.Visible = IsFinalWorkflow && CurrentUserId > 0 &&
                     (HasPermission("tenders.monitor") || HasPermission("tender.create.department") ||
                      HasPermission("tender.cell.verify") || HasPermission("shortfall.respond.own") ||
-                     HasPermission("financial.open.approve") || HasPermission("financial.approve.final") ||
-                     HasPermission("system.admin"));
+                     HasPermission("shortfall.approve") || HasPermission("shortfall.clear") ||
+                     HasPermission("financial.open.approve") || HasPermission("financial.open.execute") ||
+                     HasPermission("financial.approve.final") || HasPermission("workorder.manage") ||
+                     HasPermission("agreement.manage") || HasPermission("system.admin"));
                 FinalWorkflowLink.NavigateUrl = "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
                 BudgetOpinionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
                 bool budgetApprovalPending = String.Equals(TenderStatus, "Budget Approval Pending", StringComparison.OrdinalIgnoreCase);
@@ -236,6 +247,14 @@ namespace DepartmentModule.Pages
                 @"SELECT o.Opinion,o.ApprovedAmount,o.OpinionAtUtc,o.Remarks,u.FullName AS ActionTakenBy
                   FROM dbo.TenderBudgetOpinions o INNER JOIN dbo.Users u ON u.UserId=o.ApprovedBy
                   WHERE o.TenderId=@TenderId ORDER BY o.OpinionAtUtc DESC;");
+            ApplicationRequirementsPanel.Visible = IsFinalWorkflow &&
+                String.Equals(TenderStatus, "Tender Published", StringComparison.OrdinalIgnoreCase);
+            if (ApplicationRequirementsPanel.Visible)
+            {
+                BindGrid(connection, ApplicationRequirementsGrid,
+                    @"SELECT DocumentType,Description,IsMandatory,AllowedExtensions,MaxFileSizeBytes
+                      FROM dbo.TenderRequiredBidDocuments WHERE TenderId=@TenderId ORDER BY DocumentType;");
+            }
         }
 
         private void BindGrid(SqlConnection connection, GridView grid, string sql)

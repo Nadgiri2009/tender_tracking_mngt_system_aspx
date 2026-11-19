@@ -11,6 +11,14 @@
                 EmptyDataText="No version-2 document checklist is configured for this tender.">
                 <Columns>
                     <asp:BoundField DataField="DocumentType" HeaderText="Required document type" />
+                    <asp:BoundField DataField="Description" HeaderText="Details" NullDisplayText="—" />
+                    <asp:TemplateField HeaderText="Required"><ItemTemplate>
+                        <%# Convert.ToBoolean(Eval("IsMandatory")) ? "Yes" : "Optional" %>
+                    </ItemTemplate></asp:TemplateField>
+                    <asp:BoundField DataField="AllowedExtensions" HeaderText="Accepted files" NullDisplayText="PDF, Office, JPEG, PNG" />
+                    <asp:TemplateField HeaderText="Maximum size"><ItemTemplate>
+                        <%# (Convert.ToInt32(Eval("MaxFileSizeBytes")) / 1000000.0).ToString("0.#") %> MB
+                    </ItemTemplate></asp:TemplateField>
                 </Columns>
             </asp:GridView>
         </div>
@@ -25,18 +33,42 @@
                 <label for="TechnicalDocumentPathText">Document Path (optional)</label>
                 <asp:TextBox ID="TechnicalDocumentPathText" runat="server" MaxLength="400" />
             </div>
-            <div class="field">
+            <asp:Panel ID="LegacyDocumentTypeField" runat="server" CssClass="field">
                 <label for="TechnicalDocumentTypeText">Document type</label>
                 <asp:TextBox ID="TechnicalDocumentTypeText" runat="server" MaxLength="160" />
-            </div>
+            </asp:Panel>
             <div class="field">
                 <label for="TechnicalDocumentUpload">Technical bid document</label>
-                <asp:FileUpload ID="TechnicalDocumentUpload" runat="server" />
+                <asp:FileUpload ID="TechnicalDocumentUpload" runat="server" AllowMultiple="true" />
                 <span class="help">PDF, Office, JPEG or PNG; maximum 20 MB.</span>
             </div>
             <asp:Button ID="SubmitTechnicalButton" runat="server" Text="Submit technical bid" OnClick="SubmitTechnicalButton_Click" />
             <asp:Button ID="UploadTechnicalDocumentButton" runat="server" Text="Upload additional document"
                 OnClick="UploadTechnicalDocumentButton_Click" Visible="false" />
+        </asp:Panel>
+        <asp:Panel ID="ApplicationSubmissionPanel" runat="server" CssClass="card" Visible="false">
+            <h3>Contractor application</h3>
+            <asp:Literal ID="ApplicationProfileMessage" runat="server" />
+            <asp:Literal ID="ApplicationStatusMessage" runat="server" />
+            <p class="help">Save a draft while you gather documents. Each upload is checked against this tender's file type and size rules.</p>
+            <div class="field">
+                <label for="ApplicationDocumentTypeSelect">Document requirement</label>
+                <asp:DropDownList ID="ApplicationDocumentTypeSelect" runat="server" />
+            </div>
+            <div class="field">
+                <label for="ApplicationDocumentUpload">Documents</label>
+                <asp:FileUpload ID="ApplicationDocumentUpload" runat="server" AllowMultiple="true" />
+                <span class="help">Choose up to 10 files for one requirement per upload. Maximum request size 50 MB.</span>
+            </div>
+            <div class="row">
+                <asp:Button ID="SaveApplicationDraftButton" runat="server" Text="Save draft" OnClick="SaveApplicationDraftButton_Click" />
+                <asp:HyperLink ID="ApplicationDetailsLink" runat="server" CssClass="button secondary" Visible="false">Open application</asp:HyperLink>
+            </div>
+            <div class="field">
+                <asp:CheckBox ID="ApplicationTermsAccepted" runat="server" Text="I have read and accept the " />
+                <asp:HyperLink ID="TermsLink" runat="server" NavigateUrl="~/Pages/Terms.aspx" Target="_blank">Terms &amp; Conditions</asp:HyperLink>
+                <asp:Button ID="SubmitApplicationButton" runat="server" Text="Submit application" OnClick="SubmitApplicationButton_Click" />
+            </div>
         </asp:Panel>
         <div class="table-wrap"><asp:GridView ID="TechnicalGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No technical bids submitted yet.">
             <Columns>
