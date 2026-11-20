@@ -30,7 +30,6 @@ namespace DepartmentModule.Pages
         private const string OtpAttemptsKey = "RegisterOtpAttempts";
         private const string VerifiedMobileKey = "RegisterOtpVerifiedMobile";
         private const string VerifiedUntilKey = "RegisterOtpVerifiedUntilUtc";
-        private const int OtpLifetimeMinutes = 5;
         private const int OtpMaxAttempts = 5;
         private const int VerifiedMobileLifetimeMinutes = 15;
 
@@ -177,13 +176,9 @@ namespace DepartmentModule.Pages
                 }
 
                 string code = OtpChallenge.CreateCode();
-                string deliveryMode, developmentCode;
-                if (!OtpChallenge.TryDeliver("registration", code, mobile,
-                        out deliveryMode, out developmentCode))
+                if (!OtpChallenge.TryDeliver("registration", code, mobile))
                 {
-                    ShowMessage(String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
-                        ? "The SMS gateway could not send the OTP. Please retry later or contact support."
-                        : "OTP delivery is unavailable on this server. Please contact support.");
+                    ShowMessage("Unable to send the OTP. Please try again later or contact support.");
                     return;
                 }
 
@@ -191,12 +186,10 @@ namespace DepartmentModule.Pages
                 Session[OtpMobileKey] = mobile;
                 Session[OtpHashKey] = OtpChallenge.HashCode(code, salt);
                 Session[OtpSaltKey] = salt;
-                Session[OtpExpiresKey] = now.AddMinutes(OtpLifetimeMinutes);
+                Session[OtpExpiresKey] = now.AddMinutes(OtpChallenge.GetOtpLifetimeMinutes());
                 Session[OtpAttemptsKey] = 0;
                 OtpPanel.Visible = true;
-                ShowMessage(String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
-                    ? "A verification OTP has been sent to your mobile number."
-                    : "Development OTP (local only): " + developmentCode, true);
+                ShowMessage("The OTP request was submitted to the SMS gateway. Check your mobile number; delivery may take a short time.", true);
             }
             catch (SqlException ex)
             {

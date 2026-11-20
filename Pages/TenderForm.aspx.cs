@@ -178,7 +178,7 @@ namespace DepartmentModule.Pages
                            AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
                                            WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
                                 OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
-                                          WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId=t.DepartmentId))))
+                                          WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId=t.DepartmentId)))))
                         OR
                         (t.WorkflowVersion=2 AND @IsAdministrator=1 AND t.CurrentStatus=N'Draft'
                          AND EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments a

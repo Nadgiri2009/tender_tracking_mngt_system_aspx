@@ -24,7 +24,6 @@ namespace DepartmentModule.Pages
         private const string OtpSaltKey = "LoginOtpSalt";
         private const string OtpExpiresKey = "LoginOtpExpiresUtc";
         private const string OtpAttemptsKey = "LoginOtpAttempts";
-        private const int OtpLifetimeMinutes = 5;
         private const int OtpMaxAttempts = 5;
 
         protected void Page_Load(object sender, EventArgs e)
@@ -120,13 +119,9 @@ namespace DepartmentModule.Pages
                 }
 
                 string otp = OtpChallenge.CreateCode();
-                string deliveryMode, developmentCode;
-                if (!OtpChallenge.TryDeliver("login", otp, normalizedMobile,
-                        out deliveryMode, out developmentCode))
+                if (!OtpChallenge.TryDeliver("login", otp, normalizedMobile))
                 {
-                    Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
-                        ? "<div class=\"message\">The SMS gateway could not send the OTP. Please retry later or contact support.</div>"
-                        : "<div class=\"message\">OTP delivery is unavailable on this server. Please contact support.</div>";
+                    Message.Text = "<div class=\"message\">Unable to send the OTP. Please try again later or contact support.</div>";
                     return;
                 }
 
@@ -135,17 +130,14 @@ namespace DepartmentModule.Pages
                 Session[OtpMobileKey] = normalizedMobile;
                 Session[OtpHashKey] = OtpChallenge.HashCode(otp, salt);
                 Session[OtpSaltKey] = salt;
-                Session[OtpExpiresKey] = now.AddMinutes(OtpLifetimeMinutes);
+                Session[OtpExpiresKey] = now.AddMinutes(OtpChallenge.GetOtpLifetimeMinutes());
                 Session[OtpAttemptsKey] = 0;
                 OtpPanel.Visible = true;
                 RequestOtpButton.Text = "Resend OTP";
                 RequestOtpButton.Attributes["data-cooldown-seconds"] =
                     OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", now)
                         .ToString(CultureInfo.InvariantCulture);
-                Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
-                    ? "<div class=\"message success\">A login OTP has been sent to your registered mobile number.</div>"
-                    : "<div class=\"message success\">Development OTP (local only): <strong>" +
-                      ModuleDb.Html(developmentCode) + "</strong></div>";
+                Message.Text = "<div class=\"message success\">The OTP request was submitted to the SMS gateway. Check your registered mobile number; delivery may take a short time.</div>";
             }
             catch (SqlException ex)
             {
