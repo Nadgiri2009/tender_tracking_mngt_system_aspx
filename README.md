@@ -21,12 +21,14 @@ Classic ASP.NET Web Forms (`.aspx` + C# code-behind) on .NET Framework 4.8, ADO.
 2. **Seed data:** the installer deliberately seeds nothing. Provision roles (including the role codes used by authorization), permissions, departments, workflow stages and an administrator account (with a BCrypt password hash) before users sign in.
 3. **Connection string:** edit `TenderManagement` in `Web.config` to match the installed database.
 4. **Build and publish:** build `DepartmentModule.csproj` in Visual Studio 2019/2022, restore NuGet packages, then publish to IIS (Integrated pipeline, .NET CLR v4.0). Grant the app-pool identity modify rights on `Uploads/`.
-5. **HTTPS:** cookies require SSL. Serve the site over HTTPS; the `Console` OTP mode permits the session cookie over HTTP only for local requests.
+5. **HTTPS:** cookies require SSL. Serve the site over HTTPS; the `Console` OTP mode permits session and authentication cookies over HTTP only for local requests. OTP-authenticated sessions use a signed, HTTP-only cookie and reload the active role and permissions from SQL Server.
 6. **OTP/SMS:** `OtpDeliveryMode` is `Console` by default. Local requests show the development OTP on the form and write it to the process user's `%TEMP%\TenderManagement-DevelopmentOtp.log`; remote requests are not given a development code. In local `Console` mode only, sign-in also accepts 10-digit placeholder identifiers for active database accounts; registration and SMS delivery still require a valid Indian mobile number. Configure the `SmsGateway*` settings for real SMS delivery.
 
 ## Contractor applications
 
 Version-2 tenders support contractor application drafts, requirement-specific document uploads, terms acceptance, submission, reviewer queues, document verification, clarification responses, decisions, notifications, and visible application history. Contractors manage their applications from `MyApplications.aspx`; internal reviewers use `Applications.aspx` and `ApplicationDetails.aspx`. Version-1 technical and financial bid behavior remains on `Bids.aspx`.
+
+The version-2 upgrade adds scheduled notification availability and final BOQ PDF records. A shortfall's three-day deadline starts when JE approves it; an in-portal reminder becomes visible 24 hours before the deadline when the contractor next opens their application page. Generating the approved agreement also creates a versioned BOQ PDF, which contractors can download only for their own application. Apply the database script in `Upgrade` mode after a verified backup and rehearsal before deploying code that uses these schema changes; the application does not apply migrations automatically.
 
 The installer adds tender eligibility and document requirement metadata, plus immutable application history and remarks. Uploads are stored under the configured private `UploadRoot`, validated against the tender's size and file type rules, and served through the authorized `DocumentDownload.aspx` endpoint.
 

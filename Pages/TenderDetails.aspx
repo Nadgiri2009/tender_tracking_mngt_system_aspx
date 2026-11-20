@@ -9,7 +9,7 @@
             <asp:HyperLink ID="FinalWorkflowLink" runat="server" NavigateUrl="~/Pages/TenderWorkflow.aspx" CssClass="button secondary" Visible="false">Open finalized workflow</asp:HyperLink>
             <asp:HyperLink ID="EditTenderLink" runat="server" CssClass="button secondary" Visible="false">Edit draft</asp:HyperLink>
             <asp:Button ID="DeleteTenderButton" runat="server" Text="Delete draft" CssClass="button danger" Visible="false"
-                OnClick="DeleteTenderButton_Click" OnClientClick="return confirm('Delete this draft tender? This action cannot be undone.');" />
+                OnClick="DeleteTenderButton_Click" OnClientClick="return confirm('Remove this initial-stage draft from active tender records? Its workflow and audit history will be retained.');" />
             <asp:HyperLink ID="BackToTendersLink" runat="server" CssClass="button secondary">Back to tenders</asp:HyperLink>
         </div>
     </div>

@@ -24,9 +24,14 @@ namespace DepartmentModule
                 HttpCookie sessionCookie = Response.Cookies["ASP.NET_SessionId"];
                 if (sessionCookie != null)
                     sessionCookie.Secure = false;
-                HttpCookie authenticationCookie = Response.Cookies[FormsAuthentication.FormsCookieName];
-                if (authenticationCookie != null)
-                    authenticationCookie.Secure = false;
+            }
+
+            HttpCookie authenticationCookie = Response.Cookies[FormsAuthentication.FormsCookieName];
+            if (authenticationCookie != null)
+            {
+                bool localConsoleHttp = Request.IsLocal && !Request.IsSecureConnection &&
+                    String.Equals(otpMode, "Console", StringComparison.OrdinalIgnoreCase);
+                authenticationCookie.Secure = !localConsoleHttp;
             }
         }
 

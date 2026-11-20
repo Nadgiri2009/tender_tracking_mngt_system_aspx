@@ -2,6 +2,7 @@ using System;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Globalization;
 using System.Web.Security;
 using System.Web.UI;
 using System.Web.UI.WebControls;
@@ -29,6 +30,10 @@ namespace DepartmentModule.Pages
         protected void Page_Load(object sender, EventArgs e)
         {
             OtpPanel.Visible = Session[OtpHashKey] != null;
+            RequestOtpButton.Text = OtpPanel.Visible ? "Resend OTP" : "Send OTP";
+            RequestOtpButton.Attributes["data-cooldown-seconds"] =
+                OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", DateTime.UtcNow)
+                    .ToString(CultureInfo.InvariantCulture);
             OtpText.Attributes["inputmode"] = "numeric";
             OtpText.Attributes["pattern"] = "[0-9]*";
             MobileText.Attributes["inputmode"] = "numeric";
@@ -49,19 +54,26 @@ namespace DepartmentModule.Pages
             Page.Validate("LoginId");
             if (!Page.IsValid) return;
 
-            ClearOtpChallenge();
-            OtpText.Text = String.Empty;
-            OtpPanel.Visible = false;
             string normalizedMobile = OtpChallenge.NormalizeMobile(MobileText.Text);
             try
             {
                 DateTime now = DateTime.UtcNow;
-                if (!OtpChallenge.TryReserveRequest(Session, "Login", now))
+                int retryAfterSeconds;
+                if (!OtpChallenge.TryReserveRequest(Session, "Login", now, out retryAfterSeconds))
                 {
-                    Message.Text = "<div class=\"message\">You have reached the limit of 3 OTP requests in 15 minutes. Please wait before requesting another code.</div>";
+                    Message.Text = "<div class=\"message\">Please wait " +
+                        retryAfterSeconds.ToString(CultureInfo.InvariantCulture) +
+                        " seconds before requesting another OTP.</div>";
                     return;
                 }
 
+                ClearOtpChallenge();
+                OtpText.Text = String.Empty;
+                OtpPanel.Visible = false;
+                RequestOtpButton.Text = "Resend OTP";
+                RequestOtpButton.Attributes["data-cooldown-seconds"] =
+                    OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", now)
+                        .ToString(CultureInfo.InvariantCulture);
                 int userId = 0;
                 bool ambiguousMobile = false;
                 using (SqlConnection connection = ModuleDb.OpenConnection())
@@ -126,6 +138,10 @@ namespace DepartmentModule.Pages
                 Session[OtpExpiresKey] = now.AddMinutes(OtpLifetimeMinutes);
                 Session[OtpAttemptsKey] = 0;
                 OtpPanel.Visible = true;
+                RequestOtpButton.Text = "Resend OTP";
+                RequestOtpButton.Attributes["data-cooldown-seconds"] =
+                    OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", now)
+                        .ToString(CultureInfo.InvariantCulture);
                 Message.Text = String.Equals(deliveryMode, "Sms", StringComparison.OrdinalIgnoreCase)
                     ? "<div class=\"message success\">A login OTP has been sent to your registered mobile number.</div>"
                     : "<div class=\"message success\">Development OTP (local only): <strong>" +
@@ -256,8 +272,12 @@ namespace DepartmentModule.Pages
                 int applyTenderId = GetApplyTenderId();
                 string destination = String.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
                     ? "~/Pages/Admin.aspx"
-                    : String.Equals(role, "Contractor", StringComparison.OrdinalIgnoreCase) && applyTenderId > 0
-                        ? "~/Pages/Bids.aspx?tenderId=" + applyTenderId.ToString()
+                    : String.Equals(role, "Junior Engineer (JE)", StringComparison.OrdinalIgnoreCase)
+                        ? "~/Pages/Admin.aspx"
+                    : String.Equals(role, "Contractor", StringComparison.OrdinalIgnoreCase)
+                        ? applyTenderId > 0
+                            ? "~/Pages/Bids.aspx?tenderId=" + applyTenderId.ToString()
+                            : "~/Pages/MyApplications.aspx"
                         : "~/Pages/Default.aspx";
                 Response.Redirect(ResolveUrl(destination), false);
             }

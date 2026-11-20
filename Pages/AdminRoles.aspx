@@ -6,7 +6,7 @@
     <section class="card">
         <asp:HiddenField ID="RoleIdHidden" runat="server" />
         <h2><asp:Literal ID="FormHeading" runat="server">Create custom role</asp:Literal></h2>
-        <p class="muted">The six workflow roles and legacy roles are protected from renaming, deletion, and deactivation.</p>
+        <p class="muted">Core workflow role names, status, and workflow-linked records are protected; the JE administrator can manage their permission assignments and create or edit custom roles.</p>
         <div class="row">
             <div class="field"><asp:Label runat="server" AssociatedControlID="RoleNameText">Role name</asp:Label><asp:TextBox ID="RoleNameText" runat="server" MaxLength="100" /><asp:RequiredFieldValidator runat="server" ControlToValidate="RoleNameText" ValidationGroup="Role" CssClass="validation" ErrorMessage="Role name is required." /></div>
             <div class="field"><asp:Label runat="server" AssociatedControlID="RoleDescriptionText">Description</asp:Label><asp:TextBox ID="RoleDescriptionText" runat="server" MaxLength="400" TextMode="MultiLine" Rows="3" /></div>

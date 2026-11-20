@@ -14,6 +14,7 @@ namespace DepartmentModule.Helpers
     {
         private const int MaxRequestsPerWindow = 3;
         private static readonly TimeSpan RequestWindow = TimeSpan.FromMinutes(15);
+        private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(30);
         public const string NormalizedMobileSql =
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(u.Mobile,N''),N'+',N''),N' ',N''),N'-',N''),N'(',N''),N')',N''),N'.',N'')";
         public const string IndianMobileMatchSql =
@@ -21,8 +22,19 @@ namespace DepartmentModule.Helpers
 
         public static bool TryReserveRequest(HttpSessionState session, string keyPrefix, DateTime now)
         {
+            int retryAfterSeconds;
+            return TryReserveRequest(session, keyPrefix, now, out retryAfterSeconds);
+        }
+
+        public static bool TryReserveRequest(HttpSessionState session, string keyPrefix, DateTime now,
+            out int retryAfterSeconds)
+        {
+            retryAfterSeconds = GetRequestRetryAfterSeconds(session, keyPrefix, now);
+            if (retryAfterSeconds > 0) return false;
+
             string countKey = keyPrefix + "OtpRequests";
             string windowKey = keyPrefix + "OtpRequestWindowUtc";
+            string lastRequestKey = keyPrefix + "OtpLastRequestUtc";
             DateTime windowStart = session[windowKey] is DateTime
                 ? (DateTime)session[windowKey]
                 : now;
@@ -36,11 +48,45 @@ namespace DepartmentModule.Helpers
                 requestCount = 0;
             }
 
-            if (requestCount >= MaxRequestsPerWindow) return false;
-
             session[countKey] = requestCount + 1;
             session[windowKey] = windowStart;
+            session[lastRequestKey] = now;
             return true;
+        }
+
+        public static int GetRequestRetryAfterSeconds(HttpSessionState session, string keyPrefix, DateTime now)
+        {
+            string countKey = keyPrefix + "OtpRequests";
+            string windowKey = keyPrefix + "OtpRequestWindowUtc";
+            string lastRequestKey = keyPrefix + "OtpLastRequestUtc";
+            int retryAfterSeconds = 0;
+
+            if (session[lastRequestKey] is DateTime)
+            {
+                TimeSpan cooldownRemaining = ResendCooldown - (now - (DateTime)session[lastRequestKey]);
+                if (cooldownRemaining > TimeSpan.Zero)
+                    retryAfterSeconds = (int)Math.Ceiling(cooldownRemaining.TotalSeconds);
+            }
+
+            DateTime windowStart = session[windowKey] is DateTime
+                ? (DateTime)session[windowKey]
+                : now;
+            int requestCount = session[countKey] is int
+                ? (int)session[countKey]
+                : 0;
+            if (now - windowStart >= RequestWindow)
+                requestCount = 0;
+
+            if (requestCount >= MaxRequestsPerWindow)
+            {
+                TimeSpan windowRemaining = RequestWindow - (now - windowStart);
+                int windowRetry = windowRemaining > TimeSpan.Zero
+                    ? (int)Math.Ceiling(windowRemaining.TotalSeconds)
+                    : 0;
+                retryAfterSeconds = Math.Max(retryAfterSeconds, windowRetry);
+            }
+
+            return retryAfterSeconds;
         }
 
         public static string NormalizeMobile(string mobile)

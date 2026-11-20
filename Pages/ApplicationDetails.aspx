@@ -94,6 +94,22 @@
                 </asp:GridView>
             </div>
         </asp:Panel>
+        <asp:Panel ID="FinalDocumentsPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Final tender documents</h2>
+            <div class="table-wrap">
+                <asp:GridView ID="FinalDocumentsGrid" runat="server" AutoGenerateColumns="false"
+                    GridLines="None" EmptyDataText="Final tender documents are not available yet.">
+                    <Columns>
+                        <asp:BoundField DataField="DocumentKind" HeaderText="Document" />
+                        <asp:BoundField DataField="VersionNumber" HeaderText="Version" />
+                        <asp:HyperLinkField DataTextField="FileName" DataNavigateUrlFields="GeneratedDocumentId"
+                            DataNavigateUrlFormatString="DocumentDownload.aspx?generatedDocumentId={0}" HeaderText="Download" />
+                        <asp:BoundField DataField="GeneratedAtUtc" HeaderText="Generated"
+                            DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+        </asp:Panel>
     </asp:Panel>
     <section class="card">
         <h2>Uploaded documents</h2>

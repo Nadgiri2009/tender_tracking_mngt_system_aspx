@@ -339,6 +339,16 @@ namespace DepartmentModule.Helpers
             string note = (remarks ?? String.Empty).Trim();
             if (note.Length > 2000 || (!approve && note.Length == 0))
                 throw new InvalidOperationException("Provide remarks of at most 2,000 characters; remarks are required when returning a shortfall.");
+            if (approve)
+            {
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT CASE WHEN COL_LENGTH(N'dbo.TenderNotifications',N'AvailableAtUtc') IS NULL
+                                  THEN 0 ELSE 1 END;", connection, transaction))
+                {
+                    if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) != 1)
+                        throw new InvalidOperationException("Apply the scheduled-notification database upgrade before approving a shortfall.");
+                }
+            }
 
             int contractorUserId, applicationId, contractorId;
             using (SqlCommand command = new SqlCommand(
@@ -362,8 +372,12 @@ namespace DepartmentModule.Helpers
             }
 
             using (SqlCommand command = new SqlCommand(
-                @"UPDATE dbo.TenderShortfalls
-                  SET Status=@Status,JeApprovedBy=@UserId,JeApprovedAtUtc=SYSUTCDATETIME(),
+                @"DECLARE @DecisionAtUtc DATETIME2(0)=SYSUTCDATETIME();
+                  UPDATE dbo.TenderShortfalls
+                  SET Status=@Status,JeApprovedBy=@UserId,JeApprovedAtUtc=@DecisionAtUtc,
+                      SubmissionDurationDays=CASE WHEN @Approve=1 THEN 3 ELSE SubmissionDurationDays END,
+                      SubmissionDeadlineUtc=CASE WHEN @Approve=1
+                          THEN DATEADD(DAY,3,@DecisionAtUtc) ELSE SubmissionDeadlineUtc END,
                       ClearanceStatus=CASE WHEN @Approve=1 THEN N'Pending' ELSE N'Continued Deficiency' END,
                       Remarks=CASE WHEN @Remarks IS NULL THEN Remarks ELSE @Remarks END
                   WHERE ShortfallId=@ShortfallId AND TenderId=@TenderId AND Status=N'Pending JE Approval';",
@@ -379,6 +393,29 @@ namespace DepartmentModule.Helpers
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
                 if (command.ExecuteNonQuery() != 1)
                     throw new InvalidOperationException("The shortfall approval changed; refresh and retry.");
+            }
+            if (approve)
+            {
+                using (SqlCommand command = new SqlCommand(
+                    @"INSERT INTO dbo.TenderNotifications
+                        (UserId,TenderId,ShortfallId,NotificationType,Message,AvailableAtUtc)
+                      SELECT @UserId,@TenderId,@ShortfallId,N'ShortfallReminder',
+                             N'This is your reminder: the three-calendar-day shortfall deadline is 24 hours away.',
+                             DATEADD(HOUR,-24,s.SubmissionDeadlineUtc)
+                      FROM dbo.TenderShortfalls s
+                      WHERE s.ShortfallId=@ShortfallId AND s.TenderId=@TenderId
+                        AND s.Status=N'Awaiting Contractor'
+                        AND NOT EXISTS
+                          (SELECT 1 FROM dbo.TenderNotifications n
+                           WHERE n.ShortfallId=s.ShortfallId
+                             AND n.NotificationType=N'ShortfallReminder');", connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, contractorUserId);
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, shortfallId);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("The contractor deadline reminder could not be scheduled.");
+                }
             }
 
             ContractorApplicationRules.AddHistory(connection, transaction, applicationId,
@@ -1097,22 +1134,35 @@ namespace DepartmentModule.Helpers
             };
         }
 
-        public static void EnsureFinalAgreementGenerated(SqlConnection connection,
+        public static void EnsureFinalDocumentsGenerated(SqlConnection connection,
             SqlTransaction transaction, int tenderId)
         {
             using (SqlCommand command = new SqlCommand(
-                @"SELECT COUNT(1)
-                  FROM dbo.Agreement a
-                  INNER JOIN dbo.TenderGeneratedDocuments d ON d.AgreementId=a.AgreementId
-                    AND d.TenderId=a.TenderId AND d.DocumentKind=N'Agreement'
-                  WHERE a.TenderId=@TenderId
-                    AND a.AgreementId=(SELECT TOP (1) x.AgreementId FROM dbo.Agreement x
-                      WHERE x.TenderId=@TenderId ORDER BY x.CreatedDate DESC,x.AgreementId DESC);",
+                @"SELECT
+                    CASE WHEN EXISTS
+                    (
+                        SELECT 1 FROM dbo.Agreement a
+                        INNER JOIN dbo.TenderGeneratedDocuments d ON d.AgreementId=a.AgreementId
+                          AND d.TenderId=a.TenderId AND d.DocumentKind=N'Agreement'
+                        WHERE a.TenderId=@TenderId
+                          AND a.AgreementId=(SELECT TOP (1) x.AgreementId FROM dbo.Agreement x
+                            WHERE x.TenderId=@TenderId ORDER BY x.CreatedDate DESC,x.AgreementId DESC)
+                    ) THEN 1 ELSE 0 END AS AgreementGenerated,
+                    CASE WHEN EXISTS
+                    (
+                        SELECT 1 FROM dbo.TenderGeneratedDocuments
+                        WHERE TenderId=@TenderId AND DocumentKind=N'BOQ'
+                    ) THEN 1 ELSE 0 END AS BoqGenerated;",
                 connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
-                if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) != 1)
-                    throw new InvalidOperationException("Generate and store the approved agreement PDF before completing the tender.");
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read() ||
+                        Convert.ToInt32(reader["AgreementGenerated"], CultureInfo.InvariantCulture) != 1 ||
+                        Convert.ToInt32(reader["BoqGenerated"], CultureInfo.InvariantCulture) != 1)
+                        throw new InvalidOperationException("Generate and store the approved agreement and final BOQ PDFs before completing the tender.");
+                }
             }
         }
 
@@ -1390,6 +1440,115 @@ namespace DepartmentModule.Helpers
             {
                 RelatedDocumentPath = relativePath,
                 ActionName = "Generate" + kind + "V" + version.ToString(CultureInfo.InvariantCulture)
+            };
+        }
+
+        public static WorkflowTransitionMetadata GenerateFinalBoqDocument(Page page,
+            SqlConnection connection, SqlTransaction transaction, int tenderId, int userId)
+        {
+            if (page == null || connection == null || transaction == null ||
+                tenderId <= 0 || userId <= 0)
+                throw new InvalidOperationException("A valid tender and authenticated user are required to generate the BOQ.");
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT CASE WHEN EXISTS
+                  (
+                      SELECT 1 FROM sys.check_constraints
+                      WHERE parent_object_id=OBJECT_ID(N'dbo.TenderGeneratedDocuments')
+                        AND name=N'CK_TenderGeneratedDocuments_Kind'
+                        AND definition LIKE N'%BOQ%'
+                  ) AND EXISTS
+                  (
+                      SELECT 1 FROM sys.check_constraints
+                      WHERE parent_object_id=OBJECT_ID(N'dbo.TenderGeneratedDocuments')
+                        AND name=N'CK_TenderGeneratedDocuments_Target'
+                        AND definition LIKE N'%BOQ%'
+                  ) THEN 1 ELSE 0 END;", connection, transaction))
+            {
+                if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) != 1)
+                    throw new InvalidOperationException("Apply the BOQ document database upgrade before generating the final agreement.");
+            }
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT TOP (1) Decision,SelectedFinancialBidId
+                  FROM dbo.TenderFinancialApprovals
+                  WHERE TenderId=@TenderId
+                  ORDER BY ApprovedAtUtc DESC,FinancialApprovalId DESC;", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read() || Convert.ToString(reader["Decision"]) != "Approved" ||
+                        reader["SelectedFinancialBidId"] == DBNull.Value)
+                        throw new InvalidOperationException("The BOQ can be generated only after the Chief Auditor approves a selected bidder.");
+                }
+            }
+
+            string tenderNumber, tenderTitle;
+            DataTable items = new DataTable();
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT t.TenderNumber,t.Title,b.BOQId,b.ItemName,b.Description,b.Quantity,b.Unit,b.Rate,b.Amount
+                  FROM dbo.Tender t
+                  INNER JOIN dbo.BOQ b ON b.TenderId=t.TenderId
+                  WHERE t.TenderId=@TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0
+                  ORDER BY b.BOQId;", connection, transaction))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                adapter.Fill(items);
+            }
+            if (items.Rows.Count == 0)
+                throw new InvalidOperationException("Add at least one BOQ item before generating the final BOQ.");
+            tenderNumber = Convert.ToString(items.Rows[0]["TenderNumber"]);
+            tenderTitle = Convert.ToString(items.Rows[0]["Title"]);
+
+            int version;
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT COALESCE(MAX(VersionNumber),0)+1
+                  FROM dbo.TenderGeneratedDocuments WITH (UPDLOCK,HOLDLOCK)
+                  WHERE TenderId=@TenderId AND DocumentKind=N'BOQ';", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                version = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+            }
+
+            string fileName = TenderLifecycleFiles.SafeFileName(tenderNumber + "_BOQ_v" +
+                version.ToString(CultureInfo.InvariantCulture) + ".pdf");
+            byte[] content = TenderDocumentGenerator.RenderBoq(tenderNumber, tenderTitle, items);
+            string relativePath = TenderLifecycleFiles.SaveGeneratedTenderDocument(
+                page, tenderId, fileName, content);
+
+            try
+            {
+                using (SqlCommand command = new SqlCommand(
+                    @"INSERT INTO dbo.TenderGeneratedDocuments
+                        (TenderId,WorkOrderId,AgreementId,DocumentKind,VersionNumber,FileName,FilePath,GeneratedBy)
+                      VALUES(@TenderId,NULL,NULL,N'BOQ',@Version,@FileName,@FilePath,@UserId);",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@Version", SqlDbType.Int, version);
+                    ModuleDb.AddParameter(command, "@FileName", SqlDbType.NVarChar, fileName, 520);
+                    ModuleDb.AddParameter(command, "@FilePath", SqlDbType.NVarChar, relativePath, 800);
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("The BOQ PDF could not be recorded.");
+                }
+
+                ModuleDb.AddAudit(connection, transaction, userId, "GenerateFinalBoq",
+                    "Tender", tenderId, "Generated final BOQ PDF version " +
+                    version.ToString(CultureInfo.InvariantCulture), null);
+            }
+            catch
+            {
+                TenderLifecycleFiles.DeleteStoredGeneratedTenderDocument(page, relativePath);
+                throw;
+            }
+
+            return new WorkflowTransitionMetadata
+            {
+                RelatedDocumentPath = relativePath,
+                ActionName = "GenerateBOQV" + version.ToString(CultureInfo.InvariantCulture)
             };
         }
 

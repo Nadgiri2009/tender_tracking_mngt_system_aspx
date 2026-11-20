@@ -220,6 +220,38 @@ namespace DepartmentModule.Helpers
             return "Uploads/" + relativeFolder + "/" + storedName;
         }
 
+        public static bool TryResolveStoredFilePath(Page page, string storedPath, out string fullPath)
+        {
+            fullPath = null;
+            if (page == null || String.IsNullOrWhiteSpace(storedPath)) return false;
+
+            string normalized = storedPath.Replace('\\', '/').TrimStart('/');
+            if (!normalized.StartsWith("Uploads/", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("..") || Path.IsPathRooted(normalized))
+                return false;
+
+            string relativePath = normalized.Substring("Uploads/".Length)
+                .Replace('/', Path.DirectorySeparatorChar);
+            string configuredRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
+            string[] roots = { configuredRoot, "~/Uploads" };
+            HashSet<string> checkedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string rootPath in roots)
+            {
+                string root = Path.GetFullPath(page.Server.MapPath(rootPath));
+                if (!checkedRoots.Add(root)) continue;
+
+                string candidate = Path.GetFullPath(Path.Combine(root, relativePath));
+                if (candidate.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) +
+                        Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(candidate))
+                {
+                    fullPath = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static void DeleteStoredUpload(Page page, string relativePath, string relativeFolderName)
         {
             if (String.IsNullOrWhiteSpace(relativePath)) return;
@@ -228,15 +260,8 @@ namespace DepartmentModule.Helpers
             if (!normalized.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase) ||
                 normalized.Contains("..") || Path.IsPathRooted(normalized)) return;
 
-            string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
-            string root = Path.GetFullPath(page.Server.MapPath(uploadRoot));
-            string path = Path.GetFullPath(Path.Combine(
-                root, normalized.Substring("Uploads/".Length).Replace('/', Path.DirectorySeparatorChar)));
-            if (path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                    StringComparison.OrdinalIgnoreCase) && File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            string path;
+            if (TryResolveStoredFilePath(page, normalized, out path)) File.Delete(path);
         }
 
         public static string NormalizeAllowedApplicationExtensions(string value)
@@ -270,8 +295,9 @@ namespace DepartmentModule.Helpers
             return parsed;
         }
 
-        private static bool HasAllowedContentSignature(Stream stream, string extension)
+        public static bool HasAllowedContentSignature(Stream stream, string extension)
         {
+            if (stream == null || !stream.CanRead) return false;
             byte[] header = new byte[8];
             long originalPosition = stream.CanSeek ? stream.Position : 0;
             int count = stream.Read(header, 0, header.Length);

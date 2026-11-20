@@ -109,6 +109,20 @@ namespace DepartmentModule.Helpers
             public const string DraftOrSubmitted =
                 "t.CurrentStatus IN (N'Draft',N'Requirement Submitted',N'Estimate Prepared',N'Tender Draft Created'," +
                 "N'Budget Revision Required')";
+            public const string Published =
+                    "(t.CurrentStatus NOT LIKE N'%cancel%' AND " +
+                    "(EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') " +
+                    "OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))";
+            public const string Active =
+                    "(t.CurrentStatus=N'Tender Published' AND s.PublicationStartUtc<=SYSUTCDATETIME() " +
+                    "AND s.CurrentClosingUtc>SYSUTCDATETIME() AND " +
+                    "(EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') " +
+                    "OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))";
+            public const string Closed =
+                    "(t.CurrentStatus NOT LIKE N'%cancel%' AND s.CurrentClosingUtc<=SYSUTCDATETIME() " +
+                    "AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') " +
+                    "OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))";
+            public const string Cancelled = "t.CurrentStatus LIKE N'%cancel%'";
 
         public static string Predicate(string bucket)
         {
@@ -119,6 +133,10 @@ namespace DepartmentModule.Helpers
                 case "Rejected": return Rejected;
                 case "Under Review": return UnderReview;
                 case "Draft / Submitted": return DraftOrSubmitted;
+                case "Published": return Published;
+                case "Active": return Active;
+                case "Closed": return Closed;
+                case "Cancelled": return Cancelled;
                 default: return null;
             }
         }

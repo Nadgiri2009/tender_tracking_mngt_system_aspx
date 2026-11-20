@@ -185,7 +185,8 @@ CREATE TABLE dbo.Users (
     Email           NVARCHAR(150)  NOT NULL UNIQUE,
     Mobile          NVARCHAR(20)   NULL,
     PasswordHash    NVARCHAR(500)  NOT NULL,
-    RoleId          INT            NOT NULL,
+    RoleId          INT            NULL,
+    AccountType     NVARCHAR(24)   NOT NULL CONSTRAINT DF_Users_AccountType DEFAULT N'Internal',
     DepartmentId    INT            NULL,
     IsActive        BIT            NOT NULL DEFAULT 1,
     CreatedDate     DATETIME2      NOT NULL DEFAULT SYSUTCDATETIME(),
@@ -195,6 +196,9 @@ CREATE TABLE dbo.Users (
     FailedLoginCount INT NOT NULL CONSTRAINT DF_Users_FailedLoginCount DEFAULT(0),
     LockoutUntil DATETIME2 NULL,
     LastLoginDate DATETIME2 NULL,
+    CONSTRAINT CK_Users_AccountTypeRole CHECK
+        ((AccountType=N'Internal' AND RoleId IS NOT NULL)
+         OR (AccountType=N'ExternalBidder' AND RoleId IS NULL)),
     CONSTRAINT FK_Users_Roles FOREIGN KEY (RoleId) REFERENCES dbo.Roles(RoleId),
     CONSTRAINT FK_Users_Departments FOREIGN KEY (DepartmentId) REFERENCES dbo.Departments(DepartmentId)
 );
@@ -202,6 +206,23 @@ END;
 GO
 IF N'$(InstallMode)'=N'Upgrade'
 BEGIN
+    IF COL_LENGTH(N'dbo.Users',N'AccountType') IS NULL
+        ALTER TABLE dbo.Users ADD AccountType NVARCHAR(24) NOT NULL
+            CONSTRAINT DF_Users_AccountType DEFAULT N'Internal' WITH VALUES;
+    IF EXISTS
+    (
+        SELECT 1 FROM sys.columns
+        WHERE object_id=OBJECT_ID(N'dbo.Users') AND name=N'RoleId' AND is_nullable=0
+    )
+        ALTER TABLE dbo.Users ALTER COLUMN RoleId INT NULL;
+    IF NOT EXISTS
+    (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.Users') AND name=N'CK_Users_AccountTypeRole'
+    )
+        ALTER TABLE dbo.Users ADD CONSTRAINT CK_Users_AccountTypeRole CHECK
+            ((AccountType=N'Internal' AND RoleId IS NOT NULL)
+             OR (AccountType=N'ExternalBidder' AND RoleId IS NULL));
     IF COL_LENGTH(N'dbo.Users',N'FailedLoginCount') IS NULL
         ALTER TABLE dbo.Users ADD FailedLoginCount INT NOT NULL
             CONSTRAINT DF_Users_FailedLoginCount DEFAULT(0) WITH VALUES;
@@ -232,15 +253,91 @@ BEGIN
 CREATE TABLE dbo.Contractors (
     ContractorId    INT IDENTITY(1,1) PRIMARY KEY,
     Name            NVARCHAR(150) NOT NULL,
-    RegistrationNo  NVARCHAR(100) NOT NULL UNIQUE,
+    RegistrationNo  NVARCHAR(100) NULL,
     Address         NVARCHAR(300) NULL,
     ContactNo       NVARCHAR(20)  NULL,
     Email           NVARCHAR(150) NULL,
     UserId          INT           NULL,
     IsActive        BIT           NOT NULL DEFAULT 1,
     CreatedDate     DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
+    ContactPersonName NVARCHAR(150) NULL,
+    City            NVARCHAR(100) NULL,
+    State           NVARCHAR(100) NULL,
+    PinCode         NVARCHAR(6)   NULL,
+    GSTNumber       NVARCHAR(15)  NULL,
+    PANNumber       NVARCHAR(10)  NULL,
+    CompanyType     NVARCHAR(30)  NULL,
     CONSTRAINT FK_Contractors_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId)
 );
+END;
+GO
+IF N'$(InstallMode)'=N'Upgrade'
+BEGIN
+    DECLARE @RegistrationNoUniqueConstraint SYSNAME;
+    SELECT TOP (1) @RegistrationNoUniqueConstraint=kc.name
+    FROM sys.key_constraints kc
+    INNER JOIN sys.index_columns ic
+        ON ic.object_id=kc.parent_object_id AND ic.index_id=kc.unique_index_id AND ic.key_ordinal=1
+    INNER JOIN sys.columns c
+        ON c.object_id=ic.object_id AND c.column_id=ic.column_id
+    WHERE kc.parent_object_id=OBJECT_ID(N'dbo.Contractors')
+      AND kc.type=N'U' AND c.name=N'RegistrationNo'
+      AND (SELECT COUNT(*) FROM sys.index_columns keyColumns
+           WHERE keyColumns.object_id=kc.parent_object_id
+             AND keyColumns.index_id=kc.unique_index_id AND keyColumns.key_ordinal>0)=1;
+    IF @RegistrationNoUniqueConstraint IS NOT NULL
+    BEGIN
+        DECLARE @DropRegistrationNoConstraintSql NVARCHAR(MAX);
+        SET @DropRegistrationNoConstraintSql =
+            N'ALTER TABLE dbo.Contractors DROP CONSTRAINT ' + QUOTENAME(@RegistrationNoUniqueConstraint) + N';';
+        EXEC sys.sp_executesql @DropRegistrationNoConstraintSql;
+    END;
+    IF EXISTS
+    (
+        SELECT 1 FROM sys.columns
+        WHERE object_id=OBJECT_ID(N'dbo.Contractors') AND name=N'RegistrationNo' AND is_nullable=0
+    )
+        ALTER TABLE dbo.Contractors ALTER COLUMN RegistrationNo NVARCHAR(100) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'ContactPersonName') IS NULL
+        ALTER TABLE dbo.Contractors ADD ContactPersonName NVARCHAR(150) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'City') IS NULL
+        ALTER TABLE dbo.Contractors ADD City NVARCHAR(100) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'State') IS NULL
+        ALTER TABLE dbo.Contractors ADD State NVARCHAR(100) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'PinCode') IS NULL
+        ALTER TABLE dbo.Contractors ADD PinCode NVARCHAR(6) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'GSTNumber') IS NULL
+        ALTER TABLE dbo.Contractors ADD GSTNumber NVARCHAR(15) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'PANNumber') IS NULL
+        ALTER TABLE dbo.Contractors ADD PANNumber NVARCHAR(10) NULL;
+    IF COL_LENGTH(N'dbo.Contractors',N'CompanyType') IS NULL
+        ALTER TABLE dbo.Contractors ADD CompanyType NVARCHAR(30) NULL;
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Contractors') AND name=N'UX_Contractors_RegistrationNo')
+BEGIN
+    IF EXISTS
+    (
+        SELECT RegistrationNo FROM dbo.Contractors
+        WHERE RegistrationNo IS NOT NULL AND RegistrationNo<>N''
+        GROUP BY RegistrationNo HAVING COUNT(*)>1
+    )
+        THROW 51021, 'Contractor registration numbers contain duplicates; resolve them before adding the unique registration index.', 1;
+    CREATE UNIQUE INDEX UX_Contractors_RegistrationNo ON dbo.Contractors(RegistrationNo)
+        WHERE RegistrationNo IS NOT NULL AND RegistrationNo<>N'';
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.Contractors') AND name=N'UX_Contractors_Email')
+BEGIN
+    IF EXISTS
+    (
+        SELECT Email FROM dbo.Contractors
+        WHERE Email IS NOT NULL AND Email<>N''
+        GROUP BY Email HAVING COUNT(*)>1
+    )
+        THROW 51020, 'Contractor company emails contain duplicates; resolve them before adding the unique email index.', 1;
+    CREATE UNIQUE INDEX UX_Contractors_Email ON dbo.Contractors(Email)
+        WHERE Email IS NOT NULL AND Email<>N'';
 END;
 GO
 
@@ -1508,11 +1605,37 @@ BEGIN
         Message NVARCHAR(1000) NOT NULL,
         CreatedAtUtc DATETIME2(0) NOT NULL
             CONSTRAINT DF_TenderNotifications_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+        AvailableAtUtc DATETIME2(0) NOT NULL
+            CONSTRAINT DF_TenderNotifications_AvailableAtUtc DEFAULT SYSUTCDATETIME(),
         ReadAtUtc DATETIME2(0) NULL
     );
     CREATE INDEX IX_TenderNotifications_User
         ON dbo.TenderNotifications(UserId,ReadAtUtc,CreatedAtUtc DESC);
 END;
+
+IF COL_LENGTH(N'dbo.TenderNotifications', N'AvailableAtUtc') IS NULL
+    ALTER TABLE dbo.TenderNotifications ADD AvailableAtUtc DATETIME2(0) NOT NULL
+        CONSTRAINT DF_TenderNotifications_AvailableAtUtc DEFAULT SYSUTCDATETIME() WITH VALUES;
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id=OBJECT_ID(N'dbo.TenderNotifications')
+      AND name=N'IX_TenderNotifications_UserAvailable'
+)
+    CREATE INDEX IX_TenderNotifications_UserAvailable
+        ON dbo.TenderNotifications(UserId,AvailableAtUtc,CreatedAtUtc DESC)
+        INCLUDE(NotificationType,ShortfallId,ReadAtUtc);
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id=OBJECT_ID(N'dbo.TenderNotifications')
+      AND name=N'UX_TenderNotifications_ShortfallReminder'
+)
+    CREATE UNIQUE INDEX UX_TenderNotifications_ShortfallReminder
+        ON dbo.TenderNotifications(ShortfallId,NotificationType)
+        WHERE ShortfallId IS NOT NULL AND NotificationType=N'ShortfallReminder';
 
 IF COL_LENGTH(N'dbo.WorkOrder', N'WorkDescription') IS NULL
     ALTER TABLE dbo.WorkOrder ADD WorkDescription NVARCHAR(2000) NULL;
@@ -1562,17 +1685,52 @@ BEGIN
             CONSTRAINT FK_TenderGeneratedDocuments_User REFERENCES dbo.Users(UserId),
         GeneratedAtUtc DATETIME2(0) NOT NULL
             CONSTRAINT DF_TenderGeneratedDocuments_GeneratedAtUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT CK_TenderGeneratedDocuments_Kind CHECK (DocumentKind IN (N'WorkOrder',N'Agreement')),
+        CONSTRAINT CK_TenderGeneratedDocuments_Kind CHECK (DocumentKind IN (N'WorkOrder',N'Agreement',N'BOQ')),
         CONSTRAINT CK_TenderGeneratedDocuments_Version CHECK (VersionNumber>0),
         CONSTRAINT CK_TenderGeneratedDocuments_Target CHECK
             ((DocumentKind=N'WorkOrder' AND WorkOrderId IS NOT NULL AND AgreementId IS NULL)
-             OR (DocumentKind=N'Agreement' AND AgreementId IS NOT NULL AND WorkOrderId IS NULL))
+             OR (DocumentKind=N'Agreement' AND AgreementId IS NOT NULL AND WorkOrderId IS NULL)
+             OR (DocumentKind=N'BOQ' AND WorkOrderId IS NULL AND AgreementId IS NULL))
     );
     CREATE UNIQUE INDEX UX_TenderGeneratedDocuments_WorkOrderVersion
         ON dbo.TenderGeneratedDocuments(WorkOrderId,VersionNumber) WHERE WorkOrderId IS NOT NULL;
     CREATE UNIQUE INDEX UX_TenderGeneratedDocuments_AgreementVersion
         ON dbo.TenderGeneratedDocuments(AgreementId,VersionNumber) WHERE AgreementId IS NOT NULL;
 END;
+
+IF EXISTS
+(
+    SELECT 1 FROM sys.check_constraints
+    WHERE parent_object_id=OBJECT_ID(N'dbo.TenderGeneratedDocuments')
+      AND name=N'CK_TenderGeneratedDocuments_Kind'
+)
+    ALTER TABLE dbo.TenderGeneratedDocuments DROP CONSTRAINT CK_TenderGeneratedDocuments_Kind;
+ALTER TABLE dbo.TenderGeneratedDocuments
+    ADD CONSTRAINT CK_TenderGeneratedDocuments_Kind
+        CHECK (DocumentKind IN (N'WorkOrder',N'Agreement',N'BOQ'));
+
+IF EXISTS
+(
+    SELECT 1 FROM sys.check_constraints
+    WHERE parent_object_id=OBJECT_ID(N'dbo.TenderGeneratedDocuments')
+      AND name=N'CK_TenderGeneratedDocuments_Target'
+)
+    ALTER TABLE dbo.TenderGeneratedDocuments DROP CONSTRAINT CK_TenderGeneratedDocuments_Target;
+ALTER TABLE dbo.TenderGeneratedDocuments
+    ADD CONSTRAINT CK_TenderGeneratedDocuments_Target CHECK
+        ((DocumentKind=N'WorkOrder' AND WorkOrderId IS NOT NULL AND AgreementId IS NULL)
+         OR (DocumentKind=N'Agreement' AND AgreementId IS NOT NULL AND WorkOrderId IS NULL)
+         OR (DocumentKind=N'BOQ' AND WorkOrderId IS NULL AND AgreementId IS NULL));
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id=OBJECT_ID(N'dbo.TenderGeneratedDocuments')
+      AND name=N'UX_TenderGeneratedDocuments_BoqVersion'
+)
+    CREATE UNIQUE INDEX UX_TenderGeneratedDocuments_BoqVersion
+        ON dbo.TenderGeneratedDocuments(TenderId,VersionNumber)
+        WHERE DocumentKind=N'BOQ';
 
 COMMIT TRANSACTION;
 PRINT 'RBAC and finalized tender workflow schema installed. No role, permission, or workflow-stage rows were seeded.';

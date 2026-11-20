@@ -137,6 +137,8 @@
     <Content Include="Pages\DocumentDownload.aspx" />
     <Content Include="Pages\Error.aspx" />
     <Content Include="Content\Styles.css" />
+    <Content Include="SMC.png" />
+    <Content Include="Uploads\web.config" />
     <Content Include="SMC_TENDER_DATABASE.sql" />
     <Content Include="README.md" />
   </ItemGroup>

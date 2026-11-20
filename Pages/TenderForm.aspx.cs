@@ -37,21 +37,18 @@ namespace DepartmentModule.Pages
         protected void Page_Load(object sender, EventArgs e)
         {
             bool isEditing = EditingTenderId > 0;
-            bool isJe = HasAnyRole("Junior Engineer (JE)");
-            if (isEditing)
-            {
-                if (!RequireRoles("Admin", "DepartmentOfficer")) return;
-            }
-            else if (!RequireAnyPermission("tender.create.department", "tenders.manage.all")) return;
+            bool isJe = IsJeAdministrator ||
+                String.Equals(CurrentRole, "Junior Engineer (JE)", StringComparison.OrdinalIgnoreCase);
+            if (!RequireAnyPermission("system.admin", "tender.create.department", "tenders.manage.all")) return;
 
             FormTitle.Text = isEditing ? "Edit Tender" : "New Tender";
             FormHeading.Text = isEditing ? "Edit Tender Requirement" : "New Tender Requirement";
             FormDescription.Text = isEditing
-                ? "Drafts are editable by administrators. Returned budget proposals can be revised by their owning department officer."
+                ? "Only eligible drafts and returned budget proposals can be edited. Later workflow stages remain protected."
                 : "Create a draft requirement for department processing.";
             CreateButton.Text = isEditing ? "Save Changes" : "Create Tender";
-            DepartmentPanel.Visible = !isEditing && !isJe;
-            DepartmentRequired.Enabled = !isEditing;
+            DepartmentPanel.Visible = !isEditing && (!isJe || HasPermission("system.admin"));
+            DepartmentRequired.Enabled = DepartmentPanel.Visible;
             AttachmentPanel.Visible = !isEditing;
 
             if (!IsPostBack)
@@ -60,20 +57,20 @@ namespace DepartmentModule.Pages
                 {
                     using (SqlConnection connection = ModuleDb.OpenConnection())
                     {
-                        if (!isEditing && !isJe)
+                        if (!isEditing && DepartmentPanel.Visible)
                         {
-                        using (SqlCommand command = new SqlCommand("SELECT DepartmentId, DepartmentName FROM dbo.Departments WHERE IsActive=1 ORDER BY DepartmentName;", connection))
-                        using (SqlDataReader reader = command.ExecuteReader())
-                        {
-                            DepartmentSelect.Items.Clear();
-                            DepartmentSelect.Items.Add(new ListItem("Select department", ""));
-                            while (reader.Read())
+                            using (SqlCommand command = new SqlCommand("SELECT DepartmentId, DepartmentName FROM dbo.Departments WHERE IsActive=1 ORDER BY DepartmentName;", connection))
+                            using (SqlDataReader reader = command.ExecuteReader())
                             {
-                                ListItem item = new ListItem(reader.GetString(1), reader.GetInt32(0).ToString(CultureInfo.InvariantCulture));
-                                DepartmentSelect.Items.Add(item);
-                                if (CurrentDepartmentId.HasValue && CurrentDepartmentId.Value == reader.GetInt32(0)) item.Selected = true;
+                                DepartmentSelect.Items.Clear();
+                                DepartmentSelect.Items.Add(new ListItem("Select department", ""));
+                                while (reader.Read())
+                                {
+                                    ListItem item = new ListItem(reader.GetString(1), reader.GetInt32(0).ToString(CultureInfo.InvariantCulture));
+                                    DepartmentSelect.Items.Add(item);
+                                    if (CurrentDepartmentId.HasValue && CurrentDepartmentId.Value == reader.GetInt32(0)) item.Selected = true;
+                                }
                             }
-                        }
                         }
 
                         BindTenderCatalog(connection, TenderTypeSelect, "SELECT MethodName FROM dbo.TenderMethods WHERE IsActive=1 ORDER BY SortOrder,MethodName;", "Select tender method");
@@ -111,20 +108,36 @@ namespace DepartmentModule.Pages
         {
             using (SqlConnection connection = ModuleDb.OpenConnection())
             using (SqlCommand command = new SqlCommand(
-                @"SELECT Title,Description,EligibilityCriteria,EstimatedAmount,TenderType,TenderCategory,SubmissionStartDate,SubmissionDeadline,CurrentStatus
+                @"SELECT t.Title,t.Description,t.EligibilityCriteria,t.EstimatedAmount,t.TenderType,t.TenderCategory,
+                         t.SubmissionStartDate,t.SubmissionDeadline,t.CurrentStatus
                   FROM dbo.Tender t
-                  WHERE TenderId=@TenderId AND IsDeleted=0 AND WorkflowVersion=1
-                    AND (@Role=N'Admin'
-                         OR (@Role=N'DepartmentOfficer' AND t.CreatedBy=@UserId
-                             AND t.CurrentStatus=N'Budget Revision Required'
-                             AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
-                             AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
-                                             WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
-                                  OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
-                                            WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId=t.DepartmentId))));", connection))
+                  WHERE t.TenderId=@TenderId AND t.IsDeleted=0
+                    AND
+                    (
+                        (t.WorkflowVersion=1 AND
+                         (@IsAdministrator=1 OR
+                          (@IsDepartmentOfficer=1 AND t.CreatedBy=@UserId
+                           AND t.CurrentStatus=N'Budget Revision Required'
+                           AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
+                           AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
+                                           WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
+                                OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
+                                          WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId=t.DepartmentId))))
+                        OR
+                        (t.WorkflowVersion=2 AND @IsAdministrator=1 AND t.CurrentStatus=N'Draft'
+                         AND EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                    INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                    WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                      AND s.StageName=N'Final_JE_SubmitTender'))
+                    );", connection))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
-                AddText(command, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
+                ModuleDb.AddParameter(command, "@IsAdministrator", SqlDbType.Bit,
+                    HasPermission("system.admin") || HasAnyRole("Admin"));
+                ModuleDb.AddParameter(command, "@IsDepartmentOfficer", SqlDbType.Bit,
+                    !HasPermission("system.admin") &&
+                    (String.Equals(CurrentRole, "DepartmentOfficer", StringComparison.OrdinalIgnoreCase) ||
+                     String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase)));
                 ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                 ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                     CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
@@ -146,7 +159,7 @@ namespace DepartmentModule.Pages
                     }
                     FormDescription.Text = String.Equals(status, "Budget Revision Required", StringComparison.OrdinalIgnoreCase)
                         ? "Revise the returned estimate and proposal. Submit the updated proposal from tender details when ready."
-                        : "Only administrators can edit a tender that is still in draft.";
+                        : "This draft is editable before it advances beyond its initial workflow stage.";
 
                     TitleText.Text = Convert.ToString(reader["Title"]);
                     DescriptionText.Text = Convert.ToString(reader["Description"] == DBNull.Value ? String.Empty : reader["Description"]);
@@ -177,13 +190,10 @@ namespace DepartmentModule.Pages
 
         protected void CreateButton_Click(object sender, EventArgs e)
         {
-            if (EditingTenderId > 0)
+            if (!HasPermission("system.admin") && !HasPermission("tender.create.department") &&
+                !HasPermission("tenders.manage.all"))
             {
-                if (!HasAnyRole("Admin", "DepartmentOfficer")) { RequireRoles("Admin", "DepartmentOfficer"); return; }
-            }
-            else if (!HasAnyRole("DepartmentOfficer", "Admin"))
-            {
-                RequireRoles("DepartmentOfficer", "Admin");
+                RequireAnyPermission("system.admin", "tender.create.department", "tenders.manage.all");
                 return;
             }
             Page.Validate();
@@ -425,8 +435,8 @@ namespace DepartmentModule.Pages
                         string diskName = Guid.NewGuid().ToString("N") + file.Extension;
                         string fullPath = Path.Combine(folder, diskName);
                         file.File.SaveAs(fullPath);
-                        string relativeRoot = uploadRoot.Trim('~', '/', '\\').Replace('\\', '/');
-                        string relativePath = relativeRoot + "/tenders/" + tenderId.ToString(CultureInfo.InvariantCulture) + "/" + diskName;
+                        string relativePath = "Uploads/tenders/" +
+                            tenderId.ToString(CultureInfo.InvariantCulture) + "/" + diskName;
                         savedPaths.Add(fullPath);
                         using (SqlCommand command = new SqlCommand(
                             @"INSERT INTO dbo.TenderDocuments (TenderId, DocumentType, FileName, FilePath, UploadedBy)
@@ -469,12 +479,6 @@ namespace DepartmentModule.Pages
         private bool TryGetAuthorizedDepartmentId(out int departmentId)
         {
             departmentId = 0;
-            if (HasAnyRole("Junior Engineer (JE)"))
-            {
-                if (!CurrentDepartmentId.HasValue) return false;
-                departmentId = CurrentDepartmentId.Value;
-                return true;
-            }
             return Int32.TryParse(DepartmentSelect.SelectedValue, out departmentId) && departmentId > 0;
         }
 
@@ -509,6 +513,10 @@ namespace DepartmentModule.Pages
 
         private void UpdateDraftTender(decimal amount, DateTime? submissionStart, DateTime? submissionDeadline)
         {
+            bool isAdministrator = HasPermission("system.admin") || HasAnyRole("Admin");
+            bool isDepartmentOfficer = !isAdministrator &&
+                (String.Equals(CurrentRole, "DepartmentOfficer", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase));
             try
             {
                 using (SqlConnection connection = ModuleDb.OpenConnection())
@@ -520,19 +528,30 @@ namespace DepartmentModule.Pages
                     string currentStatus;
                     using (SqlCommand read = new SqlCommand(
                         @"SELECT t.CurrentStatus FROM dbo.Tender t WITH (UPDLOCK,ROWLOCK)
-                          WHERE t.TenderId=@TenderId AND t.IsDeleted=0 AND t.WorkflowVersion=1
-                            AND (@Role=N'Admin' OR
-                                 (@Role=N'DepartmentOfficer' AND t.CreatedBy=@UserId
-                                  AND t.CurrentStatus=N'Budget Revision Required'
-                                  AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
-                                  AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
-                                                  WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
-                                       OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
-                                                 WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId=t.DepartmentId))));",
+                          WHERE t.TenderId=@TenderId AND t.IsDeleted=0
+                            AND
+                            (
+                                (t.WorkflowVersion=1 AND
+                                 (@IsAdministrator=1 OR
+                                  (@IsDepartmentOfficer=1 AND t.CreatedBy=@UserId
+                                   AND t.CurrentStatus=N'Budget Revision Required'
+                                   AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
+                                   AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
+                                                   WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
+                                        OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
+                                                  WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId=t.DepartmentId))))
+                                OR
+                                (t.WorkflowVersion=2 AND @IsAdministrator=1 AND t.CurrentStatus=N'Draft'
+                                 AND EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                            INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                            WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                              AND s.StageName=N'Final_JE_SubmitTender'))
+                            );",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(read, "@TenderId", SqlDbType.Int, EditingTenderId);
-                        AddText(read, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
+                        ModuleDb.AddParameter(read, "@IsAdministrator", SqlDbType.Bit, isAdministrator);
+                        ModuleDb.AddParameter(read, "@IsDepartmentOfficer", SqlDbType.Bit, isDepartmentOfficer);
                         ModuleDb.AddParameter(read, "@UserId", SqlDbType.Int, CurrentUserId);
                         ModuleDb.AddParameter(read, "@DepartmentId", SqlDbType.Int,
                             CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
@@ -545,14 +564,25 @@ namespace DepartmentModule.Pages
                         throw new InvalidOperationException("Only a draft or returned budget proposal can be edited.");
 
                     using (SqlCommand command = new SqlCommand(
-                        @"UPDATE dbo.Tender
+                        @"UPDATE t
                           SET Title=@Title,Description=@Description,EligibilityCriteria=@EligibilityCriteria,
                               EstimatedAmount=@Amount,TenderType=@TenderType,
                               TenderCategory=@TenderCategory,
                               SubmissionStartDate=@StartDate,SubmissionDeadline=@Deadline,
                               ModifiedBy=@ModifiedBy,ModifiedDate=SYSUTCDATETIME()
-                          WHERE TenderId=@TenderId AND CurrentStatus=@ExpectedStatus AND IsDeleted=0 AND WorkflowVersion=1
-                            AND (@Role=N'Admin' OR (@Role=N'DepartmentOfficer' AND CreatedBy=@UserId));", connection, transaction))
+                          FROM dbo.Tender t
+                          WHERE t.TenderId=@TenderId AND t.CurrentStatus=@ExpectedStatus AND t.IsDeleted=0
+                            AND
+                            (
+                                (t.WorkflowVersion=1 AND (@IsAdministrator=1 OR
+                                 (@IsDepartmentOfficer=1 AND t.CreatedBy=@UserId)))
+                                OR
+                                (t.WorkflowVersion=2 AND @IsAdministrator=1 AND t.CurrentStatus=N'Draft'
+                                 AND EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                            INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                            WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                              AND s.StageName=N'Final_JE_SubmitTender'))
+                            );", connection, transaction))
                     {
                         AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), 250);
                         AddText(command, "@Description", SqlDbType.NVarChar, DescriptionText.Text, -1);
@@ -567,7 +597,8 @@ namespace DepartmentModule.Pages
                         ModuleDb.AddParameter(command, "@ModifiedBy", SqlDbType.Int, CurrentUserId);
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
                         AddText(command, "@ExpectedStatus", SqlDbType.NVarChar, currentStatus, 50);
-                        AddText(command, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
+                        ModuleDb.AddParameter(command, "@IsAdministrator", SqlDbType.Bit, isAdministrator);
+                        ModuleDb.AddParameter(command, "@IsDepartmentOfficer", SqlDbType.Bit, isDepartmentOfficer);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         if (command.ExecuteNonQuery() != 1)
                             throw new InvalidOperationException("Tender status changed; refresh the page before editing.");
@@ -621,14 +652,20 @@ namespace DepartmentModule.Pages
             {
                 string originalName = Path.GetFileName(file.FileName);
                 string extension = Path.GetExtension(originalName);
-                if (file.ContentLength <= 0 || file.ContentLength > 20 * 1024 * 1024)
+                if (originalName.Length == 0 || originalName.Length > 260 ||
+                    file.ContentLength <= 0 || file.ContentLength > 20 * 1024 * 1024)
                 {
-                    error = "Each attachment must be non-empty and no larger than 20 MB.";
+                    error = "Each attachment must have a valid file name and be no larger than 20 MB.";
                     return false;
                 }
                 if (Array.IndexOf(AllowedExtensions, extension.ToLowerInvariant()) < 0)
                 {
                     error = "An attachment has a file type that is not permitted.";
+                    return false;
+                }
+                if (!TenderLifecycleFiles.HasAllowedContentSignature(file.InputStream, extension.ToLowerInvariant()))
+                {
+                    error = "An attachment's file contents do not match its file type.";
                     return false;
                 }
                 files.Add(new PostedFileInfo { File = file, OriginalName = originalName, Extension = extension.ToLowerInvariant() });

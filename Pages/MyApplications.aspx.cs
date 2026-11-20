@@ -47,6 +47,10 @@ namespace DepartmentModule.Pages
                     ApplicationsGrid.DataBind();
                     NotificationsGrid.DataSource = ContractorApplicationRules.GetApplicationNotifications(connection, CurrentUserId);
                     NotificationsGrid.DataBind();
+                    if (!ContractorApplicationRules.HasScheduledNotificationAvailability(connection))
+                    {
+                        Message.Text = "<div class=\"message\">Scheduled shortfall reminders will appear after the database upgrade is applied.</div>";
+                    }
                 }
             }
             catch (SqlException ex)
@@ -60,6 +64,11 @@ namespace DepartmentModule.Pages
         {
             ApplicationsGrid.PageIndex = e.NewPageIndex;
             BindApplications();
+        }
+
+        protected int ApplicationSerialNumber(int rowIndex)
+        {
+            return ApplicationsGrid.PageIndex * ApplicationsGrid.PageSize + rowIndex + 1;
         }
 
         protected void NotificationsGrid_RowCommand(object sender, GridViewCommandEventArgs e)

@@ -33,6 +33,26 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            if (HasAnyRole("Contractor"))
+            {
+                Response.Redirect(ResolveUrl("~/Pages/Home.aspx#published-tenders"), false);
+                Context.ApplicationInstance.CompleteRequest();
+                return;
+            }
+            if (!HasPermission("system.admin") && !HasPermission("tenders.monitor") &&
+                !HasPermission("tenders.manage.all") && !HasPermission("tender.create.department") &&
+                !HasPermission("tender.publication.manage") && !HasPermission("tender.primary.open") &&
+                !HasPermission("tender.primary.verify") && !HasPermission("tender.cell.verify") &&
+                !HasPermission("shortfall.create") && !HasPermission("shortfall.approve") &&
+                !HasPermission("shortfall.respond.own") && !HasPermission("shortfall.clear") &&
+                !HasPermission("financial.open.approve") && !HasPermission("financial.open.execute") &&
+                !HasPermission("financial.approve.final") && !HasPermission("workorder.manage") &&
+                !HasPermission("agreement.manage") && WorkflowRules.PendingStatusesForRole(CurrentRole).Length == 0)
+            {
+                RequirePermission("tenders.monitor");
+                return;
+            }
+
             NewTenderLink.Visible = HasPermission("tender.create.department") ||
                 HasPermission("tenders.manage.all") || HasAnyRole("DepartmentOfficer", "Admin");
             if (!IsPostBack)
@@ -51,6 +71,10 @@ namespace DepartmentModule.Pages
             StatusFilter.Items.Add(new ListItem("Under Review", "Under Review"));
             StatusFilter.Items.Add(new ListItem("Rejected", "Rejected"));
             StatusFilter.Items.Add(new ListItem("Draft / Submitted", "Draft / Submitted"));
+            StatusFilter.Items.Add(new ListItem("Published", "Published"));
+            StatusFilter.Items.Add(new ListItem("Active", "Active"));
+            StatusFilter.Items.Add(new ListItem("Closed", "Closed"));
+            StatusFilter.Items.Add(new ListItem("Cancelled", "Cancelled"));
             foreach (string status in WorkflowRules.Statuses) StatusFilter.Items.Add(new ListItem(status, status));
 
             using (SqlConnection connection = ModuleDb.OpenConnection())
@@ -94,7 +118,10 @@ namespace DepartmentModule.Pages
             string orderColumn = SortBy == "Title" ? "t.Title" : SortBy == "Amount" ? "t.EstimatedAmount" : SortBy == "TenderNumber" ? "t.TenderNumber" : "t.CreatedDate";
             string orderDirection = SortDescending ? "DESC" : "ASC";
             int page = TenderGrid.PageIndex + 1;
-            string ownerFilter = HasAnyRole("DepartmentOfficer") ? " AND t.CreatedBy=@CurrentUserId" : String.Empty;
+            bool isDepartmentOfficer = !HasPermission("system.admin") &&
+                (String.Equals(CurrentRole, "DepartmentOfficer", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase));
+            string ownerFilter = isDepartmentOfficer ? " AND t.CreatedBy=@CurrentUserId" : String.Empty;
             string workflowScope = String.Empty;
             if (!HasPermission("system.admin") && HasAnyRole("Junior Engineer (JE)"))
                 workflowScope = " AND @AuthorizedDepartmentId IS NOT NULL AND t.DepartmentId=@AuthorizedDepartmentId";
@@ -223,7 +250,9 @@ namespace DepartmentModule.Pages
 
         private void AddOwnerParameter(SqlCommand command)
         {
-            if (HasAnyRole("DepartmentOfficer"))
+            if (!HasPermission("system.admin") &&
+                (String.Equals(CurrentRole, "DepartmentOfficer", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase)))
                 ModuleDb.AddParameter(command, "@CurrentUserId", SqlDbType.Int, CurrentUserId);
         }
 
@@ -265,6 +294,11 @@ namespace DepartmentModule.Pages
         protected string TenderStatusCssClass(object status)
         {
             return TenderStatusBuckets.CssClass(Convert.ToString(status, CultureInfo.CurrentCulture));
+        }
+
+        protected int TenderSerialNumber(int rowIndex)
+        {
+            return TenderGrid.PageIndex * TenderGrid.PageSize + rowIndex + 1;
         }
     }
 }

@@ -20,7 +20,7 @@ namespace DepartmentModule.Pages
         protected Panel ContractorPanel, ContractorUploadPanel, ContractorSubmitPanel,
             ContractorResponsePanel, InternalPanel, ReviewDocumentsPanel, InternalRemarkPanel,
             ApplicationDecisionPanel, SecondaryApplicationDecisionPanel, ShortfallRequestPanel,
-            ContractorShortfallPanel;
+            ContractorShortfallPanel, FinalDocumentsPanel;
         protected DropDownList UploadDocumentTypeSelect, InternalRemarkTypeSelect;
         protected DropDownList SecondaryApplicationDecisionSelect;
         protected FileUpload ApplicationDocumentUpload;
@@ -29,7 +29,7 @@ namespace DepartmentModule.Pages
             RecordSecondaryApplicationDecisionButton, CreateShortfallButton;
         protected CheckBox TermsAcceptedCheck;
         protected GridView RequirementsGrid, DocumentsGrid, ReviewDocumentsGrid, RemarksGrid, HistoryGrid,
-            ShortfallRequestItemsGrid, ContractorShortfallGrid;
+            ShortfallRequestItemsGrid, ContractorShortfallGrid, FinalDocumentsGrid;
         protected TextBox ContractorResponseText, InternalRemarkText, DecisionRemarksText;
         protected TextBox SecondaryApplicationDecisionRemarksText, ShortfallRemarksText;
 
@@ -162,6 +162,8 @@ namespace DepartmentModule.Pages
             BindDocuments();
             BindRemarks();
             BindHistory();
+            FinalDocumentsPanel.Visible = IsContractor;
+            if (IsContractor) BindFinalDocuments();
 
             ContractorPanel.Visible = IsContractor;
             InternalPanel.Visible = !IsContractor;
@@ -186,6 +188,45 @@ namespace DepartmentModule.Pages
             InternalRemarkPanel.Visible = false;
             ApplicationDecisionPanel.Visible = false;
             ContractorShortfallPanel.Visible = IsContractor && BindContractorShortfallItems();
+        }
+
+        private void BindFinalDocuments()
+        {
+            using (SqlConnection connection = ModuleDb.OpenConnection())
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT d.GeneratedDocumentId,d.DocumentKind,d.VersionNumber,d.FileName,d.GeneratedAtUtc
+                  FROM dbo.TenderGeneratedDocuments d
+                  WHERE d.TenderId=@TenderId
+                    AND EXISTS
+                    (
+                        SELECT 1 FROM dbo.TechnicalBid b
+                        INNER JOIN dbo.Contractors c ON c.ContractorId=b.ContractorId
+                          AND c.UserId=@UserId AND c.IsActive=1
+                        WHERE b.TechnicalBidId=@ApplicationId AND b.TenderId=d.TenderId
+                    )
+                    AND
+                    (
+                        d.DocumentKind=N'BOQ'
+                        OR (d.WorkOrderId IS NOT NULL AND EXISTS
+                            (SELECT 1 FROM dbo.WorkOrder w
+                             INNER JOIN dbo.Contractors c ON c.ContractorId=w.ContractorId
+                             WHERE w.WorkOrderId=d.WorkOrderId AND c.UserId=@UserId))
+                        OR (d.AgreementId IS NOT NULL AND EXISTS
+                            (SELECT 1 FROM dbo.Agreement a
+                             INNER JOIN dbo.Contractors c ON c.ContractorId=a.ContractorId
+                             WHERE a.AgreementId=d.AgreementId AND c.UserId=@UserId))
+                    )
+                  ORDER BY d.GeneratedAtUtc DESC,d.GeneratedDocumentId DESC;", connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, ApplicationTenderId);
+                ModuleDb.AddParameter(command, "@ApplicationId", SqlDbType.Int, ApplicationId);
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                DataTable data = new DataTable();
+                adapter.Fill(data);
+                FinalDocumentsGrid.DataSource = data;
+                FinalDocumentsGrid.DataBind();
+            }
         }
 
         private bool CanViewApplication(SqlConnection connection)

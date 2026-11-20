@@ -120,13 +120,25 @@ namespace DepartmentModule.Helpers
 
         public static DataTable GetApplicationNotifications(SqlConnection connection, int userId)
         {
+            bool supportsScheduledNotifications = HasScheduledNotificationAvailability(connection);
             using (SqlCommand command = new SqlCommand(
-                @"SELECT TOP (20) n.NotificationId,n.TenderId,t.TenderNumber,n.NotificationType,
-                         n.Message,n.CreatedAtUtc,n.ReadAtUtc
-                  FROM dbo.TenderNotifications n
-                  INNER JOIN dbo.Tender t ON t.TenderId=n.TenderId
-                  WHERE n.UserId=@UserId AND n.NotificationType LIKE N'Application%'
-                  ORDER BY n.CreatedAtUtc DESC,n.NotificationId DESC;", connection))
+                supportsScheduledNotifications
+                     ? @"SELECT TOP (20) n.NotificationId,n.TenderId,t.TenderNumber,n.NotificationType,
+                                n.Message,n.CreatedAtUtc,n.ReadAtUtc
+                         FROM dbo.TenderNotifications n
+                         INNER JOIN dbo.Tender t ON t.TenderId=n.TenderId
+                         WHERE n.UserId=@UserId
+                           AND (n.NotificationType LIKE N'Application%' OR n.NotificationType LIKE N'Shortfall%')
+                           AND n.AvailableAtUtc<=SYSUTCDATETIME()
+                         ORDER BY n.CreatedAtUtc DESC,n.NotificationId DESC;"
+                     : @"SELECT TOP (20) n.NotificationId,n.TenderId,t.TenderNumber,n.NotificationType,
+                                n.Message,n.CreatedAtUtc,n.ReadAtUtc
+                         FROM dbo.TenderNotifications n
+                         INNER JOIN dbo.Tender t ON t.TenderId=n.TenderId
+                         WHERE n.UserId=@UserId
+                           AND (n.NotificationType LIKE N'Application%' OR n.NotificationType LIKE N'Shortfall%')
+                         ORDER BY n.CreatedAtUtc DESC,n.NotificationId DESC;",
+                connection))
             {
                 ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
                 DataTable data = new DataTable();
@@ -135,14 +147,31 @@ namespace DepartmentModule.Helpers
             }
         }
 
+        public static bool HasScheduledNotificationAvailability(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT CASE WHEN COL_LENGTH(N'dbo.TenderNotifications',N'AvailableAtUtc') IS NULL
+                               THEN 0 ELSE 1 END;", connection))
+            {
+                return Convert.ToInt32(command.ExecuteScalar()) == 1;
+            }
+        }
+
         public static bool MarkApplicationNotificationRead(SqlConnection connection,
             long notificationId, int userId)
         {
-            using (SqlCommand command = new SqlCommand(
-                @"UPDATE dbo.TenderNotifications
-                  SET ReadAtUtc=SYSUTCDATETIME()
-                  WHERE NotificationId=@NotificationId AND UserId=@UserId
-                    AND NotificationType LIKE N'Application%' AND ReadAtUtc IS NULL;", connection))
+            string query = HasScheduledNotificationAvailability(connection)
+                ? @"UPDATE dbo.TenderNotifications
+                     SET ReadAtUtc=SYSUTCDATETIME()
+                     WHERE NotificationId=@NotificationId AND UserId=@UserId
+                       AND (NotificationType LIKE N'Application%' OR NotificationType LIKE N'Shortfall%')
+                       AND AvailableAtUtc<=SYSUTCDATETIME() AND ReadAtUtc IS NULL;"
+                : @"UPDATE dbo.TenderNotifications
+                     SET ReadAtUtc=SYSUTCDATETIME()
+                     WHERE NotificationId=@NotificationId AND UserId=@UserId
+                       AND (NotificationType LIKE N'Application%' OR NotificationType LIKE N'Shortfall%')
+                       AND ReadAtUtc IS NULL;";
+            using (SqlCommand command = new SqlCommand(query, connection))
             {
                 ModuleDb.AddParameter(command, "@NotificationId", SqlDbType.BigInt, notificationId);
                 ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);

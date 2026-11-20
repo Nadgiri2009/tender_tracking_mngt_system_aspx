@@ -39,6 +39,7 @@ namespace DepartmentModule.Pages
         private int TenderDepartmentId { get; set; }
         private bool IsFinalWorkflow { get; set; }
         private bool IsDraft { get; set; }
+        private bool IsEditableDraft { get; set; }
         private bool IsAuthorizedTender { get; set; }
         private bool IsPublicationWindowOpen { get; set; }
 
@@ -63,6 +64,14 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"SELECT t.TenderId,t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,t.TenderType,t.TenderCategory,t.EstimatedAmount,t.CurrentStatus,
                                  t.WorkflowVersion,t.DepartmentId,
+                                 CAST(CASE WHEN t.CurrentStatus=N'Draft' AND
+                                     (t.WorkflowVersion=1 OR
+                                      (t.WorkflowVersion=2 AND EXISTS
+                                          (SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                           INNER JOIN dbo.WorkflowStages ws ON ws.StageId=a.StageId
+                                           WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                             AND ws.StageName=N'Final_JE_SubmitTender')))
+                                     THEN 1 ELSE 0 END AS bit) AS IsEditableDraft,
                                  COALESCE((SELECT MIN(ah.ApprovalDate) FROM dbo.ApprovalHistory ah
                                            WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published'),
                                           s.PublicationStartUtc) AS PublicationDate,
@@ -81,9 +90,15 @@ namespace DepartmentModule.Pages
                             AND
                             (
                                 (@CurrentUserId=0 AND
-                                 (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
-                                         WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published')
-                                  OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))
+                                 s.PublicationStartUtc<=SYSUTCDATETIME()
+                                 AND t.CurrentStatus IN
+                                    (N'Tender Published',N'Technical Bid Opening',N'Technical Evaluation',
+                                     N'Financial Bid Opening',N'CAFO Rate Opinion',N'Financial Evaluation',
+                                     N'MCA Opinion',N'Completed')
+                                 AND
+                                    (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
+                                            WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published')
+                                     OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))
                                 OR (@CurrentUserId>0 AND @IsContractor=1 AND
                                     (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
                                             WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published')
@@ -129,6 +144,7 @@ namespace DepartmentModule.Pages
                             EstimatedAmount.Text = Convert.ToDecimal(reader["EstimatedAmount"]).ToString("N2", CultureInfo.CurrentCulture);
                             TenderStatus = Convert.ToString(reader["CurrentStatus"]);
                             IsFinalWorkflow = Convert.ToInt16(reader["WorkflowVersion"]) == 2;
+                            IsEditableDraft = Convert.ToBoolean(reader["IsEditableDraft"]);
                             TenderDepartmentId = Convert.ToInt32(reader["DepartmentId"]);
                             CurrentStatus.Text = ModuleDb.Html(TenderStatus);
                             PublicationDate.Text = reader["PublicationDate"] == DBNull.Value ? "—" : Convert.ToDateTime(reader["PublicationDate"]).ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
@@ -169,11 +185,12 @@ namespace DepartmentModule.Pages
                     ApproveButton.Text = "Positive budget opinion";
                     RejectButton.Text = "Negative budget opinion — return for revision";
                 }
-                EditTenderLink.Visible = !IsFinalWorkflow && ((IsDraft && HasAnyRole("Admin")) ||
-                    (isBudgetRevision && HasAnyRole("DepartmentOfficer", "Admin")));
+                bool isAdministrator = HasPermission("system.admin") || HasAnyRole("Admin");
+                EditTenderLink.Visible = (IsEditableDraft && isAdministrator) ||
+                    (isBudgetRevision && !IsFinalWorkflow && HasAnyRole("DepartmentOfficer", "Admin"));
                 EditTenderLink.Text = isBudgetRevision ? "Revise proposal" : "Edit draft";
                 EditTenderLink.NavigateUrl = "~/Pages/TenderForm.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
-                DeleteTenderButton.Visible = !IsFinalWorkflow && IsDraft && HasAnyRole("Admin");
+                DeleteTenderButton.Visible = IsEditableDraft && isAdministrator;
                 AddBoqPanel.Visible = CanManageTenderPreparation();
                 UploadPanel.Visible = IsFinalWorkflow ? CanManageTenderPreparation() : HasAnyRole("DepartmentOfficer", "Admin");
                 bool acceptingBids = String.Equals(
@@ -361,7 +378,8 @@ namespace DepartmentModule.Pages
             string extension = Path.GetExtension(DocumentFile.FileName).ToLowerInvariant();
             string[] allowed = { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png" };
             if (DocumentFile.PostedFile.ContentLength <= 0 || DocumentFile.PostedFile.ContentLength > 20 * 1024 * 1024 ||
-                Array.IndexOf(allowed, extension) < 0)
+                Array.IndexOf(allowed, extension) < 0 ||
+                !TenderLifecycleFiles.HasAllowedContentSignature(DocumentFile.PostedFile.InputStream, extension))
             {
                 ShowError("Choose a non-empty PDF, Office document, JPEG, or PNG file no larger than 20 MB.");
                 return;
@@ -419,9 +437,10 @@ namespace DepartmentModule.Pages
         protected void DeleteTenderButton_Click(object sender, EventArgs e)
         {
             if (!RequireTenderAccess()) return;
-            if (!HasAnyRole("Admin") || !String.Equals(TenderStatus, "Draft", StringComparison.OrdinalIgnoreCase))
+            if ((!HasPermission("system.admin") && !HasAnyRole("Admin")) ||
+                !IsEditableDraft || !String.Equals(TenderStatus, "Draft", StringComparison.OrdinalIgnoreCase))
             {
-                ShowError("Only an administrator can delete a draft tender.");
+                ShowError("Only an administrator can delete a draft at its initial workflow stage.");
                 return;
             }
 
@@ -431,14 +450,21 @@ namespace DepartmentModule.Pages
                 using (SqlTransaction transaction = connection.BeginTransaction())
                 {
                     using (SqlCommand command = new SqlCommand(
-                        @"UPDATE dbo.Tender
+                        @"UPDATE t
                           SET IsDeleted=1,ModifiedBy=@ModifiedBy,ModifiedDate=SYSUTCDATETIME()
-                          WHERE TenderId=@TenderId AND CurrentStatus=N'Draft' AND IsDeleted=0;", connection, transaction))
+                          FROM dbo.Tender t
+                          WHERE t.TenderId=@TenderId AND t.CurrentStatus=N'Draft' AND t.IsDeleted=0
+                            AND (t.WorkflowVersion=1 OR
+                                 (t.WorkflowVersion=2 AND EXISTS
+                                     (SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                      INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                      WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                        AND s.StageName=N'Final_JE_SubmitTender')));", connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@ModifiedBy", SqlDbType.Int, CurrentUserId);
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                         if (command.ExecuteNonQuery() != 1)
-                            throw new InvalidOperationException("Only an existing draft tender can be deleted.");
+                            throw new InvalidOperationException("Only an initial-stage draft tender can be deleted.");
                     }
 
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId, "Delete", "Tender",

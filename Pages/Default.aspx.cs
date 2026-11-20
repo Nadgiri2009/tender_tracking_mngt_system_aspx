@@ -11,7 +11,9 @@ namespace DepartmentModule.Pages
         protected Literal Message, TotalTenders, ApprovedTenders, PendingCount, RejectedTenders, UnderReviewTenders, RecentHeading,
             LifecyclePendingApprovals, LifecycleAwaitingPublication, LifecyclePublished, LifecycleExtensions,
             LifecycleBidOpenings, LifecycleAwaitingEvaluation, LifecycleUnderEvaluation,
-            FinalQueueCount, FinalVerificationCount, FinalShortfallCount, FinalApprovalCount;
+            FinalQueueCount, FinalVerificationCount, FinalShortfallCount, FinalApprovalCount,
+            DashboardTitle, DashboardDescription, FinalQueueLabel, FinalVerificationLabel,
+            FinalShortfallLabel, FinalApprovalLabel, FinalQueueHeading;
         protected HyperLink NewTenderLink, WorkflowQueueLink;
         protected Panel PendingApprovalsPanel, LifecycleSummaryPanel, LegacyDashboardPanel, FinalWorkflowDashboardPanel;
         protected System.Web.UI.WebControls.PlaceHolder LifecycleReviewSummaryPanel;
@@ -21,6 +23,14 @@ namespace DepartmentModule.Pages
         {
             if (!IsPostBack)
             {
+                if (HasAnyRole("Contractor"))
+                {
+                    Response.Redirect(ResolveUrl("~/Pages/MyApplications.aspx"), false);
+                    Context.ApplicationInstance.CompleteRequest();
+                    return;
+                }
+
+                SetFinalWorkflowDashboardCopy();
                 bool isFinalWorkflowRole = HasAnyRole("Junior Engineer (JE)", "Nivida Kaksh (Tender Cell)",
                     "Nivida Samiti Adhyaksha", "Chief Auditor", "Contractor");
                 LegacyDashboardPanel.Visible = !isFinalWorkflowRole;
@@ -49,6 +59,60 @@ namespace DepartmentModule.Pages
             }
         }
 
+        private void SetFinalWorkflowDashboardCopy()
+        {
+            if (HasAnyRole("Junior Engineer (JE)"))
+            {
+                DashboardTitle.Text = "Junior Engineer Tender Dashboard";
+                DashboardDescription.Text = "Manage tenders and follow department-scoped verification, shortfall, and approval work.";
+                FinalQueueHeading.Text = "My tender-management queue";
+                FinalQueueLabel.Text = "Assigned tenders";
+                FinalVerificationLabel.Text = "Verification stages";
+                FinalShortfallLabel.Text = "Shortfall actions";
+                FinalApprovalLabel.Text = "Financial approval stages";
+            }
+            else if (HasAnyRole("Tender Cell"))
+            {
+                DashboardTitle.Text = "Tender Cell Verification Dashboard";
+                DashboardDescription.Text = "Re-verify assigned applications, review shortfall responses, and track cleared cases.";
+                FinalQueueHeading.Text = "My verification queue";
+                FinalQueueLabel.Text = "Assigned cases";
+                FinalVerificationLabel.Text = "Verification stages";
+                FinalShortfallLabel.Text = "Shortfall cases";
+                FinalApprovalLabel.Text = "Approval handoffs";
+            }
+            else if (HasAnyRole("Nivida Samiti Adhyaksha"))
+            {
+                DashboardTitle.Text = "Financial Bid Opening Approvals";
+                DashboardDescription.Text = "Review and decide financial bid opening requests assigned to the Samiti.";
+                FinalQueueHeading.Text = "Pending opening requests";
+                FinalQueueLabel.Text = "Assigned requests";
+                FinalVerificationLabel.Text = "Technical review stages";
+                FinalShortfallLabel.Text = "Shortfall-related cases";
+                FinalApprovalLabel.Text = "Approval queue";
+            }
+            else if (HasAnyRole("Chief Auditor"))
+            {
+                DashboardTitle.Text = "Chief Auditor Financial Review";
+                DashboardDescription.Text = "Review bidder-wise financial evaluations and record final decisions.";
+                FinalQueueHeading.Text = "Pending financial evaluations";
+                FinalQueueLabel.Text = "Assigned evaluations";
+                FinalVerificationLabel.Text = "Verification stages";
+                FinalShortfallLabel.Text = "Shortfall-related cases";
+                FinalApprovalLabel.Text = "Final approval queue";
+            }
+            else
+            {
+                DashboardTitle.Text = "Department Dashboard";
+                DashboardDescription.Text = "Tender processing and work-management overview.";
+                FinalQueueHeading.Text = "My assigned workflow queue";
+                FinalQueueLabel.Text = "Assigned tenders";
+                FinalVerificationLabel.Text = "Verification stages";
+                FinalShortfallLabel.Text = "Shortfall actions";
+                FinalApprovalLabel.Text = "Approval stages";
+            }
+        }
+
         private void LoadFinalWorkflowDashboard()
         {
             try
@@ -74,7 +138,8 @@ namespace DepartmentModule.Pages
                           WHERE a.IsCurrent=1 AND a.AssignedRoleId=@RoleId
                             AND ((@IsContractor=1 AND a.AssignedUserId=@UserId)
                                  OR (@IsContractor=0 AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                                     AND (@DepartmentId IS NULL OR a.DepartmentId=@DepartmentId)));",
+                                     AND (@IsDepartmentScopedRole=0 OR
+                                          (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))));",
                         connection))
                     {
                         AddFinalWorkflowScope(command);
@@ -98,7 +163,8 @@ namespace DepartmentModule.Pages
                           WHERE a.IsCurrent=1 AND a.AssignedRoleId=@RoleId
                             AND ((@IsContractor=1 AND a.AssignedUserId=@UserId)
                                  OR (@IsContractor=0 AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                                     AND (@DepartmentId IS NULL OR a.DepartmentId=@DepartmentId)))
+                                     AND (@IsDepartmentScopedRole=0 OR
+                                          (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))))
                           ORDER BY a.AssignedAtUtc,t.TenderId;", connection))
                     {
                         AddFinalWorkflowScope(command);
@@ -119,6 +185,8 @@ namespace DepartmentModule.Pages
             ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
             ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
             ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("Contractor"));
+            ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
+                HasAnyRole("Junior Engineer (JE)"));
             ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                 CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
         }

@@ -2,20 +2,21 @@
 <asp:Content ID="Title" ContentPlaceHolderID="TitleContent" runat="server">Department Dashboard</asp:Content>
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <div class="page-heading">
-        <div><h1>Department Dashboard</h1><div class="muted">Tender processing and work-management overview.</div></div>
+        <div><h1><asp:Literal ID="DashboardTitle" runat="server" /></h1>
+            <div class="muted"><asp:Literal ID="DashboardDescription" runat="server" /></div></div>
         <asp:HyperLink ID="NewTenderLink" runat="server" NavigateUrl="~/Pages/TenderForm.aspx" CssClass="button">New Tender</asp:HyperLink>
         <asp:HyperLink ID="WorkflowQueueLink" runat="server" NavigateUrl="~/Pages/TenderWorkflow.aspx" CssClass="button secondary" Visible="false">My workflow queue</asp:HyperLink>
     </div>
     <asp:Literal ID="Message" runat="server" />
     <asp:Panel ID="FinalWorkflowDashboardPanel" runat="server" Visible="false">
         <section class="cards dashboard-statistics" aria-label="Assigned workflow summary">
-            <div class="stat"><span class="muted">Assigned tenders</span><strong><asp:Literal ID="FinalQueueCount" runat="server" /></strong></div>
-            <div class="stat"><span class="muted">Verification stages</span><strong><asp:Literal ID="FinalVerificationCount" runat="server" /></strong></div>
-            <div class="stat"><span class="muted">Shortfall actions</span><strong><asp:Literal ID="FinalShortfallCount" runat="server" /></strong></div>
-            <div class="stat"><span class="muted">Approval stages</span><strong><asp:Literal ID="FinalApprovalCount" runat="server" /></strong></div>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=assigned") %>"><span class="muted"><asp:Literal ID="FinalQueueLabel" runat="server" /></span><strong><asp:Literal ID="FinalQueueCount" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=verification") %>"><span class="muted"><asp:Literal ID="FinalVerificationLabel" runat="server" /></span><strong><asp:Literal ID="FinalVerificationCount" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=shortfall") %>"><span class="muted"><asp:Literal ID="FinalShortfallLabel" runat="server" /></span><strong><asp:Literal ID="FinalShortfallCount" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=approval") %>"><span class="muted"><asp:Literal ID="FinalApprovalLabel" runat="server" /></span><strong><asp:Literal ID="FinalApprovalCount" runat="server" /></strong></a>
         </section>
         <section class="card">
-            <div class="page-heading"><div><h2>My assigned workflow queue</h2><div class="muted">Tenders are limited to your role and current workflow assignment.</div></div><a href="TenderWorkflow.aspx">Open queue</a></div>
+            <div class="page-heading"><div><h2><asp:Literal ID="FinalQueueHeading" runat="server" /></h2><div class="muted">Tenders are limited to your role and current workflow assignment.</div></div><a href="TenderWorkflow.aspx">Open queue</a></div>
             <div class="table-wrap">
                 <asp:GridView ID="FinalWorkflowGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No tenders are currently assigned to you.">
                     <Columns>

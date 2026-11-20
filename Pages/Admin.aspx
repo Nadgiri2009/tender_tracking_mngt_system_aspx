@@ -1,30 +1,33 @@
 <%@ Page Title="Admin Dashboard" Language="C#" MasterPageFile="~/Pages/Site.Master" AutoEventWireup="true" CodeBehind="Admin.aspx.cs" Inherits="DepartmentModule.Pages.AdminDashboard" %>
 <asp:Content ID="Title" ContentPlaceHolderID="TitleContent" runat="server">Admin Dashboard</asp:Content>
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
-    <div class="page-heading"><div><h1>Main Administrator</h1><div class="muted">Live system overview and recent activity.</div></div></div>
+    <div class="page-heading"><div><h1>JE Administration Dashboard</h1><div class="muted">Live system overview and recent activity.</div></div></div>
     <asp:Literal ID="Message" runat="server" />
-    <section class="cards dashboard-statistics" aria-label="System summary">
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx") %>"><span class="muted">Total tenders</span><strong><asp:Literal ID="TotalTenders" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Approved") %>"><span class="muted">Approved</span><strong><asp:Literal ID="ApprovedTenders" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Pending") %>"><span class="muted">Pending</span><strong><asp:Literal ID="PendingTenders" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Rejected") %>"><span class="muted">Rejected</span><strong><asp:Literal ID="RejectedTenders" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Under%20Review") %>"><span class="muted">Under review</span><strong><asp:Literal ID="UnderReviewTenders" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx") %>"><span class="muted">Registered contractors</span><strong><asp:Literal ID="TotalContractors" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx") %>"><span class="muted">Active contractors</span><strong><asp:Literal ID="ActiveContractors" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx") %>"><span class="muted">Total users</span><strong><asp:Literal ID="TotalUsers" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx") %>"><span class="muted">Active user accounts</span><strong><asp:Literal ID="ActiveUsers" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminDepartments.aspx") %>"><span class="muted">Departments</span><strong><asp:Literal ID="Departments" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx") %>"><span class="muted">Inactive contractors</span><strong><asp:Literal ID="InactiveContractors" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx") %>"><span class="muted">Inactive users</span><strong><asp:Literal ID="InactiveUsers" runat="server" /></strong></a>
-    </section>
-    <section class="cards dashboard-statistics" aria-label="Tender lifecycle summary">
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Approvals.aspx") %>"><span class="muted">Pending approvals</span><strong><asp:Literal ID="LifecyclePendingApprovals" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/TenderLifecycle.aspx") %>"><span class="muted">Tenders awaiting publication</span><strong><asp:Literal ID="LifecycleAwaitingPublication" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx") %>"><span class="muted">Currently published</span><strong><asp:Literal ID="LifecyclePublished" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/TenderLifecycle.aspx") %>"><span class="muted">Extension requests</span><strong><asp:Literal ID="LifecycleExtensions" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/TenderEvaluation.aspx") %>"><span class="muted">Pending bid openings</span><strong><asp:Literal ID="LifecycleBidOpenings" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/TenderEvaluation.aspx") %>"><span class="muted">Awaiting evaluation</span><strong><asp:Literal ID="LifecycleAwaitingEvaluation" runat="server" /></strong></a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/TenderEvaluation.aspx") %>"><span class="muted">Under evaluation</span><strong><asp:Literal ID="LifecycleUnderEvaluation" runat="server" /></strong></a>
+    <section class="cards dashboard-statistics admin-dashboard-statistics" aria-label="System summary">
+        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx") %>">
+            <span class="muted">Total tenders</span><strong><asp:Literal ID="TotalTenders" runat="server" /></strong>
+            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6" /></svg></span>
+        </a>
+        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?status=Draft") %>">
+            <span class="muted">Draft tenders</span><strong><asp:Literal ID="DraftTenders" runat="server" /></strong>
+            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5" /></svg></span>
+        </a>
+        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Published") %>">
+            <span class="muted">Published tenders</span><strong><asp:Literal ID="PublishedTenders" runat="server" /></strong>
+            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10" /></svg></span>
+        </a>
+        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Active") %>">
+            <span class="muted">Active tenders</span><strong><asp:Literal ID="ActiveTenderCount" runat="server" /></strong>
+            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M16 3h5v5" /></svg></span>
+        </a>
+        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Closed") %>">
+            <span class="muted">Closed tenders</span><strong><asp:Literal ID="ClosedTenders" runat="server" /></strong>
+            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19" /></svg></span>
+        </a>
+        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminDepartments.aspx") %>">
+            <span class="muted">Departments</span><strong><asp:Literal ID="Departments" runat="server" /></strong>
+            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h1M14 10h1M9 14h1M14 14h1M10 21v-4h4v4" /></svg></span>
+        </a>
     </section>
     <section class="card">
         <div class="page-heading"><div><h2>Tenders by category</h2><div class="muted">Counts use the existing tender type values.</div></div></div>
@@ -37,8 +40,11 @@
     </section>
     <section class="card">
         <div class="page-heading"><div><h2>Recent tenders</h2></div><a href="Tenders.aspx">View all tenders</a></div>
-        <div class="table-wrap"><asp:GridView ID="RecentTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No tenders found.">
+        <div class="table-wrap"><asp:GridView ID="RecentTendersGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true"
+            AllowCustomPaging="true" PageSize="10" DataKeyNames="TenderId" GridLines="None" EmptyDataText="No tenders found."
+            OnPageIndexChanging="RecentTendersGrid_PageIndexChanging" OnRowCommand="RecentTendersGrid_RowCommand">
             <Columns>
+                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# RecentTenderSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                 <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
                 <asp:BoundField DataField="Title" HeaderText="Title" />
                 <asp:BoundField DataField="TenderCategory" HeaderText="Category" />
@@ -49,8 +55,34 @@
                 <asp:BoundField DataField="SubmissionStartDate" HeaderText="Submission starts" DataFormatString="{0:dd MMM yyyy}" NullDisplayText="-" />
                 <asp:BoundField DataField="SubmissionDeadline" HeaderText="Submission ends" DataFormatString="{0:dd MMM yyyy}" NullDisplayText="-" />
                 <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
+                <asp:TemplateField HeaderText="Actions"><ItemTemplate>
+                    <span class="icon-actions">
+                        <asp:HyperLink ID="ViewTenderLink" runat="server" CssClass="icon-action"
+                            NavigateUrl='<%# ResolveUrl("~/Pages/TenderDetails.aspx?id=" + Eval("TenderId")) %>'
+                            aria-label="View tender" title="View tender">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" /></svg>
+                            <span class="sr-only">View</span>
+                        </asp:HyperLink>
+                        <asp:HyperLink ID="EditTenderLink" runat="server" CssClass="icon-action"
+                            NavigateUrl='<%# ResolveUrl("~/Pages/TenderForm.aspx?id=" + Eval("TenderId")) %>'
+                            Visible='<%# CanEditDraft(Eval("CanEditDraft")) %>'
+                            aria-label="Edit and update draft tender" title="Edit / update draft">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16-.8 4.8L8 20l11.5-11.5a2.1 2.1 0 0 0-3-3L5 17M14.5 6.5l3 3" /></svg>
+                            <span class="sr-only">Edit / update</span>
+                        </asp:HyperLink>
+                        <asp:LinkButton ID="DeleteTenderLink" runat="server" CssClass="icon-action danger"
+                            CommandName="DeleteDraft" CommandArgument='<%# Eval("TenderId") %>'
+                            Visible='<%# CanEditDraft(Eval("CanEditDraft")) %>'
+                            aria-label="Delete draft tender" title="Delete draft"
+                            OnClientClick="return confirm('Move this draft tender to deleted records? Its workflow and audit history will be retained.');">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3" /></svg>
+                            <span class="sr-only">Delete draft</span>
+                        </asp:LinkButton>
+                    </span>
+                </ItemTemplate></asp:TemplateField>
             </Columns>
         </asp:GridView></div>
+        <div class="pagination"><asp:Literal ID="RecentTendersPageSummary" runat="server" /><span>10 tenders per page</span></div>
     </section>
     <section class="card">
         <div class="page-heading"><div><h2>Upcoming submission deadlines</h2></div><a href="Tenders.aspx">View tender list</a></div>

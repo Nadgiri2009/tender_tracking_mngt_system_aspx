@@ -32,7 +32,7 @@ namespace DepartmentModule.Pages
         {
             using (SqlCommand command = new SqlCommand(
                 @"SELECT RoleName FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK)
-                  WHERE RoleId=@RoleId AND IsActive=1 AND RoleName<>N'Super Admin';", connection, transaction))
+                  WHERE RoleId=@RoleId AND IsActive=1;", connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
                 object value = command.ExecuteScalar();
@@ -58,7 +58,7 @@ namespace DepartmentModule.Pages
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 {
                     using (SqlCommand command = new SqlCommand(
-                        "SELECT RoleId,RoleName FROM dbo.Roles WHERE IsActive=1 AND RoleName<>N'Super Admin' ORDER BY RoleName;", connection))
+                        "SELECT RoleId,RoleName FROM dbo.Roles WHERE IsActive=1 ORDER BY RoleName;", connection))
                     using (SqlDataReader reader = command.ExecuteReader())
                     {
                         RoleSelect.Items.Clear();
@@ -250,7 +250,7 @@ namespace DepartmentModule.Pages
                     string selectedRoleName = GetAssignableRoleName(connection, transaction, roleId);
                     if (selectedRoleName == null)
                     {
-                        ShowMessage("The selected role is unavailable or requires the trusted Super Admin provisioning process.");
+                        ShowMessage("The selected role is unavailable. Refresh the role list and retry.");
                         return;
                     }
                     if (RequiresDepartment(selectedRoleName) && !optionalDepartmentId.HasValue)
@@ -261,10 +261,11 @@ namespace DepartmentModule.Pages
 
                     int currentRoleId;
                     bool isActive;
-                    string currentMobile;
-                    string currentRole;
+                    string currentMobile, currentRoleCode, currentRoleName, currentFullName, currentEmail;
+                    int? currentDepartmentId;
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT u.RoleId,u.IsActive,u.Mobile,r.RoleName
+                        @"SELECT u.RoleId,u.IsActive,u.Mobile,u.FullName,u.Email,u.DepartmentId,
+                                 r.RoleCode,r.RoleName
                           FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK)
                           INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
                           WHERE u.UserId=@UserId;", connection, transaction))
@@ -280,7 +281,13 @@ namespace DepartmentModule.Pages
                             currentRoleId = Convert.ToInt32(reader["RoleId"]);
                             isActive = Convert.ToBoolean(reader["IsActive"]);
                             currentMobile = reader["Mobile"] == DBNull.Value ? String.Empty : Convert.ToString(reader["Mobile"]);
-                            currentRole = Convert.ToString(reader["RoleName"]);
+                            currentRoleCode = Convert.ToString(reader["RoleCode"]);
+                            currentRoleName = Convert.ToString(reader["RoleName"]);
+                            currentFullName = Convert.ToString(reader["FullName"]);
+                            currentEmail = Convert.ToString(reader["Email"]);
+                            currentDepartmentId = reader["DepartmentId"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["DepartmentId"]);
                         }
                     }
 
@@ -294,10 +301,10 @@ namespace DepartmentModule.Pages
                         ShowMessage("Mobile-number changes are disabled until a trusted OTP identity-verification service is configured.");
                         return;
                     }
-                    if (isActive && String.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                    if (isActive && String.Equals(currentRoleCode, "JE", StringComparison.OrdinalIgnoreCase) &&
                         roleId != currentRoleId && GetActiveAdministratorCount(connection, transaction, userId) == 0)
                     {
-                        ShowMessage("The last active administrator cannot be removed from the Main Administrator role.");
+                        ShowMessage("The last active JE administrator cannot be reassigned.");
                         return;
                     }
 
@@ -325,7 +332,13 @@ namespace DepartmentModule.Pages
                     }
 
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId, "Update", "User", userId,
-                        "Profile and role " + selectedRoleName + " updated; no credentials recorded.", Request.UserHostAddress);
+                        "Full name: " + currentFullName + " -> " + fullName +
+                        "; email: " + currentEmail + " -> " + email +
+                        "; role: " + currentRoleName + " -> " + selectedRoleName +
+                        "; department ID: " + (currentDepartmentId.HasValue ? currentDepartmentId.Value.ToString() : "none") +
+                        " -> " + (optionalDepartmentId.HasValue ? optionalDepartmentId.Value.ToString() : "none") +
+                        (String.IsNullOrEmpty(PasswordText.Text) ? String.Empty : "; authentication credential reset."),
+                        Request.UserHostAddress);
                     transaction.Commit();
                 }
 
@@ -364,7 +377,7 @@ namespace DepartmentModule.Pages
             using (SqlCommand command = new SqlCommand(
                 @"SELECT COUNT(*) FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK)
                   INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
-                  WHERE r.RoleName=N'Admin' AND u.IsActive=1 AND u.UserId<>@UserId;", connection, transaction))
+                  WHERE r.RoleCode=N'JE' AND u.IsActive=1 AND u.UserId<>@UserId;", connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, exceptUserId);
                 return Convert.ToInt32(command.ExecuteScalar());
@@ -411,7 +424,7 @@ namespace DepartmentModule.Pages
                     string selectedRoleName = GetAssignableRoleName(connection, transaction, roleId);
                     if (selectedRoleName == null)
                     {
-                        ShowMessage("The selected role is unavailable or requires the trusted Super Admin provisioning process.");
+                        ShowMessage("The selected role is unavailable. Refresh the role list and retry.");
                         return;
                     }
                     if (RequiresDepartment(selectedRoleName) && !optionalDepartmentId.HasValue)
@@ -557,9 +570,9 @@ namespace DepartmentModule.Pages
                 using (SqlTransaction transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
                 {
                     bool isActive;
-                    string roleName;
+                    string roleCode;
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT u.IsActive,r.RoleName FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK)
+                        @"SELECT u.IsActive,r.RoleCode FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK)
                           INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId WHERE u.UserId=@UserId;", connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
@@ -571,14 +584,14 @@ namespace DepartmentModule.Pages
                                 return;
                             }
                             isActive = Convert.ToBoolean(reader["IsActive"]);
-                            roleName = Convert.ToString(reader["RoleName"]);
+                            roleCode = Convert.ToString(reader["RoleCode"]);
                         }
                     }
 
-                    if (isActive && String.Equals(roleName, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                    if (isActive && String.Equals(roleCode, "JE", StringComparison.OrdinalIgnoreCase) &&
                         GetActiveAdministratorCount(connection, transaction, userId) == 0)
                     {
-                        ShowMessage("The last active administrator account cannot be deactivated.");
+                        ShowMessage("The last active JE administrator account cannot be deactivated.");
                         return;
                     }
 
@@ -598,7 +611,8 @@ namespace DepartmentModule.Pages
                     }
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId,
                         newStatus ? "Activate" : "Deactivate", "User", userId,
-                        "Account status changed by administrator.", Request.UserHostAddress);
+                        "Account status: " + (isActive ? "active" : "inactive") + " -> " +
+                        (newStatus ? "active" : "inactive") + ".", Request.UserHostAddress);
                     transaction.Commit();
                 }
 
@@ -707,7 +721,8 @@ namespace DepartmentModule.Pages
 
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId,
                         newStatus ? "Activate" : "Deactivate", "Contractor", contractorId,
-                        "Contractor profile status changed by administrator.", Request.UserHostAddress);
+                        "Contractor profile status: " + (isActive ? "active" : "inactive") + " -> " +
+                        (newStatus ? "active" : "inactive") + ".", Request.UserHostAddress);
                     transaction.Commit();
                 }
                 ShowMessage("Contractor profile status updated.", true);

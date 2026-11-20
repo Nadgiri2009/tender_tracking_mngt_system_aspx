@@ -32,6 +32,7 @@
         <div class="table-wrap">
             <asp:GridView ID="ApplicationsGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" EmptyDataText="You have not applied for any tender yet." OnPageIndexChanging="ApplicationsGrid_PageIndexChanging">
                 <Columns>
+                    <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ApplicationSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
                     <asp:BoundField DataField="Title" HeaderText="Title" />
                     <asp:BoundField DataField="DepartmentName" HeaderText="Department" />

@@ -21,6 +21,7 @@
                 PageSize="10" GridLines="None" EmptyDataText="No tenders match your filters."
                 OnPageIndexChanging="TenderGrid_PageIndexChanging" OnSorting="TenderGrid_Sorting">
                 <Columns>
+                    <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# TenderSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." SortExpression="TenderNumber" />
                     <asp:BoundField DataField="Title" HeaderText="Title" SortExpression="Title" />
                     <asp:BoundField DataField="TenderCategory" HeaderText="Category" />

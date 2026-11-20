@@ -11,11 +11,10 @@ namespace DepartmentModule.Pages
     {
         private const int FeedItemsPerPage = 10;
         private const string FeedPageIndexKey = "AdminDashboardFeedPageIndex";
+        private const int RecentTendersPerPage = 10;
 
-        protected Literal Message, TotalTenders, ApprovedTenders, PendingTenders, RejectedTenders, UnderReviewTenders,
-            TotalContractors, ActiveContractors, TotalUsers, ActiveUsers, InactiveContractors, InactiveUsers, Departments, PageSummary,
-            LifecyclePendingApprovals, LifecycleAwaitingPublication, LifecyclePublished, LifecycleExtensions,
-            LifecycleBidOpenings, LifecycleAwaitingEvaluation, LifecycleUnderEvaluation;
+        protected Literal Message, TotalTenders, DraftTenders, PublishedTenders, ActiveTenderCount,
+            ClosedTenders, Departments, PageSummary, RecentTendersPageSummary;
         protected GridView DashboardFeedGrid, CategoryStatsGrid, UpcomingDeadlinesGrid, RecentTendersGrid;
         protected LinkButton PreviousPageButton, NextPageButton;
         protected Repeater PageNumbers;
@@ -39,40 +38,40 @@ namespace DepartmentModule.Pages
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 {
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT COUNT(*) AS TotalTenders,
-                            SUM(CASE WHEN " + TenderStatusBuckets.Approved + @" THEN 1 ELSE 0 END) AS ApprovedTenders,
-                            SUM(CASE WHEN " + TenderStatusBuckets.Pending + @" THEN 1 ELSE 0 END) AS PendingTenders,
-                            SUM(CASE WHEN " + TenderStatusBuckets.Rejected + @" THEN 1 ELSE 0 END) AS RejectedTenders,
-                            SUM(CASE WHEN " + TenderStatusBuckets.UnderReview + @" THEN 1 ELSE 0 END) AS UnderReviewTenders
-                          FROM dbo.Tender t WHERE t.IsDeleted=0;
-                          SELECT
-                            (SELECT COUNT(*) FROM dbo.Contractors) AS TotalContractors,
-                            (SELECT COUNT(*) FROM dbo.Contractors WHERE IsActive=1) AS ActiveContractors,
-                            (SELECT COUNT(*) FROM dbo.Users) AS TotalUsers,
-                            (SELECT COUNT(*) FROM dbo.Users WHERE IsActive=1) AS ActiveUsers,
-                            (SELECT COUNT(*) FROM dbo.Users WHERE IsActive=0) AS InactiveUsers,
-                            (SELECT COUNT(*) FROM dbo.Contractors WHERE IsActive=0) AS InactiveContractors,
-                            (SELECT COUNT(*) FROM dbo.Departments WHERE IsActive=1) AS Departments;", connection))
+                        @"SELECT
+                            (SELECT COUNT(*) FROM dbo.Tender WHERE IsDeleted=0) AS TotalTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender WHERE IsDeleted=0 AND CurrentStatus=N'Draft') AS DraftTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender t
+                             WHERE t.IsDeleted=0 AND t.CurrentStatus NOT LIKE N'%cancel%'
+                               AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
+                                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
+                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published'))) AS PublishedTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender t
+                             INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
+                             WHERE t.IsDeleted=0 AND t.CurrentStatus=N'Tender Published'
+                               AND s.PublicationStartUtc<=SYSUTCDATETIME()
+                               AND s.CurrentClosingUtc>SYSUTCDATETIME()
+                               AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
+                                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
+                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published'))) AS ActiveTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender t
+                             INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
+                             WHERE t.IsDeleted=0 AND t.CurrentStatus NOT LIKE N'%cancel%'
+                               AND s.CurrentClosingUtc<=SYSUTCDATETIME()
+                               AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
+                                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
+                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published'))) AS ClosedTenders,
+                            (SELECT COUNT(*) FROM dbo.Departments) AS Departments;", connection))
                     {
                         using (SqlDataReader reader = command.ExecuteReader())
                         {
                             if (reader.Read())
                             {
                                 TotalTenders.Text = Convert.ToString(reader["TotalTenders"]);
-                                ApprovedTenders.Text = Convert.ToString(reader["ApprovedTenders"] == DBNull.Value ? 0 : reader["ApprovedTenders"]);
-                                PendingTenders.Text = Convert.ToString(reader["PendingTenders"] == DBNull.Value ? 0 : reader["PendingTenders"]);
-                                RejectedTenders.Text = Convert.ToString(reader["RejectedTenders"] == DBNull.Value ? 0 : reader["RejectedTenders"]);
-                                UnderReviewTenders.Text = Convert.ToString(reader["UnderReviewTenders"] == DBNull.Value ? 0 : reader["UnderReviewTenders"]);
-                            }
-                            reader.NextResult();
-                            if (reader.Read())
-                            {
-                                TotalContractors.Text = Convert.ToString(reader["TotalContractors"]);
-                                ActiveContractors.Text = Convert.ToString(reader["ActiveContractors"]);
-                                TotalUsers.Text = Convert.ToString(reader["TotalUsers"]);
-                                ActiveUsers.Text = Convert.ToString(reader["ActiveUsers"]);
-                                InactiveUsers.Text = Convert.ToString(reader["InactiveUsers"]);
-                                InactiveContractors.Text = Convert.ToString(reader["InactiveContractors"]);
+                                DraftTenders.Text = Convert.ToString(reader["DraftTenders"]);
+                                PublishedTenders.Text = Convert.ToString(reader["PublishedTenders"]);
+                                ActiveTenderCount.Text = Convert.ToString(reader["ActiveTenders"]);
+                                ClosedTenders.Text = Convert.ToString(reader["ClosedTenders"]);
                                 Departments.Text = Convert.ToString(reader["Departments"]);
                             }
                         }
@@ -80,58 +79,12 @@ namespace DepartmentModule.Pages
 
                     BindOverviewTables(connection);
                     BindDashboardFeed(connection);
-                    BindLifecycleSummary(connection);
                 }
             }
             catch (SqlException ex)
             {
                 Trace.Warn("DepartmentModule", "Admin dashboard data could not be loaded.", ex);
                 Message.Text = "<div class=\"message\">Dashboard data could not be loaded. Please retry or contact support.</div>";
-            }
-        }
-
-        private void BindLifecycleSummary(SqlConnection connection)
-        {
-            string[] pendingStatuses = WorkflowRules.PendingStatusesForRole(CurrentRole);
-            string[] parameters = new string[pendingStatuses.Length];
-            for (int i = 0; i < pendingStatuses.Length; i++) parameters[i] = "@LifecycleStatus" + i;
-            string pendingPredicate = pendingStatuses.Length == 0
-                ? "1=0"
-                : "t.CurrentStatus IN (" + String.Join(",", parameters) + ")";
-            using (SqlCommand command = new SqlCommand(
-                @"SELECT
-                    (SELECT COUNT(*) FROM dbo.Tender t WHERE t.IsDeleted=0 AND " + pendingPredicate + @") AS PendingApprovals,
-                    (SELECT COUNT(*) FROM dbo.Tender t LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                     WHERE t.IsDeleted=0 AND t.CurrentStatus=N'Tender Published'
-                       AND (s.TenderId IS NULL OR s.PublicationStartUtc>SYSUTCDATETIME())) AS AwaitingPublication,
-                    (SELECT COUNT(*) FROM dbo.Tender t INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                     WHERE t.IsDeleted=0 AND t.CurrentStatus=N'Tender Published'
-                       AND s.PublicationStartUtc<=SYSUTCDATETIME() AND s.CurrentClosingUtc>SYSUTCDATETIME()) AS CurrentlyPublished,
-                    (SELECT COUNT(*) FROM dbo.TenderExtensionRequests e INNER JOIN dbo.Tender t ON t.TenderId=e.TenderId
-                     WHERE t.IsDeleted=0 AND e.ReviewStatus=N'Pending') AS ExtensionRequests,
-                    (SELECT COUNT(*) FROM dbo.Tender t INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                     WHERE t.IsDeleted=0 AND t.CurrentStatus=N'Tender Published'
-                       AND s.CurrentClosingUtc<=SYSUTCDATETIME()
-                       AND NOT EXISTS(SELECT 1 FROM dbo.TenderBidOpening o WHERE o.TenderId=t.TenderId)) AS PendingBidOpenings,
-                    (SELECT COUNT(*) FROM dbo.TenderEvaluation e INNER JOIN dbo.Tender t ON t.TenderId=e.TenderId
-                     WHERE t.IsDeleted=0 AND e.EvaluationStatus=N'Awaiting Evaluation') AS AwaitingEvaluation,
-                    (SELECT COUNT(*) FROM dbo.TenderEvaluation e INNER JOIN dbo.Tender t ON t.TenderId=e.TenderId
-                     WHERE t.IsDeleted=0 AND e.EvaluationStatus=N'Under Evaluation') AS UnderEvaluation;",
-                connection))
-            {
-                for (int i = 0; i < pendingStatuses.Length; i++)
-                    ModuleDb.AddParameter(command, parameters[i], SqlDbType.NVarChar, pendingStatuses[i], 50);
-                using (SqlDataReader reader = command.ExecuteReader())
-                {
-                    if (!reader.Read()) return;
-                    LifecyclePendingApprovals.Text = Convert.ToString(reader["PendingApprovals"]);
-                    LifecycleAwaitingPublication.Text = Convert.ToString(reader["AwaitingPublication"]);
-                    LifecyclePublished.Text = Convert.ToString(reader["CurrentlyPublished"]);
-                    LifecycleExtensions.Text = Convert.ToString(reader["ExtensionRequests"]);
-                    LifecycleBidOpenings.Text = Convert.ToString(reader["PendingBidOpenings"]);
-                    LifecycleAwaitingEvaluation.Text = Convert.ToString(reader["AwaitingEvaluation"]);
-                    LifecycleUnderEvaluation.Text = Convert.ToString(reader["UnderEvaluation"]);
-                }
             }
         }
 
@@ -150,23 +103,50 @@ namespace DepartmentModule.Pages
                 CategoryStatsGrid.DataBind();
             }
 
+            int tenderCount;
+            using (SqlCommand countCommand = new SqlCommand(
+                "SELECT COUNT(*) FROM dbo.Tender WHERE IsDeleted=0;", connection))
+            {
+                tenderCount = Convert.ToInt32(countCommand.ExecuteScalar());
+            }
+            int pageCount = Math.Max(1, (int)Math.Ceiling(tenderCount / (double)RecentTendersPerPage));
+            RecentTendersGrid.PageIndex = Math.Max(0, Math.Min(RecentTendersGrid.PageIndex, pageCount - 1));
+            RecentTendersGrid.VirtualItemCount = tenderCount;
             using (SqlCommand command = new SqlCommand(
-                @"SELECT TOP (5) t.TenderId,t.TenderNumber,t.Title,t.TenderType,
+                @"SELECT t.TenderId,t.TenderNumber,t.Title,t.TenderType,
                          COALESCE(t.TenderCategory,N'Uncategorized') AS TenderCategory,d.DepartmentName,
                          COALESCE(u.FullName,N'') AS AssignedOfficer,
                          (SELECT MIN(ah.ApprovalDate) FROM dbo.ApprovalHistory ah
                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') AS PublicationDate,
-                         t.SubmissionStartDate,t.SubmissionDeadline,t.CurrentStatus
+                         t.SubmissionStartDate,t.SubmissionDeadline,t.CurrentStatus,
+                         CAST(CASE WHEN t.CurrentStatus=N'Draft' AND
+                             (t.WorkflowVersion=1 OR
+                              (t.WorkflowVersion=2 AND EXISTS
+                                  (SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                   INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                   WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                     AND s.StageName=N'Final_JE_SubmitTender')))
+                             THEN 1 ELSE 0 END AS bit) AS CanEditDraft
                   FROM dbo.Tender t INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
                   LEFT JOIN dbo.Users u ON u.UserId=t.CreatedBy
-                  WHERE t.IsDeleted=0 ORDER BY t.CreatedDate DESC,t.TenderId DESC;", connection))
-            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+                  WHERE t.IsDeleted=0
+                  ORDER BY t.CreatedDate DESC,t.TenderId DESC
+                  OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;", connection))
             {
-                DataTable data = new DataTable();
-                adapter.Fill(data);
-                RecentTendersGrid.DataSource = data;
-                RecentTendersGrid.DataBind();
+                ModuleDb.AddParameter(command, "@Offset", SqlDbType.Int,
+                    RecentTendersGrid.PageIndex * RecentTendersPerPage);
+                ModuleDb.AddParameter(command, "@PageSize", SqlDbType.Int, RecentTendersPerPage);
+                using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+                {
+                    DataTable data = new DataTable();
+                    adapter.Fill(data);
+                    RecentTendersGrid.DataSource = data;
+                    RecentTendersGrid.DataBind();
+                }
             }
+            RecentTendersPageSummary.Text = String.Format(
+                "Page {0} of {1} · {2} tenders",
+                RecentTendersGrid.PageIndex + 1, pageCount, tenderCount);
 
             using (SqlCommand command = new SqlCommand(
                 @"SELECT TOP (5) t.TenderId,t.TenderNumber,t.Title,t.TenderType,
@@ -269,6 +249,76 @@ namespace DepartmentModule.Pages
         protected int FeedSerialNumber(int rowIndex)
         {
             return (CurrentPage - 1) * FeedItemsPerPage + rowIndex + 1;
+        }
+
+        protected int RecentTenderSerialNumber(int rowIndex)
+        {
+            return RecentTendersGrid.PageIndex * RecentTendersPerPage + rowIndex + 1;
+        }
+
+        protected bool CanEditDraft(object value)
+        {
+            return HasPermission("system.admin") &&
+                value != null && value != DBNull.Value && Convert.ToBoolean(value);
+        }
+
+        protected void RecentTendersGrid_PageIndexChanging(object sender, GridViewPageEventArgs e)
+        {
+            RecentTendersGrid.PageIndex = e.NewPageIndex;
+            LoadDashboard();
+        }
+
+        protected void RecentTendersGrid_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (!String.Equals(e.CommandName, "DeleteDraft", StringComparison.Ordinal)) return;
+            if (!HasPermission("system.admin"))
+            {
+                Message.Text = "<div class=\"message\">You are not authorized to delete tenders.</div>";
+                return;
+            }
+
+            int tenderId;
+            if (!Int32.TryParse(Convert.ToString(e.CommandArgument), out tenderId) || tenderId <= 0)
+            {
+                Message.Text = "<div class=\"message\">The selected tender could not be verified. Refresh the page and retry.</div>";
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlTransaction transaction = connection.BeginTransaction())
+                using (SqlCommand command = new SqlCommand(
+                    @"UPDATE t
+                      SET IsDeleted=1,ModifiedBy=@UserId,ModifiedDate=SYSUTCDATETIME()
+                      FROM dbo.Tender t
+                      WHERE t.TenderId=@TenderId AND t.IsDeleted=0 AND t.CurrentStatus=N'Draft'
+                        AND (t.WorkflowVersion=1 OR
+                             (t.WorkflowVersion=2 AND EXISTS
+                                 (SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                  INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                  WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                    AND s.StageName=N'Final_JE_SubmitTender')));", connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("Only a draft at its initial workflow stage can be deleted.");
+                    ModuleDb.AddAudit(connection, transaction, CurrentUserId, "Delete", "Tender",
+                        tenderId, "Draft soft-deleted; workflow and audit history retained.", Request.UserHostAddress);
+                    transaction.Commit();
+                }
+                LoadDashboard();
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Draft tender could not be deleted.", ex);
+                Message.Text = "<div class=\"message\">The draft could not be deleted. Please retry.</div>";
+            }
+            catch (InvalidOperationException ex)
+            {
+                Message.Text = "<div class=\"message\">" + ModuleDb.Html(ex.Message) + "</div>";
+            }
         }
 
         protected void PreviousPageButton_Click(object sender, EventArgs e)

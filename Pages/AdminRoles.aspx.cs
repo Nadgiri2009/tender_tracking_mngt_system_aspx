@@ -189,11 +189,13 @@ namespace DepartmentModule.Pages
                 using (SqlTransaction transaction = connection.BeginTransaction(IsolationLevel.Serializable))
                 {
                     string oldName = null;
+                    string oldDescription = null;
+                    List<string> oldPermissionKeys = new List<string>();
                     bool isSystemRole = false;
                     if (isEditing)
                     {
                         using (SqlCommand command = new SqlCommand(
-                            "SELECT RoleName,IsSystemRole FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK) WHERE RoleId=@RoleId;", connection, transaction))
+                            "SELECT RoleName,Description,IsSystemRole FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK) WHERE RoleId=@RoleId;", connection, transaction))
                         {
                             ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
                             using (SqlDataReader reader = command.ExecuteReader())
@@ -204,6 +206,7 @@ namespace DepartmentModule.Pages
                                     return;
                                 }
                                 oldName = Convert.ToString(reader["RoleName"]);
+                                oldDescription = reader["Description"] == DBNull.Value ? String.Empty : Convert.ToString(reader["Description"]);
                                 isSystemRole = Convert.ToBoolean(reader["IsSystemRole"]);
                             }
                         }
@@ -211,6 +214,15 @@ namespace DepartmentModule.Pages
                         {
                             ShowMessage("Protected system role names cannot be changed.");
                             return;
+                        }
+                        using (SqlCommand command = new SqlCommand(
+                            @"SELECT p.PermissionKey FROM dbo.RolePermissions rp
+                              INNER JOIN dbo.Permissions p ON p.PermissionId=rp.PermissionId
+                              WHERE rp.RoleId=@RoleId ORDER BY p.PermissionKey;", connection, transaction))
+                        {
+                            ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
+                            using (SqlDataReader reader = command.ExecuteReader())
+                                while (reader.Read()) oldPermissionKeys.Add(Convert.ToString(reader["PermissionKey"]));
                         }
                     }
 
@@ -235,10 +247,11 @@ namespace DepartmentModule.Pages
                     }
                     if (permissionKeys.Contains("system.admin", StringComparer.OrdinalIgnoreCase) &&
                         !alreadyHasSystemAdmin &&
+                        !IsJeAdministrator &&
                         !(String.Equals(name, "Super Admin", StringComparison.OrdinalIgnoreCase) &&
                           String.Equals(CurrentRole, "Super Admin", StringComparison.OrdinalIgnoreCase)))
                     {
-                        ShowMessage("Only an existing Super Admin can grant the system administration permission.");
+                        ShowMessage("Only the JE administrator can grant the system administration permission.");
                         return;
                     }
 
@@ -290,7 +303,10 @@ namespace DepartmentModule.Pages
 
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId,
                         isEditing ? "Update" : "Create", "Role", roleId,
-                        "Role details and permission assignments updated.", Request.UserHostAddress);
+                        "Role name: " + (isEditing ? oldName : "(new)") + " -> " + name +
+                        "; description: " + (isEditing ? oldDescription : "(new)") + " -> " + description +
+                        "; permissions: [" + String.Join(", ", oldPermissionKeys) + "] -> [" +
+                        String.Join(", ", permissionKeys) + "].", Request.UserHostAddress);
                     transaction.Commit();
                 }
 
@@ -383,7 +399,8 @@ namespace DepartmentModule.Pages
                         command.ExecuteNonQuery();
                     }
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId, isActive ? "Deactivate" : "Activate",
-                        "Role", roleId, "Role active status changed.", Request.UserHostAddress);
+                        "Role", roleId, "Role active status: " + (isActive ? "active" : "inactive") + " -> " +
+                        (!isActive ? "active" : "inactive") + ".", Request.UserHostAddress);
                     transaction.Commit();
                 }
                 ShowMessage("Role status updated.", true);

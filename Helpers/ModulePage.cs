@@ -43,6 +43,14 @@ namespace DepartmentModule.Helpers
             if (!hasSessionIdentity && RequiresAuthentication)
             {
                 string loginUrl = ConfigurationManager.AppSettings["DepartmentPanelLoginUrl"] ?? "~/Pages/Error.aspx?code=401";
+                int tenderId = QueryId("tenderId");
+                if (tenderId > 0 &&
+                    String.Equals(Request.AppRelativeCurrentExecutionFilePath, "~/Pages/Bids.aspx", StringComparison.OrdinalIgnoreCase) &&
+                    loginUrl.IndexOf("~/Pages/Login.aspx", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    loginUrl += loginUrl.IndexOf("?", StringComparison.Ordinal) >= 0 ? "&" : "?";
+                    loginUrl += "applyTenderId=" + tenderId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
                 Response.Redirect(ResolveUrl(loginUrl), true);
                 return;
             }
@@ -75,6 +83,10 @@ namespace DepartmentModule.Helpers
                 Session[departmentKey] = CurrentDepartmentId.HasValue
                     ? (object)CurrentDepartmentId.Value
                     : null;
+                Session["RoleId"] = CurrentRoleId;
+                Session["RoleCode"] = CurrentRoleCode;
+                Session["AccountType"] = CurrentAccountType;
+                Session["PermissionKeys"] = new List<string>(CurrentPermissions).ToArray();
             }
             ViewStateUserKey = Session == null ? null : Session.SessionID;
             base.OnInit(e);
@@ -179,7 +191,17 @@ namespace DepartmentModule.Helpers
 
         protected bool HasPermission(string permissionKey)
         {
-            return !String.IsNullOrWhiteSpace(permissionKey) && CurrentPermissions.Contains(permissionKey);
+            return !String.IsNullOrWhiteSpace(permissionKey) &&
+                (IsJeAdministrator || CurrentPermissions.Contains(permissionKey));
+        }
+
+        protected bool IsJeAdministrator
+        {
+            get
+            {
+                return CurrentAccountType == "Internal" &&
+                    String.Equals(CurrentRoleCode, "JE", StringComparison.OrdinalIgnoreCase);
+            }
         }
 
         protected bool RequirePermission(string permissionKey)

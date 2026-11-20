@@ -326,13 +326,13 @@
         </asp:Panel>
         <asp:Panel ID="AgreementGeneratePanel" runat="server" CssClass="card" Visible="false">
             <h2>Generate tender agreement PDF</h2>
-            <p class="help">The versioned PDF includes the approved contractor, amount, terms, and authorized signatory.</p>
+            <p class="help">The approved agreement and final BOQ are generated and versioned together after financial approval.</p>
             <asp:Button ID="GenerateAgreementButton" runat="server" Text="Generate Agreement PDF"
                 OnClick="GenerateAgreementButton_Click" />
         </asp:Panel>
         <asp:Panel ID="CompleteTenderPanel" runat="server" CssClass="card" Visible="false">
             <h2>Complete tender workflow</h2>
-            <p class="help">Completion is enabled after the agreement PDF is generated and recorded.</p>
+            <p class="help">Completion is enabled after both the agreement and final BOQ PDFs are generated and recorded.</p>
             <asp:Button ID="CompleteTenderButton" runat="server" Text="Complete tender"
                 OnClick="CompleteTenderButton_Click" />
         </asp:Panel>
@@ -340,7 +340,7 @@
             <h2>Versioned generated documents</h2>
             <div class="table-wrap">
                 <asp:GridView ID="GeneratedDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    EmptyDataText="No generated work order or agreement documents have been recorded.">
+                    EmptyDataText="No generated work order, agreement, or BOQ documents have been recorded.">
                     <Columns>
                         <asp:BoundField DataField="DocumentKind" HeaderText="Document" />
                         <asp:BoundField DataField="VersionNumber" HeaderText="Version" />

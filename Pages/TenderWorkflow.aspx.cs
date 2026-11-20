@@ -68,6 +68,7 @@ namespace DepartmentModule.Pages
 
         private void LoadQueue()
         {
+            string stageFilter = QueueStageFilter();
             try
             {
                 using (SqlConnection connection = ModuleDb.OpenConnection())
@@ -87,7 +88,7 @@ namespace DepartmentModule.Pages
                                          (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId)))))
                               OR (@IsTenderCell=1 AND s.StageName=N'Final_Contractor_SubmitShortfall'
                                   AND @DepartmentId=t.DepartmentId
-                                  AND sf.SubmissionDeadlineUtc<=SYSUTCDATETIME())))
+                               AND sf.SubmissionDeadlineUtc<=SYSUTCDATETIME())))" + stageFilter + @"
                       ORDER BY a.AssignedAtUtc,t.TenderId;", connection))
                 {
                     ModuleDb.AddParameter(command, "@IsAdmin", SqlDbType.Bit, IsSystemAdministrator);
@@ -112,6 +113,26 @@ namespace DepartmentModule.Pages
             {
                 Trace.Warn("DepartmentModule", "Finalized workflow queue could not be loaded.", ex);
                 ShowMessage("The workflow queue could not be loaded. Please retry or contact support.");
+            }
+        }
+
+        private string QueueStageFilter()
+        {
+            switch ((Request.QueryString["queue"] ?? String.Empty).Trim().ToLowerInvariant())
+            {
+                case "verification":
+                    return @" AND s.StageName IN
+                        (N'Final_JE_OpenTechnicalBids',N'Final_JE_CompletePrimaryVerification',
+                         N'Final_Cell_CompleteSecondaryVerification',N'Final_Cell_ClearShortfall')";
+                case "shortfall":
+                    return @" AND s.StageName IN
+                        (N'Final_Cell_CreateShortfall',N'Final_JE_ApproveShortfall',
+                         N'Final_Contractor_SubmitShortfall',N'Final_Cell_ClearShortfall')";
+                case "approval":
+                    return @" AND s.StageName IN
+                        (N'Final_Samiti_ApproveFinancialOpening',N'Final_Auditor_ApproveFinancialBids')";
+                default:
+                    return String.Empty;
             }
         }
 
@@ -761,7 +782,7 @@ namespace DepartmentModule.Pages
                 "Completed", "Tender documents completed.", null,
                 (connection, transaction, departmentId, previousStatus, newStatus) =>
                 {
-                    TenderFinalizedWorkflowService.EnsureFinalAgreementGenerated(
+                    TenderFinalizedWorkflowService.EnsureFinalDocumentsGenerated(
                         connection, transaction, TenderId);
                     return new WorkflowTransitionMetadata { ActionName = "CompleteTender" };
                 });
@@ -812,7 +833,7 @@ namespace DepartmentModule.Pages
         private void ProcessGeneratedDocument(string stageName, string permission,
             string newStatus, string kind)
         {
-            string storedPath = null;
+            List<string> storedPaths = new List<string>();
             try
             {
                 TenderFinalizedWorkflowService.Transition(TenderId, CurrentUserId, CurrentRoleId,
@@ -823,7 +844,16 @@ namespace DepartmentModule.Pages
                         WorkflowTransitionMetadata metadata =
                             TenderFinalizedWorkflowService.GenerateFinalDocument(this, connection,
                                 transaction, TenderId, CurrentUserId, kind);
-                        storedPath = metadata.RelatedDocumentPath;
+                        if (!String.IsNullOrWhiteSpace(metadata.RelatedDocumentPath))
+                            storedPaths.Add(metadata.RelatedDocumentPath);
+                        if (String.Equals(kind, "Agreement", StringComparison.Ordinal))
+                        {
+                            WorkflowTransitionMetadata boqMetadata =
+                                TenderFinalizedWorkflowService.GenerateFinalBoqDocument(this,
+                                    connection, transaction, TenderId, CurrentUserId);
+                            storedPaths.Add(boqMetadata.RelatedDocumentPath);
+                            metadata.ActionName += ";" + boqMetadata.ActionName;
+                        }
                         return metadata;
                     });
                 Response.Redirect("~/Pages/TenderWorkflow.aspx?id=" +
@@ -832,14 +862,14 @@ namespace DepartmentModule.Pages
             }
             catch (SqlException ex)
             {
-                if (!String.IsNullOrWhiteSpace(storedPath))
+                foreach (string storedPath in storedPaths)
                     TenderLifecycleFiles.DeleteStoredGeneratedTenderDocument(this, storedPath);
                 Trace.Warn("DepartmentModule", "Final tender document generation failed.", ex);
                 ShowMessage("The PDF could not be generated and recorded. Please retry or contact support.");
             }
             catch (InvalidOperationException ex)
             {
-                if (!String.IsNullOrWhiteSpace(storedPath))
+                foreach (string storedPath in storedPaths)
                     TenderLifecycleFiles.DeleteStoredGeneratedTenderDocument(this, storedPath);
                 ShowMessage(ModuleDb.Html(ex.Message));
             }

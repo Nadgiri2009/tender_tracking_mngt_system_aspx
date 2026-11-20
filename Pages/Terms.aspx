@@ -28,7 +28,7 @@
         </ol>
     </section>
     <section class="card">
-        <h2>Required document checklist</h2>
+        <h2 id="required-documents">Required document checklist</h2>
         <p class="muted">Check the tender notice for the final document list, required format, validity period, and whether each item applies.</p>
         <div class="table-wrap">
             <table>
@@ -48,5 +48,20 @@
                 </tbody>
             </table>
         </div>
+    </section>
+    <section class="card" id="portal-faq">
+        <h2>FAQs and user guide</h2>
+        <h3>How do I find an available tender?</h3>
+        <p class="muted">Use the published-tender list on the home page. Search by reference or title, and filter by department, category, tender type, or status.</p>
+        <h3>How do I apply?</h3>
+        <p class="muted">Open the tender details and select Apply while the application window is open. Sign in or register as a contractor when prompted; the selected tender is retained through sign-in.</p>
+        <h3>Why is a tender not shown?</h3>
+        <p class="muted">Draft and not-yet-published tenders are not public. The list also follows the tender's publication schedule and current status.</p>
+        <h3>Where can I check requirements or outcomes?</h3>
+        <p class="muted">Review the tender notice, documents, and any published corrigenda. A completed status is not a substitute for an official result or award notice.</p>
+    </section>
+    <section class="card" id="portal-policies">
+        <h2>Privacy, disclaimer, and accessibility</h2>
+        <p class="muted">The project does not include approved SMC privacy-policy, disclaimer, or accessibility-statement text. These links are provided for navigation, not as published policy. The authorized Corporation content owner should supply and approve those statements before they are presented as official policy.</p>
     </section>
 </asp:Content>

@@ -432,6 +432,10 @@ namespace DepartmentModule.Pages
                                           OR (d.AgreementId IS NOT NULL AND EXISTS
                                             (SELECT 1 FROM dbo.Agreement a
                                              WHERE a.AgreementId=d.AgreementId AND a.ContractorId=c.ContractorId))
+                                          OR (d.DocumentKind=N'BOQ' AND EXISTS
+                                            (SELECT 1 FROM dbo.TechnicalBid b
+                                             WHERE b.TenderId=d.TenderId
+                                               AND b.ContractorId=c.ContractorId))
                                       )
                                 ))
                             OR (@HasDocumentPermission=1 AND
@@ -469,20 +473,8 @@ namespace DepartmentModule.Pages
 
         private void SendStoredFile(string storedPath, string fileName)
         {
-            string normalized = (storedPath ?? String.Empty).Replace('\\', '/').TrimStart('/');
-            if (normalized.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
-                normalized = normalized.Substring("uploads/".Length);
-            if (String.IsNullOrWhiteSpace(normalized) || normalized.Contains("..") || Path.IsPathRooted(normalized))
-            {
-                NotFound();
-                return;
-            }
-
-            string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
-            string root = Path.GetFullPath(Server.MapPath(uploadRoot));
-            string path = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
-            if (!path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-                !File.Exists(path))
+            string path;
+            if (!TenderLifecycleFiles.TryResolveStoredFilePath(this, storedPath, out path))
             {
                 NotFound();
                 return;
