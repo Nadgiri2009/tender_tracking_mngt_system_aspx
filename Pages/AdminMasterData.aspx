@@ -2,7 +2,7 @@
 <asp:Content ID="Title" ContentPlaceHolderID="TitleContent" runat="server">Master Data</asp:Content>
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <div class="page-heading">
-        <div><h1>Master data</h1><div class="muted">Manage tender categories, methods, document types, units, and officer designations.</div></div>
+        <div><h1>Master data</h1><div class="muted">Manage tender categories, subcategories, methods, financial years, document types, units, and officer designations.</div></div>
         <a class="button secondary" href="Admin.aspx">Back to administration</a>
     </div>
     <asp:Literal ID="Message" runat="server" />
@@ -12,6 +12,16 @@
             <asp:DropDownList ID="CatalogSelect" runat="server" AutoPostBack="true" OnSelectedIndexChanged="CatalogSelect_SelectedIndexChanged" />
         </div>
         <asp:HiddenField ID="OriginalValue" runat="server" />
+        <asp:Panel ID="ParentCategoryPanel" runat="server" CssClass="field" Visible="false">
+            <asp:Label runat="server" AssociatedControlID="ParentCategorySelect">Tender category</asp:Label>
+            <asp:DropDownList ID="ParentCategorySelect" runat="server" />
+        </asp:Panel>
+        <asp:Panel ID="FinancialYearPanel" runat="server" Visible="false">
+            <div class="row">
+                <div class="field"><label for="FinancialYearStartText">Financial year starts</label><asp:TextBox ID="FinancialYearStartText" runat="server" TextMode="Date" /></div>
+                <div class="field"><label for="FinancialYearEndText">Financial year ends</label><asp:TextBox ID="FinancialYearEndText" runat="server" TextMode="Date" /></div>
+            </div>
+        </asp:Panel>
         <div class="row">
             <div class="field">
                 <asp:Label ID="ValueLabel" runat="server" AssociatedControlID="ValueText">Name</asp:Label>
@@ -37,12 +47,14 @@
                 OnRowCommand="CatalogGrid_RowCommand" EmptyDataText="No entries are configured.">
                 <Columns>
                     <asp:BoundField DataField="CatalogValue" HeaderText="Name" />
+                    <asp:BoundField DataField="ParentValue" HeaderText="Category" />
+                    <asp:BoundField DataField="FinancialYearRange" HeaderText="Date range" />
                     <asp:BoundField DataField="SortOrder" HeaderText="Display order" />
                     <asp:CheckBoxField DataField="IsActive" HeaderText="Active" />
                     <asp:BoundField DataField="UsageCount" HeaderText="References" />
                     <asp:TemplateField HeaderText="Actions"><ItemTemplate>
-                        <asp:LinkButton runat="server" Text="Edit" CommandName="EditCatalogItem" CommandArgument='<%# Eval("CatalogValue") %>' CausesValidation="false" />
-                        <asp:LinkButton runat="server" Text="Delete" CommandName="DeleteCatalogItem" CommandArgument='<%# Eval("CatalogValue") %>' CausesValidation="false" OnClientClick="return confirm('Delete this unused catalog entry?');" />
+                        <asp:LinkButton runat="server" Text="Edit" CommandName="EditCatalogItem" CommandArgument='<%# Eval("CatalogKey") %>' CausesValidation="false" />
+                        <asp:LinkButton runat="server" Text="Delete" CommandName="DeleteCatalogItem" CommandArgument='<%# Eval("CatalogKey") %>' CausesValidation="false" OnClientClick="return confirm('Delete this unused catalog entry?');" />
                     </ItemTemplate></asp:TemplateField>
                 </Columns>
             </asp:GridView>

@@ -10,6 +10,7 @@ Classic ASP.NET Web Forms (`.aspx` + C# code-behind) on .NET Framework 4.8, ADO.
 | `Helpers/` | Session/permission handling, database helpers, workflow rules, application services, and secure upload handling |
 | `Content/Styles.css` | Site styling |
 | `SMC_TENDER_DATABASE.sql` | SQLCMD-mode database installer |
+| `Migrations/20261120_TenderFormExtensions.sql` | Additive tender-form and contractor-profile schema migration |
 | `Web.config`, `Global.asax`, `DepartmentModule.csproj` | Configuration and project |
 | `Uploads/` | Private document storage; the app-pool identity needs write access |
 
@@ -18,6 +19,7 @@ Classic ASP.NET Web Forms (`.aspx` + C# code-behind) on .NET Framework 4.8, ADO.
 1. **Database** (SQL Server 2016 SP1+):
    `sqlcmd -S "<server>" -E -b -v DatabaseName="<db>" -v InstallMode=Fresh -v BackupVerified=NO -i "SMC_TENDER_DATABASE.sql"`
    For an existing database use `InstallMode=Upgrade -v BackupVerified=YES` only after a verified backup and a rehearsal on a restored copy.
+   Existing deployments also need `Migrations/20261120_TenderFormExtensions.sql` for the dynamic financial-year/subcategory masters, expanded tender details, requirement and revision records, and contractor profile columns. The migration is additive and idempotent; back up the database before applying it with `sqlcmd -S "<server>" -d "<db>" -E -b -i "Migrations\20261120_TenderFormExtensions.sql"`.
 2. **Seed data:** the installer deliberately seeds nothing. Provision roles (including the role codes used by authorization), permissions, departments, workflow stages and an administrator account (with a BCrypt password hash) before users sign in.
 3. **Connection string:** edit `TenderManagement` in `Web.config` to match the installed database.
 4. **Build and publish:** build `DepartmentModule.csproj` in Visual Studio 2019/2022, restore NuGet packages, then publish to IIS (Integrated pipeline, .NET CLR v4.0). Grant the app-pool identity modify rights on `Uploads/`.

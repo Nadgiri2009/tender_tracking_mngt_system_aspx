@@ -87,8 +87,6 @@ namespace DepartmentModule.Pages
                     }
 
                     if (isEditing) LoadTenderForEdit();
-                    FinancialYearMissingPanel.Visible = FinancialYearSelect.Items.Count <= 1;
-                    FinancialYearRequired.Enabled = !FinancialYearMissingPanel.Visible;
                 }
                 catch (SqlException ex)
                 {
@@ -97,6 +95,11 @@ namespace DepartmentModule.Pages
                     CreateButton.Enabled = false;
                 }
             }
+            FinancialYearMissingPanel.Visible = FinancialYearSelect.Items.Count <= 1;
+            FinancialYearRequired.Enabled = !FinancialYearMissingPanel.Visible;
+            DocumentTypesMissingPanel.Visible = DocumentTypeSelect.Items.Count <= 1;
+            Attachments.Enabled = DocumentTypeSelect.Items.Count > 1;
+            if (FinancialYearMissingPanel.Visible) CreateButton.Enabled = false;
         }
 
         private static int BindTenderCatalog(SqlConnection connection, DropDownList control, string query, string placeholder)
@@ -159,6 +162,8 @@ namespace DepartmentModule.Pages
                          t.SubmissionStartDate,t.SubmissionDeadline,t.CurrentStatus,t.FinancialYear,t.TenderSubcategoryId,
                          t.EMDAmount,t.TenderDocumentFee,t.ProcessingFee,t.SecurityDepositAmount,
                          t.PublicationScheduledUtc,t.TechnicalBidOpeningScheduledUtc,t.FinancialBidOpeningScheduledUtc,
+                         t.BudgetInformation,t.TechnicalSanctionNumber,t.TechnicalSanctionAuthority,t.TechnicalSanctionDate,
+                         t.PreBidMeetingUtc,t.PreBidLocation,t.PreBidDetails,
                          r.ScopeOfWork,r.TechnicalRequirements,r.FinancialRequirements,r.AdditionalConditions,r.TermsAndConditions
                   FROM dbo.Tender t
                   LEFT JOIN dbo.TenderRequirements r ON r.TenderId=t.TenderId
@@ -240,14 +245,19 @@ namespace DepartmentModule.Pages
                     ProcessingFeeText.Text = FormatOptionalAmount(reader["ProcessingFee"]);
                     SecurityDepositText.Text = FormatOptionalAmount(reader["SecurityDepositAmount"]);
                     PublicationDateText.Text = FormatDateTimeLocal(reader["PublicationScheduledUtc"]);
-                    StartText.Text = reader["SubmissionStartDate"] == DBNull.Value
-                        ? String.Empty
-                        : Convert.ToDateTime(reader["SubmissionStartDate"]).ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture);
-                    DeadlineText.Text = reader["SubmissionDeadline"] == DBNull.Value
-                        ? String.Empty
-                        : Convert.ToDateTime(reader["SubmissionDeadline"]).ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture);
+                    StartText.Text = FormatDateTimeLocal(reader["SubmissionStartDate"]);
+                    DeadlineText.Text = FormatDateTimeLocal(reader["SubmissionDeadline"]);
                     TechnicalBidOpeningText.Text = FormatDateTimeLocal(reader["TechnicalBidOpeningScheduledUtc"]);
                     FinancialBidOpeningText.Text = FormatDateTimeLocal(reader["FinancialBidOpeningScheduledUtc"]);
+                    BudgetInformationText.Text = Convert.ToString(reader["BudgetInformation"] == DBNull.Value ? String.Empty : reader["BudgetInformation"]);
+                    TechnicalSanctionNumberText.Text = Convert.ToString(reader["TechnicalSanctionNumber"] == DBNull.Value ? String.Empty : reader["TechnicalSanctionNumber"]);
+                    TechnicalSanctionAuthorityText.Text = Convert.ToString(reader["TechnicalSanctionAuthority"] == DBNull.Value ? String.Empty : reader["TechnicalSanctionAuthority"]);
+                    TechnicalSanctionDateText.Text = reader["TechnicalSanctionDate"] == DBNull.Value
+                        ? String.Empty
+                        : Convert.ToDateTime(reader["TechnicalSanctionDate"], CultureInfo.InvariantCulture).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    PreBidMeetingText.Text = FormatDateTimeLocal(reader["PreBidMeetingUtc"]);
+                    PreBidLocationText.Text = Convert.ToString(reader["PreBidLocation"] == DBNull.Value ? String.Empty : reader["PreBidLocation"]);
+                    PreBidDetailsText.Text = Convert.ToString(reader["PreBidDetails"] == DBNull.Value ? String.Empty : reader["PreBidDetails"]);
                     ScopeOfWorkText.Text = Convert.ToString(reader["ScopeOfWork"] == DBNull.Value ? String.Empty : reader["ScopeOfWork"]);
                     TechnicalRequirementsText.Text = Convert.ToString(reader["TechnicalRequirements"] == DBNull.Value ? String.Empty : reader["TechnicalRequirements"]);
                     FinancialRequirementsText.Text = Convert.ToString(reader["FinancialRequirements"] == DBNull.Value ? String.Empty : reader["FinancialRequirements"]);
@@ -453,7 +463,8 @@ namespace DepartmentModule.Pages
             {
                 UpdateDraftTender(amount, emdAmount, documentFee, processingFee, securityDeposit,
                     subcategoryId, publicationScheduledUtc, submissionStart, submissionDeadline,
-                    technicalOpeningUtc, financialOpeningUtc);
+                    technicalOpeningUtc, financialOpeningUtc,
+                    hasSanctionDate ? (DateTime?)sanctionDate.Date : null, preBidMeetingUtc);
                 return;
             }
 
@@ -517,14 +528,14 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"INSERT INTO dbo.Tender
                             (TenderNumber,TrackingId,Title,Description,EligibilityCriteria,DepartmentId,EstimatedAmount,TenderType,TenderCategory,
-                             TenderSubcategoryId,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,SecurityDepositAmount,
+                             TenderSubcategoryId,TenderSubcategoryCategory,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,SecurityDepositAmount,
                              PublicationScheduledUtc,FinancialBidOpeningScheduledUtc,
                              CurrentStatus,SubmissionStartDate,SubmissionDeadline,CreatedBy,WorkflowVersion,
                              BudgetInformation,TechnicalSanctionNumber,TechnicalSanctionAuthority,TechnicalSanctionDate,
                              PreBidMeetingUtc,PreBidLocation,PreBidDetails,TechnicalBidOpeningScheduledUtc)
                           VALUES
                             (@TenderNumber,@TrackingId,@Title,@Description,@EligibilityCriteria,@DepartmentId,@Amount,@TenderType,@TenderCategory,
-                             @TenderSubcategoryId,@FinancialYear,@EMDAmount,@DocumentFee,@ProcessingFee,@SecurityDeposit,
+                             @TenderSubcategoryId,@TenderSubcategoryCategory,@FinancialYear,@EMDAmount,@DocumentFee,@ProcessingFee,@SecurityDeposit,
                              @PublicationScheduledUtc,@FinancialBidOpeningUtc,
                              N'Draft',@StartDate,@Deadline,@CreatedBy,2,@BudgetInformation,@SanctionNumber,
                              @SanctionAuthority,@SanctionDate,@PreBidMeetingUtc,@PreBidLocation,@PreBidDetails,
@@ -542,6 +553,8 @@ namespace DepartmentModule.Pages
                         AddText(command, "@TenderCategory", SqlDbType.NVarChar, TenderCategorySelect.SelectedValue, 50);
                         ModuleDb.AddParameter(command, "@TenderSubcategoryId", SqlDbType.Int,
                             subcategoryId.HasValue ? (object)subcategoryId.Value : null);
+                        AddText(command, "@TenderSubcategoryCategory", SqlDbType.NVarChar,
+                            subcategoryId.HasValue ? TenderCategorySelect.SelectedValue : null, 50);
                         AddText(command, "@FinancialYear", SqlDbType.NVarChar, FinancialYearSelect.SelectedValue, 9);
                         ModuleDb.AddParameter(command, "@EMDAmount", SqlDbType.Decimal, emdAmount);
                         ModuleDb.AddParameter(command, "@DocumentFee", SqlDbType.Decimal, documentFee);
@@ -810,7 +823,8 @@ namespace DepartmentModule.Pages
         private void UpdateDraftTender(decimal amount, decimal? emdAmount, decimal? documentFee,
             decimal? processingFee, decimal? securityDeposit, int? subcategoryId,
             DateTime? publicationScheduledUtc, DateTime? submissionStart, DateTime? submissionDeadline,
-            DateTime? technicalOpeningUtc, DateTime? financialOpeningUtc)
+            DateTime? technicalOpeningUtc, DateTime? financialOpeningUtc,
+            DateTime? sanctionDate, DateTime? preBidMeetingUtc)
         {
             bool isAdministrator = HasPermission("system.admin") || HasAnyRole("Admin");
             bool isDepartmentOfficer = !isAdministrator &&
@@ -869,11 +883,16 @@ namespace DepartmentModule.Pages
                           SET Title=@Title,Description=@Description,EligibilityCriteria=@EligibilityCriteria,
                               EstimatedAmount=@Amount,TenderType=@TenderType,
                               TenderCategory=@TenderCategory,TenderSubcategoryId=@TenderSubcategoryId,
+                              TenderSubcategoryCategory=@TenderSubcategoryCategory,
                               FinancialYear=@FinancialYear,EMDAmount=@EMDAmount,TenderDocumentFee=@DocumentFee,
                               ProcessingFee=@ProcessingFee,SecurityDepositAmount=@SecurityDeposit,
                               PublicationScheduledUtc=@PublicationScheduledUtc,
                               TechnicalBidOpeningScheduledUtc=@TechnicalBidOpeningUtc,
                               FinancialBidOpeningScheduledUtc=@FinancialBidOpeningUtc,
+                              BudgetInformation=@BudgetInformation,TechnicalSanctionNumber=@SanctionNumber,
+                              TechnicalSanctionAuthority=@SanctionAuthority,TechnicalSanctionDate=@SanctionDate,
+                              PreBidMeetingUtc=@PreBidMeetingUtc,PreBidLocation=@PreBidLocation,
+                              PreBidDetails=@PreBidDetails,
                               SubmissionStartDate=@StartDate,SubmissionDeadline=@Deadline,
                               ModifiedBy=@ModifiedBy,ModifiedDate=SYSUTCDATETIME()
                           FROM dbo.Tender t
@@ -898,6 +917,8 @@ namespace DepartmentModule.Pages
                         AddText(command, "@TenderCategory", SqlDbType.NVarChar, TenderCategorySelect.SelectedValue, 50);
                         ModuleDb.AddParameter(command, "@TenderSubcategoryId", SqlDbType.Int,
                             subcategoryId.HasValue ? (object)subcategoryId.Value : null);
+                        AddText(command, "@TenderSubcategoryCategory", SqlDbType.NVarChar,
+                            subcategoryId.HasValue ? TenderCategorySelect.SelectedValue : null, 50);
                         AddText(command, "@FinancialYear", SqlDbType.NVarChar, FinancialYearSelect.SelectedValue, 9);
                         ModuleDb.AddParameter(command, "@EMDAmount", SqlDbType.Decimal, emdAmount);
                         ModuleDb.AddParameter(command, "@DocumentFee", SqlDbType.Decimal, documentFee);
@@ -909,6 +930,14 @@ namespace DepartmentModule.Pages
                             technicalOpeningUtc.HasValue ? (object)technicalOpeningUtc.Value : null);
                         ModuleDb.AddParameter(command, "@FinancialBidOpeningUtc", SqlDbType.DateTime2,
                             financialOpeningUtc.HasValue ? (object)financialOpeningUtc.Value : null);
+                        AddText(command, "@BudgetInformation", SqlDbType.NVarChar, BudgetInformationText.Text, 2000);
+                        AddText(command, "@SanctionNumber", SqlDbType.NVarChar, TechnicalSanctionNumberText.Text, 100);
+                        AddText(command, "@SanctionAuthority", SqlDbType.NVarChar, TechnicalSanctionAuthorityText.Text, 200);
+                        ModuleDb.AddParameter(command, "@SanctionDate", SqlDbType.Date, sanctionDate.HasValue ? (object)sanctionDate.Value : null);
+                        ModuleDb.AddParameter(command, "@PreBidMeetingUtc", SqlDbType.DateTime2,
+                            preBidMeetingUtc.HasValue ? (object)preBidMeetingUtc.Value : null);
+                        AddText(command, "@PreBidLocation", SqlDbType.NVarChar, PreBidLocationText.Text, 300);
+                        AddText(command, "@PreBidDetails", SqlDbType.NVarChar, PreBidDetailsText.Text, 2000);
                         ModuleDb.AddParameter(command, "@StartDate", SqlDbType.DateTime2,
                             submissionStart.HasValue ? (object)submissionStart.Value : null);
                         ModuleDb.AddParameter(command, "@Deadline", SqlDbType.DateTime2,

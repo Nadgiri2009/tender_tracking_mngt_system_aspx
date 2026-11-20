@@ -24,16 +24,33 @@
         <div class="row">
             <p><strong>Tender Method</strong><br /><asp:Literal ID="TenderType" runat="server" /></p>
             <p><strong>Tender Category</strong><br /><asp:Literal ID="TenderCategory" runat="server" /></p>
+            <p><strong>Tender Subcategory</strong><br /><asp:Literal ID="TenderSubcategory" runat="server" /></p>
+            <p><strong>Financial year</strong><br /><asp:Literal ID="FinancialYear" runat="server" /></p>
             <p><strong>Estimated Cost</strong><br />₹<asp:Literal ID="EstimatedAmount" runat="server" /></p>
+            <p><strong>EMD</strong><br /><asp:Literal ID="EMDAmount" runat="server" /></p>
+            <p><strong>Tender document fee</strong><br /><asp:Literal ID="TenderDocumentFee" runat="server" /></p>
+            <p><strong>Processing fee</strong><br /><asp:Literal ID="ProcessingFee" runat="server" /></p>
+            <p><strong>Security deposit</strong><br /><asp:Literal ID="SecurityDepositAmount" runat="server" /></p>
+            <p><strong>Planned publication</strong><br /><asp:Literal ID="PublicationScheduledDate" runat="server" /></p>
             <p><strong>Publication Date</strong><br /><asp:Literal ID="PublicationDate" runat="server" /></p>
             <p><strong>Approved publication period (IST)</strong><br /><asp:Literal ID="PublicationPeriod" runat="server" /></p>
             <p><strong>Approved extensions</strong><br /><asp:Literal ID="ExtensionCount" runat="server" /></p>
             <p><strong>Submission Start Date</strong><br /><asp:Literal ID="SubmissionStartDate" runat="server" /></p>
             <p><strong>Legacy submission deadline</strong><br /><asp:Literal ID="SubmissionDeadline" runat="server" /></p>
+            <p><strong>Technical bid opening</strong><br /><asp:Literal ID="TechnicalBidOpeningDate" runat="server" /></p>
+            <p><strong>Financial bid opening</strong><br /><asp:Literal ID="FinancialBidOpeningDate" runat="server" /></p>
             <p><strong>Created By</strong><br /><asp:Literal ID="CreatedBy" runat="server" /></p>
             <p><strong>Created Date</strong><br /><asp:Literal ID="CreatedDate" runat="server" /></p>
             <p><strong>Status</strong><br /><span class="badge"><asp:Literal ID="CurrentStatus" runat="server" /></span></p>
         </div>
+    </section>
+    <section class="card">
+        <h2>Tender requirements and conditions</h2>
+        <p><strong>Scope of work</strong><br /><asp:Literal ID="ScopeOfWork" runat="server" /></p>
+        <p><strong>Technical requirements</strong><br /><asp:Literal ID="TechnicalRequirements" runat="server" /></p>
+        <p><strong>Financial requirements</strong><br /><asp:Literal ID="FinancialRequirements" runat="server" /></p>
+        <p><strong>Additional conditions</strong><br /><asp:Literal ID="AdditionalConditions" runat="server" /></p>
+        <p><strong>Terms and conditions</strong><br /><asp:Literal ID="TermsAndConditions" runat="server" /></p>
     </section>
     <asp:Panel ID="ApplicationRequirementsPanel" runat="server" CssClass="card" Visible="false">
         <h2>Application document requirements</h2>
@@ -103,6 +120,19 @@
         </asp:Panel>
     </section>
     <asp:Panel ID="AuthenticatedWorkflowPanel" runat="server">
+        <asp:Panel ID="RevisionHistoryPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Tender revision history</h2>
+            <div class="table-wrap"><asp:GridView ID="RevisionHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                EmptyDataText="No revisions have been recorded.">
+                <Columns>
+                    <asp:BoundField DataField="RevisionNumber" HeaderText="Revision" />
+                    <asp:BoundField DataField="ActionName" HeaderText="Action" />
+                    <asp:BoundField DataField="RevisionReason" HeaderText="Notes" NullDisplayText="—" />
+                    <asp:BoundField DataField="RevisedBy" HeaderText="Changed by" />
+                    <asp:BoundField DataField="RevisedAtUtc" HeaderText="Date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                </Columns>
+            </asp:GridView></div>
+        </asp:Panel>
         <section class="card">
             <h2>Workflow action</h2>
             <asp:Panel ID="BudgetOpinionPanel" runat="server" CssClass="card" Visible="false">

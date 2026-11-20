@@ -18,13 +18,13 @@
                             <asp:RequiredFieldValidator ID="FullNameRequired" runat="server" ControlToValidate="FullNameText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" ErrorMessage="Full name is required." />
                             <asp:CustomValidator ID="FullNameLength" runat="server" ControlToValidate="FullNameText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" OnServerValidate="FullName_ServerValidate" ErrorMessage="Enter a name between 2 and 150 characters." />
                         </div>
-                        <div class="field">
+                        <div class="field auth-register-email">
                             <asp:Label ID="EmailLabel" runat="server" AssociatedControlID="EmailText">Email ID</asp:Label>
                             <asp:TextBox ID="EmailText" runat="server" TextMode="Email" MaxLength="150" autocomplete="email" placeholder="name@example.com" />
                             <asp:RequiredFieldValidator ID="EmailRequired" runat="server" ControlToValidate="EmailText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" ErrorMessage="Email ID is required." />
                             <asp:CustomValidator ID="EmailFormat" runat="server" ControlToValidate="EmailText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" OnServerValidate="Email_ServerValidate" ErrorMessage="Enter a valid email address." />
                         </div>
-                        <div class="field">
+                        <div class="field auth-register-mobile">
                             <asp:Label ID="MobileLabel" runat="server" AssociatedControlID="MobileText">Mobile number</asp:Label>
                             <div class="auth-mobile-input">
                                 <svg class="auth-field-icon" viewBox="0 0 24 24" aria-hidden="true">

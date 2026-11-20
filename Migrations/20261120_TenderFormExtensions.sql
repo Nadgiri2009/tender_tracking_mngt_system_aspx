@@ -34,6 +34,8 @@ IF COL_LENGTH(N'dbo.Tender', N'FinancialYear') IS NULL
     ALTER TABLE dbo.Tender ADD FinancialYear NVARCHAR(9) NULL;
 IF COL_LENGTH(N'dbo.Tender', N'TenderSubcategoryId') IS NULL
     ALTER TABLE dbo.Tender ADD TenderSubcategoryId INT NULL;
+IF COL_LENGTH(N'dbo.Tender', N'TenderSubcategoryCategory') IS NULL
+    ALTER TABLE dbo.Tender ADD TenderSubcategoryCategory NVARCHAR(50) NULL;
 IF COL_LENGTH(N'dbo.Tender', N'EMDAmount') IS NULL
     ALTER TABLE dbo.Tender ADD EMDAmount DECIMAL(18,2) NULL;
 IF COL_LENGTH(N'dbo.Tender', N'TenderDocumentFee') IS NULL
@@ -67,7 +69,7 @@ BEGIN
     CREATE TABLE dbo.TenderSubcategories
     (
         SubcategoryId INT IDENTITY(1,1) NOT NULL,
-        TenderCategory NVARCHAR(100) NOT NULL,
+        TenderCategory NVARCHAR(50) NOT NULL,
         SubcategoryName NVARCHAR(100) NOT NULL,
         SortOrder INT NOT NULL CONSTRAINT DF_TenderSubcategories_SortOrder DEFAULT (0),
         IsActive BIT NOT NULL CONSTRAINT DF_TenderSubcategories_IsActive DEFAULT (1),
@@ -82,19 +84,21 @@ END;
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.Tender') AND name=N'FK_Tender_FinancialYears')
     ALTER TABLE dbo.Tender WITH CHECK ADD CONSTRAINT FK_Tender_FinancialYears
         FOREIGN KEY (FinancialYear) REFERENCES dbo.FinancialYears(FinancialYear);
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.Tender') AND name=N'FK_Tender_TenderSubcategories')
-    ALTER TABLE dbo.Tender WITH CHECK ADD CONSTRAINT FK_Tender_TenderSubcategories
-        FOREIGN KEY (TenderSubcategoryId, TenderCategory)
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.Tender') AND name=N'FK_Tender_TenderSubcategories')
+    ALTER TABLE dbo.Tender DROP CONSTRAINT FK_Tender_TenderSubcategories;
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.Tender') AND name=N'FK_Tender_TenderSubcategoryCategory')
+    ALTER TABLE dbo.Tender WITH CHECK ADD CONSTRAINT FK_Tender_TenderSubcategoryCategory
+        FOREIGN KEY (TenderSubcategoryId, TenderSubcategoryCategory)
         REFERENCES dbo.TenderSubcategories(SubcategoryId, TenderCategory);
 
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.Tender') AND name=N'CK_Tender_Fees_NonNegative')
-    ALTER TABLE dbo.Tender WITH CHECK ADD CONSTRAINT CK_Tender_Fees_NonNegative CHECK
+    EXEC sys.sp_executesql N'ALTER TABLE dbo.Tender WITH CHECK ADD CONSTRAINT CK_Tender_Fees_NonNegative CHECK
     (
         (EMDAmount IS NULL OR EMDAmount >= 0) AND
         (TenderDocumentFee IS NULL OR TenderDocumentFee >= 0) AND
         (ProcessingFee IS NULL OR ProcessingFee >= 0) AND
         (SecurityDepositAmount IS NULL OR SecurityDepositAmount >= 0)
-    );
+    );';
 
 IF OBJECT_ID(N'dbo.TenderRequirements', N'U') IS NULL
 BEGIN
@@ -159,6 +163,29 @@ BEGIN
         CONSTRAINT FK_TenderRevisions_RevisedBy FOREIGN KEY (RevisedBy) REFERENCES dbo.Users(UserId)
     );
 END;
+
+EXEC sys.sp_executesql N'
+INSERT INTO dbo.TenderRevisions
+    (TenderId,RevisionNumber,ActionName,RevisionReason,TenderNumber,Title,Description,
+     EligibilityCriteria,DepartmentId,EstimatedAmount,TenderType,TenderCategory,
+     TenderSubcategoryId,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,
+     SecurityDepositAmount,PublicationScheduledUtc,SubmissionStartDate,SubmissionDeadline,
+     TechnicalBidOpeningScheduledUtc,FinancialBidOpeningScheduledUtc,CurrentStatus,
+     ScopeOfWork,TechnicalRequirements,FinancialRequirements,AdditionalConditions,
+     TermsAndConditions,RevisedBy)
+SELECT t.TenderId,1,N''Schema baseline'',N''Initial snapshot recorded during tender form schema upgrade.'',
+       t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,t.DepartmentId,t.EstimatedAmount,
+       t.TenderType,t.TenderCategory,t.TenderSubcategoryId,t.FinancialYear,t.EMDAmount,
+       t.TenderDocumentFee,t.ProcessingFee,t.SecurityDepositAmount,t.PublicationScheduledUtc,
+       t.SubmissionStartDate,t.SubmissionDeadline,t.TechnicalBidOpeningScheduledUtc,
+       t.FinancialBidOpeningScheduledUtc,t.CurrentStatus,req.ScopeOfWork,req.TechnicalRequirements,
+       req.FinancialRequirements,req.AdditionalConditions,req.TermsAndConditions,t.CreatedBy
+FROM dbo.Tender t
+LEFT JOIN dbo.TenderRequirements req ON req.TenderId=t.TenderId
+WHERE NOT EXISTS
+(
+    SELECT 1 FROM dbo.TenderRevisions existingRevision WHERE existingRevision.TenderId=t.TenderId
+);';
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.TenderDocuments') AND name=N'IX_TenderDocuments_TenderId')
     CREATE INDEX IX_TenderDocuments_TenderId ON dbo.TenderDocuments(TenderId, UploadedDate);

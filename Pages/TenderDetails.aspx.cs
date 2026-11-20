@@ -18,14 +18,18 @@ namespace DepartmentModule.Pages
         }
 
         protected Literal PageTitle, TenderTitle, TenderNumber, DepartmentName, Description, EligibilityCriteria,
-            TenderType, TenderCategory, EstimatedAmount;
+            TenderType, TenderCategory, EstimatedAmount, TenderSubcategory, FinancialYear,
+            EMDAmount, TenderDocumentFee, ProcessingFee, SecurityDepositAmount;
         protected Literal PublicationDate, SubmissionStartDate, SubmissionDeadline, CreatedBy, CreatedDate,
-            CurrentStatus, Message, ApplicationMessage, PublicationPeriod, ExtensionCount;
-        protected GridView BoqGrid, DocumentsGrid, HistoryGrid, ApplicationRequirementsGrid;
+            CurrentStatus, Message, ApplicationMessage, PublicationPeriod, ExtensionCount,
+            PublicationScheduledDate, TechnicalBidOpeningDate, FinancialBidOpeningDate,
+            ScopeOfWork, TechnicalRequirements, FinancialRequirements, AdditionalConditions, TermsAndConditions;
+        protected GridView BoqGrid, DocumentsGrid, HistoryGrid, ApplicationRequirementsGrid, RevisionHistoryGrid;
         protected GridView BudgetOpinionsGrid;
         protected Panel AddBoqPanel, UploadPanel, AuthenticatedWorkflowPanel, EligibilityCriteriaPanel,
             ApplicationRequirementsPanel;
         protected Panel BudgetOpinionPanel, BudgetOpinionHistoryPanel;
+        protected Panel RevisionHistoryPanel;
         protected DropDownList DocumentTypeSelect;
         protected TextBox ItemName, ItemDescription, Quantity, Unit, Rate, Remarks;
         protected TextBox ApprovedBudgetAmount;
@@ -63,6 +67,11 @@ namespace DepartmentModule.Pages
                     if (!IsPostBack) BindDocumentTypes(connection);
                     using (SqlCommand command = new SqlCommand(
                         @"SELECT t.TenderId,t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,t.TenderType,t.TenderCategory,t.EstimatedAmount,t.CurrentStatus,
+                                 t.TenderSubcategoryId,sub.SubcategoryName,t.FinancialYear,
+                                 t.EMDAmount,t.TenderDocumentFee,t.ProcessingFee,t.SecurityDepositAmount,
+                                 t.PublicationScheduledUtc,t.TechnicalBidOpeningScheduledUtc,t.FinancialBidOpeningScheduledUtc,
+                                 req.ScopeOfWork,req.TechnicalRequirements,req.FinancialRequirements,
+                                 req.AdditionalConditions,req.TermsAndConditions,
                                  t.WorkflowVersion,t.DepartmentId,
                                  CAST(CASE WHEN t.CurrentStatus=N'Draft' AND
                                      (t.WorkflowVersion=1 OR
@@ -85,6 +94,8 @@ namespace DepartmentModule.Pages
                                       ELSE CAST(0 AS bit) END AS IsBidWindowOpen
                           FROM dbo.Tender t INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
                           INNER JOIN dbo.Users u ON u.UserId=t.CreatedBy
+                          LEFT JOIN dbo.TenderSubcategories sub ON sub.SubcategoryId=t.TenderSubcategoryId
+                          LEFT JOIN dbo.TenderRequirements req ON req.TenderId=t.TenderId
                           LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
                           WHERE t.TenderId=@TenderId AND t.IsDeleted=0
                             AND
@@ -141,15 +152,29 @@ namespace DepartmentModule.Pages
                                 !String.IsNullOrWhiteSpace(Convert.ToString(reader["EligibilityCriteria"]));
                             TenderType.Text = ModuleDb.Html(reader["TenderType"]);
                             TenderCategory.Text = ModuleDb.Html(reader["TenderCategory"]);
+                            TenderSubcategory.Text = ModuleDb.Html(reader["SubcategoryName"]);
+                            FinancialYear.Text = ModuleDb.Html(reader["FinancialYear"]);
                             EstimatedAmount.Text = Convert.ToDecimal(reader["EstimatedAmount"]).ToString("N2", CultureInfo.CurrentCulture);
+                            EMDAmount.Text = FormatMoney(reader["EMDAmount"]);
+                            TenderDocumentFee.Text = FormatMoney(reader["TenderDocumentFee"]);
+                            ProcessingFee.Text = FormatMoney(reader["ProcessingFee"]);
+                            SecurityDepositAmount.Text = FormatMoney(reader["SecurityDepositAmount"]);
+                            PublicationScheduledDate.Text = FormatIndiaDate(reader["PublicationScheduledUtc"]);
+                            TechnicalBidOpeningDate.Text = FormatIndiaDate(reader["TechnicalBidOpeningScheduledUtc"]);
+                            FinancialBidOpeningDate.Text = FormatIndiaDate(reader["FinancialBidOpeningScheduledUtc"]);
+                            ScopeOfWork.Text = ModuleDb.Html(reader["ScopeOfWork"]);
+                            TechnicalRequirements.Text = ModuleDb.Html(reader["TechnicalRequirements"]);
+                            FinancialRequirements.Text = ModuleDb.Html(reader["FinancialRequirements"]);
+                            AdditionalConditions.Text = ModuleDb.Html(reader["AdditionalConditions"]);
+                            TermsAndConditions.Text = ModuleDb.Html(reader["TermsAndConditions"]);
                             TenderStatus = Convert.ToString(reader["CurrentStatus"]);
                             IsFinalWorkflow = Convert.ToInt16(reader["WorkflowVersion"]) == 2;
                             IsEditableDraft = Convert.ToBoolean(reader["IsEditableDraft"]);
                             TenderDepartmentId = Convert.ToInt32(reader["DepartmentId"]);
                             CurrentStatus.Text = ModuleDb.Html(TenderStatus);
-                            PublicationDate.Text = reader["PublicationDate"] == DBNull.Value ? "—" : Convert.ToDateTime(reader["PublicationDate"]).ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
-                            SubmissionStartDate.Text = reader["SubmissionStartDate"] == DBNull.Value ? "—" : Convert.ToDateTime(reader["SubmissionStartDate"]).ToString("dd MMM yyyy HH:mm", CultureInfo.CurrentCulture);
-                            SubmissionDeadline.Text = reader["SubmissionDeadline"] == DBNull.Value ? "—" : Convert.ToDateTime(reader["SubmissionDeadline"]).ToString("dd MMM yyyy HH:mm", CultureInfo.CurrentCulture);
+                            PublicationDate.Text = reader["PublicationDate"] == DBNull.Value ? "—" : FormatIndiaDate(reader["PublicationDate"]);
+                            SubmissionStartDate.Text = FormatIndiaDate(reader["SubmissionStartDate"]);
+                            SubmissionDeadline.Text = FormatIndiaDate(reader["SubmissionDeadline"]);
                             PublicationPeriod.Text = reader["PublicationStartUtc"] == DBNull.Value
                                 ? "Not configured"
                                 : HttpUtility.HtmlEncode(TenderLifecycleFiles.FormatIndiaDateTime(reader["PublicationStartUtc"])) +
@@ -169,6 +194,7 @@ namespace DepartmentModule.Pages
                     ? "~/Pages/Home.aspx#published-tenders"
                     : "~/Pages/Tenders.aspx";
                 AuthenticatedWorkflowPanel.Visible = CurrentUserId > 0;
+                RevisionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
                 FinalWorkflowLink.Visible = IsFinalWorkflow && CurrentUserId > 0 &&
                     (HasPermission("tenders.monitor") || HasPermission("tender.create.department") ||
                      HasPermission("tender.cell.verify") || HasPermission("shortfall.respond.own") ||
@@ -260,6 +286,10 @@ namespace DepartmentModule.Pages
                 @"SELECT h.ApprovalStage,h.PreviousStatus,h.NewStatus,h.Status,h.RoleAtAction,h.Remarks,h.ApprovalDate,u.FullName AS ActionTakenBy
                   FROM dbo.ApprovalHistory h INNER JOIN dbo.Users u ON u.UserId=h.ApprovedBy
                   WHERE h.TenderId=@TenderId ORDER BY h.ApprovalDate;");
+            BindGrid(connection, RevisionHistoryGrid,
+                @"SELECT r.RevisionNumber,r.ActionName,r.RevisionReason,r.RevisedAtUtc,u.FullName AS RevisedBy
+                  FROM dbo.TenderRevisions r INNER JOIN dbo.Users u ON u.UserId=r.RevisedBy
+                  WHERE r.TenderId=@TenderId ORDER BY r.RevisionNumber DESC;");
             BindGrid(connection, BudgetOpinionsGrid,
                 @"SELECT o.Opinion,o.ApprovedAmount,o.OpinionAtUtc,o.Remarks,u.FullName AS ActionTakenBy
                   FROM dbo.TenderBudgetOpinions o INNER JOIN dbo.Users u ON u.UserId=o.ApprovedBy
@@ -272,6 +302,20 @@ namespace DepartmentModule.Pages
                     @"SELECT DocumentType,Description,IsMandatory,AllowedExtensions,MaxFileSizeBytes
                       FROM dbo.TenderRequiredBidDocuments WHERE TenderId=@TenderId ORDER BY DocumentType;");
             }
+        }
+
+        private static string FormatMoney(object value)
+        {
+            return value == null || value == DBNull.Value
+                ? "—"
+                : "₹" + Convert.ToDecimal(value, CultureInfo.InvariantCulture).ToString("N2", CultureInfo.CurrentCulture);
+        }
+
+        private static string FormatIndiaDate(object value)
+        {
+            return value == null || value == DBNull.Value
+                ? "—"
+                : HttpUtility.HtmlEncode(TenderLifecycleFiles.FormatIndiaDateTime(value)) + " IST";
         }
 
         private void BindGrid(SqlConnection connection, GridView grid, string sql)
