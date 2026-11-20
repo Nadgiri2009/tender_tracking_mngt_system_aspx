@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Web;
 using System.Web.SessionState;
+using System.Text.RegularExpressions;
 
 namespace DepartmentModule.Helpers
 {
@@ -113,22 +114,22 @@ namespace DepartmentModule.Helpers
 
         public static bool IsValidLoginMobile(string mobile)
         {
-            if (IsValidIndianMobile(mobile)) return true;
+            return IsValidIndianMobile(mobile);
+        }
 
-            HttpContext context = HttpContext.Current;
-            string configuredMode = GetSetting("OtpDeliveryMode")
-                ?? GetSetting("LoginOtpDeliveryMode")
-                ?? "Auto";
-            if (context == null || context.Request == null || !context.Request.IsLocal ||
-                !String.Equals(configuredMode, "Console", StringComparison.OrdinalIgnoreCase) ||
-                mobile == null || mobile.Length != 10)
-                return false;
+        public static int GetOtpLifetimeMinutes()
+        {
+            string configuredValue = GetSetting("OtpLifetimeMinutes");
+            if (String.IsNullOrWhiteSpace(configuredValue)) return 5;
 
-            for (int i = 0; i < mobile.Length; i++)
-            {
-                if (mobile[i] < '0' || mobile[i] > '9') return false;
-            }
-            return true;
+            int lifetimeMinutes;
+            if (Int32.TryParse(configuredValue, out lifetimeMinutes) &&
+                lifetimeMinutes >= 1 && lifetimeMinutes <= 15)
+                return lifetimeMinutes;
+
+            System.Diagnostics.Trace.TraceWarning(
+                "DepartmentModule: OtpLifetimeMinutes must be between 1 and 15; using the 5-minute default.");
+            return 5;
         }
 
         public static string CreateCode()
@@ -196,43 +197,16 @@ namespace DepartmentModule.Helpers
             return difference == 0;
         }
 
-        public static bool TryDeliver(string purpose, string code, string mobile,
-            out string deliveryMode, out string developmentCode)
+        public static bool TryDeliver(string purpose, string code, string mobile)
         {
-            developmentCode = String.Empty;
-            string configuredMode = GetSetting("OtpDeliveryMode")
-                ?? GetSetting("LoginOtpDeliveryMode")
-                ?? "Auto";
-
-            bool smsConfigured = HasSmsConfiguration();
-            if (String.Equals(configuredMode, "Sms", StringComparison.OrdinalIgnoreCase) ||
-                (String.Equals(configuredMode, "Auto", StringComparison.OrdinalIgnoreCase) && smsConfigured))
+            if (!HasSmsConfiguration())
             {
-                deliveryMode = "Sms";
-                if (!smsConfigured)
-                {
-                    System.Diagnostics.Trace.TraceWarning(
-                        "DepartmentModule: SMS OTP delivery was selected but required gateway settings are missing.");
-                    return false;
-                }
-                return TrySendSms(purpose, code, mobile);
+                System.Diagnostics.Trace.TraceWarning(
+                    "DepartmentModule: SMS OTP delivery is unavailable because required gateway settings are missing.");
+                return false;
             }
 
-            if (String.Equals(configuredMode, "Console", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(configuredMode, "Auto", StringComparison.OrdinalIgnoreCase))
-            {
-                deliveryMode = "Console";
-                bool delivered = WriteToDevelopmentOtpLog(purpose, code);
-                if (delivered && HttpContext.Current != null &&
-                    HttpContext.Current.Request != null && HttpContext.Current.Request.IsLocal)
-                    developmentCode = code;
-                return delivered;
-            }
-
-            deliveryMode = String.Empty;
-            System.Diagnostics.Trace.TraceWarning(
-                "DepartmentModule: OTP delivery mode is invalid. Use Auto, Sms, or Console.");
-            return false;
+            return TrySendSms(purpose, code, mobile);
         }
 
         private static bool HasSmsConfiguration()
@@ -243,11 +217,19 @@ namespace DepartmentModule.Helpers
                 !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayPassword")) &&
                 !String.IsNullOrWhiteSpace(GetSetting("SmsGatewaySender")) &&
                 !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayDltTemplateId")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsOtpMessageTemplate"));
+                !String.IsNullOrWhiteSpace(GetSetting("SmsOtpMessageTemplate")) &&
+                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewaySuccessResponsePattern"));
         }
 
         private static bool TrySendSms(string purpose, string code, string mobile)
         {
+            if (String.IsNullOrWhiteSpace(code) || code.Length != 6)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "DepartmentModule: SMS OTP delivery was refused because the OTP format is invalid.");
+                return false;
+            }
+
             string configuredUrl = GetSetting("SmsGatewayUrl");
             Uri endpoint;
             if (!Uri.TryCreate(configuredUrl, UriKind.Absolute, out endpoint) ||
@@ -269,6 +251,21 @@ namespace DepartmentModule.Helpers
             {
                 System.Diagnostics.Trace.TraceWarning(
                     "DepartmentModule: SMS OTP delivery was refused because the recipient number is invalid.");
+                return false;
+            }
+
+            Regex successResponsePattern;
+            try
+            {
+                successResponsePattern = new Regex(
+                    GetSetting("SmsGatewaySuccessResponsePattern"),
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                    TimeSpan.FromSeconds(1));
+            }
+            catch (ArgumentException)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "DepartmentModule: SMS gateway success response pattern is invalid.");
                 return false;
             }
 
@@ -303,6 +300,36 @@ namespace DepartmentModule.Helpers
                             (int)response.StatusCode);
                         return false;
                     }
+
+                    using (Stream responseStream = response.GetResponseStream())
+                    using (StreamReader responseReader = new StreamReader(responseStream))
+                    {
+                        char[] responseBuffer = new char[4096];
+                        int responseLength = responseReader.Read(responseBuffer, 0, responseBuffer.Length);
+                        if (responseLength == 0)
+                        {
+                            System.Diagnostics.Trace.TraceWarning(
+                                "DepartmentModule: SMS gateway returned an empty acknowledgement.");
+                            return false;
+                        }
+
+                        string responseBody = new string(responseBuffer, 0, responseLength);
+                        try
+                        {
+                            if (!successResponsePattern.IsMatch(responseBody))
+                            {
+                                System.Diagnostics.Trace.TraceWarning(
+                                    "DepartmentModule: SMS gateway response did not match the configured success acknowledgement.");
+                                return false;
+                            }
+                        }
+                        catch (RegexMatchTimeoutException)
+                        {
+                            System.Diagnostics.Trace.TraceWarning(
+                                "DepartmentModule: SMS gateway success response pattern timed out.");
+                            return false;
+                        }
+                    }
                 }
                 return true;
             }
@@ -317,39 +344,6 @@ namespace DepartmentModule.Helpers
             {
                 System.Diagnostics.Trace.TraceWarning(
                     "DepartmentModule: SMS gateway response could not be read: {0}",
-                    ex.GetType().Name);
-                return false;
-            }
-        }
-
-        private static bool WriteToDevelopmentOtpLog(string purpose, string code)
-        {
-            HttpContext context = HttpContext.Current;
-            if (context == null || context.Request == null || !context.Request.IsLocal)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    "DepartmentModule: Development OTP output is restricted to local requests.");
-                return false;
-            }
-
-            try
-            {
-                string output = "[DepartmentModule] Development " + purpose + " OTP: " + code;
-                string logPath = Path.Combine(Path.GetTempPath(), "TenderManagement-DevelopmentOtp.log");
-                File.AppendAllText(logPath, output + Environment.NewLine, new UTF8Encoding(false));
-                return true;
-            }
-            catch (IOException ex)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    "DepartmentModule: Development OTP could not be written to the local OTP log: {0}",
-                    ex.GetType().Name);
-                return false;
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    "DepartmentModule: Development OTP could not be written to the local OTP log: {0}",
                     ex.GetType().Name);
                 return false;
             }
