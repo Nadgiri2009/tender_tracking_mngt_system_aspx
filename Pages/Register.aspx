@@ -41,6 +41,29 @@
                                 <span>Mobile number verified</span>
                                 <asp:Button ID="ChangeMobileButton" runat="server" Text="Change number" CssClass="button secondary auth-change-mobile" CausesValidation="false" OnClick="ChangeMobileButton_Click" />
                             </asp:Panel>
+                            <asp:Panel ID="OtpPanel" runat="server" Visible="false" CssClass="auth-otp-panel">
+                                <div class="field">
+                                    <asp:Label ID="OtpLabel" runat="server" AssociatedControlID="OtpText">Mobile verification code</asp:Label>
+                                    <div class="auth-mobile-input">
+                                        <svg class="auth-field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <rect x="4" y="10" width="16" height="11" rx="2" />
+                                            <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
+                                        </svg>
+                                        <asp:TextBox ID="OtpText" runat="server" MaxLength="6" autocomplete="one-time-code" inputmode="numeric" placeholder="6-digit OTP" />
+                                    </div>
+                                    <asp:RequiredFieldValidator ID="OtpRequired" runat="server" ControlToValidate="OtpText" ValidationGroup="OtpVerification" CssClass="validation" Display="Dynamic" ErrorMessage="OTP is required." />
+                                    <asp:RegularExpressionValidator ID="OtpFormat" runat="server" ControlToValidate="OtpText" ValidationGroup="OtpVerification" CssClass="validation" Display="Dynamic" ValidationExpression="^[0-9]{6}$" ErrorMessage="Enter the six-digit OTP." />
+                                </div>
+                                <asp:Button ID="VerifyOtpButton" runat="server" Text="Verify mobile number" CssClass="button auth-submit"
+                                    ValidationGroup="OtpVerification" UseSubmitBehavior="false"
+                                    OnClientClick="if (!beginRegistrationSubmission(this, 'Verifying mobile number...', 'OtpVerification')) return false;"
+                                    OnClick="VerifyOtpButton_Click" />
+                            </asp:Panel>
+                            <asp:Button ID="RequestOtpButton" runat="server" Text="Send verification OTP" CssClass="button auth-submit auth-otp-request"
+                                CausesValidation="false" UseSubmitBehavior="false"
+                                OnClientClick="if (!requestRegistrationOtp(this)) return false;"
+                                OnClick="RequestOtpButton_Click" />
+                            <span id="RegistrationOtpCooldown" class="auth-countdown" role="status" aria-live="polite"></span>
                         </div>
                     </section>
 
@@ -77,7 +100,7 @@
                             <asp:RequiredFieldValidator ID="CompanyEmailRequired" runat="server" ControlToValidate="CompanyEmailText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" ErrorMessage="Company email ID is required." />
                             <asp:CustomValidator ID="CompanyEmailFormat" runat="server" ControlToValidate="CompanyEmailText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" OnServerValidate="CompanyEmail_ServerValidate" ErrorMessage="Enter a valid company email address." />
                         </div>
-                        <div class="field">
+                        <div class="field auth-field-full">
                             <asp:Label ID="CompanyAddressLabel" runat="server" AssociatedControlID="CompanyAddressText">Company address</asp:Label>
                             <asp:TextBox ID="CompanyAddressText" runat="server" MaxLength="300" autocomplete="street-address" />
                             <asp:RequiredFieldValidator ID="CompanyAddressRequired" runat="server" ControlToValidate="CompanyAddressText" ValidationGroup="Registration" CssClass="validation" Display="Dynamic" ErrorMessage="Company address is required." />
@@ -134,30 +157,6 @@
                     </section>
                 </div>
 
-                <asp:Panel ID="OtpPanel" runat="server" Visible="false" CssClass="auth-otp-panel">
-                    <div class="field">
-                        <asp:Label ID="OtpLabel" runat="server" AssociatedControlID="OtpText">Mobile verification code</asp:Label>
-                        <div class="auth-mobile-input">
-                            <svg class="auth-field-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <rect x="4" y="10" width="16" height="11" rx="2" />
-                                <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
-                            </svg>
-                            <asp:TextBox ID="OtpText" runat="server" MaxLength="6" autocomplete="one-time-code" inputmode="numeric" placeholder="6-digit OTP" />
-                        </div>
-                        <asp:RequiredFieldValidator ID="OtpRequired" runat="server" ControlToValidate="OtpText" ValidationGroup="OtpVerification" CssClass="validation" Display="Dynamic" ErrorMessage="OTP is required." />
-                        <asp:RegularExpressionValidator ID="OtpFormat" runat="server" ControlToValidate="OtpText" ValidationGroup="OtpVerification" CssClass="validation" Display="Dynamic" ValidationExpression="^[0-9]{6}$" ErrorMessage="Enter the six-digit OTP." />
-                    </div>
-                    <asp:Button ID="VerifyOtpButton" runat="server" Text="Verify mobile number" CssClass="button auth-submit"
-                        ValidationGroup="OtpVerification" UseSubmitBehavior="false"
-                    OnClientClick="if (!beginRegistrationSubmission(this, 'Verifying mobile number...', 'OtpVerification')) return false;"
-                        OnClick="VerifyOtpButton_Click" />
-                </asp:Panel>
-
-                <asp:Button ID="RequestOtpButton" runat="server" Text="Send verification OTP" CssClass="button auth-submit"
-                    CausesValidation="false" UseSubmitBehavior="false"
-                    OnClientClick="if (!requestRegistrationOtp(this)) return false;"
-                    OnClick="RequestOtpButton_Click" />
-                <span id="RegistrationOtpCooldown" class="auth-countdown" role="status" aria-live="polite"></span>
                 <span id="RegistrationProcessing" class="auth-loading" role="status" aria-live="polite" hidden="hidden"></span>
                 <asp:Button ID="CreateAccountButton" runat="server" Text="Create contractor account" CssClass="button auth-submit"
                     Visible="false" ValidationGroup="Registration" UseSubmitBehavior="false"

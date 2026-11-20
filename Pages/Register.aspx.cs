@@ -341,16 +341,18 @@ namespace DepartmentModule.Pages
                     }
 
                     int contractorId;
+                    string registrationNo = "CTR-" + Guid.NewGuid().ToString("N").ToUpperInvariant();
                     using (SqlCommand insertCommand = new SqlCommand(
                         @"INSERT INTO dbo.Contractors
                               (Name,RegistrationNo,Address,ContactNo,Email,UserId,IsActive,CreatedDate,
                                ContactPersonName,City,State,PinCode,GSTNumber,PANNumber,CompanyType)
                           OUTPUT INSERTED.ContractorId
-                          VALUES (@CompanyName,NULL,@Address,@ContactNo,@CompanyEmail,@UserId,1,SYSUTCDATETIME(),
+                          VALUES (@CompanyName,@RegistrationNo,@Address,@ContactNo,@CompanyEmail,@UserId,1,SYSUTCDATETIME(),
                                   @ContactPersonName,@City,@State,@PinCode,@GSTNumber,@PANNumber,@CompanyType);",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(insertCommand, "@CompanyName", SqlDbType.NVarChar, companyName, 150);
+                        ModuleDb.AddParameter(insertCommand, "@RegistrationNo", SqlDbType.NVarChar, registrationNo, 100);
                         ModuleDb.AddParameter(insertCommand, "@Address", SqlDbType.NVarChar, address, 300);
                         ModuleDb.AddParameter(insertCommand, "@ContactNo", SqlDbType.NVarChar, companyMobile, 20);
                         ModuleDb.AddParameter(insertCommand, "@CompanyEmail", SqlDbType.NVarChar, companyEmail, 150);
