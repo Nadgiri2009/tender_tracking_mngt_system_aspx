@@ -211,14 +211,14 @@ namespace DepartmentModule.Helpers
 
         private static bool HasSmsConfiguration()
         {
-            return !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayUrl")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayAppId")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayUserId")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayPassword")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewaySender")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewayDltTemplateId")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsOtpMessageTemplate")) &&
-                !String.IsNullOrWhiteSpace(GetSetting("SmsGatewaySuccessResponsePattern"));
+            return !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayUrl")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayAppId")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayUserId")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayPassword")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewaySender")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayDltTemplateId")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsOtpMessageTemplate")) &&
+                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewaySuccessResponsePattern"));
         }
 
         private static bool TrySendSms(string purpose, string code, string mobile)
@@ -230,17 +230,19 @@ namespace DepartmentModule.Helpers
                 return false;
             }
 
-            string configuredUrl = GetSetting("SmsGatewayUrl");
+            string configuredUrl = GetSmsSetting("SmsGatewayUrl");
             Uri endpoint;
             if (!Uri.TryCreate(configuredUrl, UriKind.Absolute, out endpoint) ||
-                !String.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                !String.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+                !String.IsNullOrEmpty(endpoint.Query) ||
+                !String.IsNullOrEmpty(endpoint.Fragment))
             {
                 System.Diagnostics.Trace.TraceWarning(
-                    "DepartmentModule: SMS OTP delivery requires a valid HTTPS gateway URL.");
+                    "DepartmentModule: SMS OTP delivery requires a valid HTTPS gateway URL without query parameters or fragments.");
                 return false;
             }
 
-            string message = GetSetting("SmsOtpMessageTemplate")
+            string message = GetSmsSetting("SmsOtpMessageTemplate")
                 .Replace("{OTP}", code)
                 .Replace("{PURPOSE}", purpose);
             string recipient = NormalizeMobile(mobile);
@@ -258,7 +260,7 @@ namespace DepartmentModule.Helpers
             try
             {
                 successResponsePattern = new Regex(
-                    GetSetting("SmsGatewaySuccessResponsePattern"),
+                    GetSmsSetting("SmsGatewaySuccessResponsePattern"),
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
                     TimeSpan.FromSeconds(1));
             }
@@ -269,27 +271,33 @@ namespace DepartmentModule.Helpers
                 return false;
             }
 
-            NameValueCollection query = HttpUtility.ParseQueryString(endpoint.Query);
-            query["appid"] = GetSetting("SmsGatewayAppId");
-            query["userId"] = GetSetting("SmsGatewayUserId");
-            query["pass"] = GetSetting("SmsGatewayPassword");
-            query["contenttype"] = "1";
-            query["from"] = GetSetting("SmsGatewaySender");
-            query["to"] = "91" + localMobile;
-            query["text"] = message;
-            query["alert"] = "1";
-            query["selfid"] = "true";
-            query["dlrreq"] = "true";
-            query["dtm"] = GetSetting("SmsGatewayDltTemplateId");
-            endpoint = new UriBuilder(endpoint) { Query = query.ToString() }.Uri;
+            NameValueCollection form = HttpUtility.ParseQueryString(String.Empty);
+            form["appid"] = GetSmsSetting("SmsGatewayAppId");
+            form["userId"] = GetSmsSetting("SmsGatewayUserId");
+            form["pass"] = GetSmsSetting("SmsGatewayPassword");
+            form["contenttype"] = "1";
+            form["from"] = GetSmsSetting("SmsGatewaySender");
+            form["to"] = "91" + localMobile;
+            form["text"] = message;
+            form["alert"] = "1";
+            form["selfid"] = "true";
+            form["dlrreq"] = "true";
+            form["dtm"] = GetSmsSetting("SmsGatewayDltTemplateId");
+            byte[] requestBody = Encoding.UTF8.GetBytes(form.ToString());
 
             try
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(endpoint);
-                request.Method = "GET";
+                request.Method = "POST";
+                request.ContentType = "application/x-www-form-urlencoded; charset=utf-8";
+                request.ContentLength = requestBody.Length;
                 request.Timeout = 15000;
                 request.ReadWriteTimeout = 15000;
                 request.AllowAutoRedirect = false;
+                using (Stream requestStream = request.GetRequestStream())
+                {
+                    requestStream.Write(requestBody, 0, requestBody.Length);
+                }
 
                 using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                 {
@@ -353,6 +361,11 @@ namespace DepartmentModule.Helpers
         {
             string environmentValue = Environment.GetEnvironmentVariable("SMC_" + key);
             return environmentValue ?? ConfigurationManager.AppSettings[key];
+        }
+
+        private static string GetSmsSetting(string key)
+        {
+            return Environment.GetEnvironmentVariable("SMC_" + key);
         }
     }
 }
