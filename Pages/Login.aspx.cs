@@ -42,7 +42,6 @@ namespace DepartmentModule.Pages
             RegisterLink.NavigateUrl = ResolveUrl("~/Pages/Register.aspx" +
                 (applyTenderId > 0 ? "?applyTenderId=" + applyTenderId.ToString() : String.Empty));
         }
-
         protected void Mobile_ServerValidate(object source, ServerValidateEventArgs args)
         {
             args.IsValid = OtpChallenge.IsValidLoginMobile(args.Value);
@@ -138,6 +137,7 @@ namespace DepartmentModule.Pages
                     OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", now)
                         .ToString(CultureInfo.InvariantCulture);
                 Message.Text = "<div class=\"message success\">The OTP request was submitted to the SMS gateway. Check your registered mobile number; delivery may take a short time.</div>";
+
             }
             catch (SqlException ex)
             {

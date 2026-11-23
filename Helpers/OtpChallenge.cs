@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Configuration;
 using System.IO;
@@ -16,6 +17,17 @@ namespace DepartmentModule.Helpers
         private const int MaxRequestsPerWindow = 3;
         private static readonly TimeSpan RequestWindow = TimeSpan.FromMinutes(15);
         private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(30);
+        private static readonly string[] RequiredSmsSettings =
+        {
+            "SmsGatewayUrl",
+            "SmsGatewayAppId",
+            "SmsGatewayUserId",
+            "SmsGatewayPassword",
+            "SmsGatewaySender",
+            "SmsGatewayDltTemplateId",
+            "SmsOtpMessageTemplate",
+            "SmsGatewaySuccessResponsePattern"
+        };
         public const string NormalizedMobileSql =
             "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(u.Mobile,N''),N'+',N''),N' ',N''),N'-',N''),N'(',N''),N')',N''),N'.',N'')";
         public const string IndianMobileMatchSql =
@@ -199,26 +211,22 @@ namespace DepartmentModule.Helpers
 
         public static bool TryDeliver(string purpose, string code, string mobile)
         {
-            if (!HasSmsConfiguration())
+            List<string> missingSettings = new List<string>();
+            foreach (string setting in RequiredSmsSettings)
+            {
+                if (String.IsNullOrWhiteSpace(GetSmsSetting(setting)))
+                    missingSettings.Add("SMC_" + setting);
+            }
+
+            if (missingSettings.Count > 0)
             {
                 System.Diagnostics.Trace.TraceWarning(
-                    "DepartmentModule: SMS OTP delivery is unavailable because required gateway settings are missing.");
+                    "DepartmentModule: SMS OTP delivery is unavailable because these environment variables are missing: {0}.",
+                    String.Join(", ", missingSettings));
                 return false;
             }
 
             return TrySendSms(purpose, code, mobile);
-        }
-
-        private static bool HasSmsConfiguration()
-        {
-            return !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayUrl")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayAppId")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayUserId")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayPassword")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewaySender")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewayDltTemplateId")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsOtpMessageTemplate")) &&
-                !String.IsNullOrWhiteSpace(GetSmsSetting("SmsGatewaySuccessResponsePattern"));
         }
 
         private static bool TrySendSms(string purpose, string code, string mobile)
