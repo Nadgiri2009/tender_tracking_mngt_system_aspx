@@ -7,7 +7,7 @@
         <h2>Tender overview</h2>
         <div class="cards dashboard-statistics admin-dashboard-statistics" aria-label="Tender overview">
             <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx") %>"><span class="muted">Total tenders</span><strong><asp:Literal ID="TotalTenders" runat="server" /></strong></a>
-            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?status=Draft") %>"><span class="muted">Draft tenders</span><strong><asp:Literal ID="DraftTenders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Draft") %>"><span class="muted">Draft tenders</span><strong><asp:Literal ID="DraftTenders" runat="server" /></strong></a>
             <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Published") %>"><span class="muted">Published tenders</span><strong><asp:Literal ID="PublishedTenders" runat="server" /></strong></a>
             <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Active") %>"><span class="muted">Active tenders</span><strong><asp:Literal ID="ActiveTenderCount" runat="server" /></strong></a>
             <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Closed") %>"><span class="muted">Closed tenders</span><strong><asp:Literal ID="ClosedTenders" runat="server" /></strong></a>

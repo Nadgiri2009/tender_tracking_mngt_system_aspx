@@ -164,6 +164,7 @@ namespace DepartmentModule.Pages
                     }
                     int pages = Math.Max(1, (int)Math.Ceiling(count / 10.0));
                     if (page > pages) { TenderGrid.PageIndex = pages - 1; page = pages; }
+                    TenderGrid.VirtualItemCount = count;
                     using (SqlCommand listCommand = new SqlCommand(
                         @"SELECT t.TenderId,t.TenderNumber,t.Title,t.TenderType,
                                  COALESCE(t.TenderCategory,N'Uncategorized') AS TenderCategory,d.DepartmentName,

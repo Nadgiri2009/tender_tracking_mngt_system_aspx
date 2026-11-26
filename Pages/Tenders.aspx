@@ -17,7 +17,7 @@
             <asp:Button ID="FilterButton" runat="server" Text="Apply filters" CssClass="button" OnClick="FilterButton_Click" />
         </div>
         <div class="table-wrap">
-            <asp:GridView ID="TenderGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" AllowSorting="true"
+            <asp:GridView ID="TenderGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" AllowCustomPaging="true" AllowSorting="true"
                 PageSize="10" GridLines="None" EmptyDataText="No tenders match your filters."
                 OnPageIndexChanging="TenderGrid_PageIndexChanging" OnSorting="TenderGrid_Sorting">
                 <Columns>
