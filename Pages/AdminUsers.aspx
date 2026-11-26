@@ -46,7 +46,7 @@
         </div>
         <asp:GridView ID="ContractorsGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" OnPageIndexChanging="ContractorsGrid_PageIndexChanging" OnRowCommand="ContractorsGrid_RowCommand" EmptyDataText="No contractor profiles found.">
             <Columns>
-                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ContractorSerialNumber(Container.RowIndex) %></ItemTemplate></asp:TemplateField>
+                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ContractorSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                 <asp:BoundField DataField="Name" HeaderText="Contractor" />
                 <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
                 <asp:BoundField DataField="Email" HeaderText="Email" />
@@ -66,7 +66,7 @@
         </div>
         <asp:GridView ID="UsersGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" OnPageIndexChanging="UsersGrid_PageIndexChanging" OnRowCommand="UsersGrid_RowCommand" EmptyDataText="No users found.">
             <Columns>
-                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# UserSerialNumber(Container.RowIndex) %></ItemTemplate></asp:TemplateField>
+                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# UserSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                 <asp:BoundField DataField="FullName" HeaderText="Name" />
                 <asp:BoundField DataField="Email" HeaderText="Email" />
                 <asp:BoundField DataField="Mobile" HeaderText="Mobile" />

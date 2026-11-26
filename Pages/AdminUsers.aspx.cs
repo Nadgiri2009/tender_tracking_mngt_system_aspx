@@ -821,12 +821,12 @@ namespace DepartmentModule.Pages
 
         protected int UserSerialNumber(int rowIndex)
         {
-            return UsersGrid.PageIndex * UsersGrid.PageSize + rowIndex + 1;
+            return rowIndex + 1;
         }
 
         protected int ContractorSerialNumber(int rowIndex)
         {
-            return ContractorsGrid.PageIndex * ContractorsGrid.PageSize + rowIndex + 1;
+            return rowIndex + 1;
         }
 
         private void ShowMessage(string text, bool success = false)

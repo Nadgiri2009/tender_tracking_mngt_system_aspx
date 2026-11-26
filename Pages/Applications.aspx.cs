@@ -90,7 +90,7 @@ namespace DepartmentModule.Pages
 
         protected int ApplicationSerialNumber(int rowIndex)
         {
-            return ApplicationsGrid.PageIndex * ApplicationsGrid.PageSize + rowIndex + 1;
+            return rowIndex + 1;
         }
 
         protected void NotificationsGrid_RowCommand(object sender, GridViewCommandEventArgs e)

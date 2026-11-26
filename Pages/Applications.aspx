@@ -34,7 +34,7 @@
                 PageSize="10" GridLines="None" EmptyDataText="No submitted applications are assigned to your current workflow queue."
                 OnPageIndexChanging="ApplicationsGrid_PageIndexChanging">
                 <Columns>
-                    <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ApplicationSerialNumber(Container.RowIndex) %></ItemTemplate></asp:TemplateField>
+                    <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ApplicationSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                     <asp:BoundField DataField="ApplicationReference" HeaderText="Application" />
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TechnicalBidId"
                         DataNavigateUrlFormatString="ApplicationDetails.aspx?id={0}" HeaderText="Tender" />

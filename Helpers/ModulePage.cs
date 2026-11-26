@@ -202,7 +202,8 @@ namespace DepartmentModule.Helpers
             get
             {
                 return CurrentAccountType == "Internal" &&
-                    String.Equals(CurrentRoleCode, "JE", StringComparison.OrdinalIgnoreCase);
+                    (String.Equals(CurrentRoleCode, "JE", StringComparison.OrdinalIgnoreCase) ||
+                     String.Equals(CurrentRole, "Junior Engineer (JE)", StringComparison.OrdinalIgnoreCase));
             }
         }
 

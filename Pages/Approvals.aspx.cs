@@ -63,7 +63,7 @@ namespace DepartmentModule.Pages
 
         protected int ApprovalSerialNumber(int rowIndex)
         {
-            return ApprovalGrid.PageIndex * ApprovalGrid.PageSize + rowIndex + 1;
+            return rowIndex + 1;
         }
     }
 }
