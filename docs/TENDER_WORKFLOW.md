@@ -5,18 +5,20 @@ This document describes the workflow implemented by the portal for newly created
 ## At a glance
 
 ```text
-JE creates draft
-  -> JE submits tender
+JE creates a draft in the five-step wizard
+  -> JE submits the prepared draft from the workflow page
   -> JE publishes and sets the public bid window
   -> Contractors submit technical applications
   -> JE opens technical bids and completes primary verification
   -> JE forwards applications to Tender Cell
   -> Tender Cell completes secondary verification
-       -> if corrections are required: Tender Cell creates shortfall
-          -> JE approves/returns it
-          -> contractor submits corrections
-          -> Tender Cell clears and resumes verification
+       -> if corrections are required: Tender Cell creates a shortfall
+          -> JE approves or returns it
+          -> contractor submits corrections within three calendar days
+          -> Tender Cell clears them, requests further corrections, or disqualifies an overdue application
+          -> cleared items return to secondary verification
        -> when complete: Chairman approves financial bid opening
+          -> if rejected: Tender Cell re-verifies, then returns it to the Chairman or creates a shortfall
   -> JE records bidder-level financial bid data
   -> Director Auditor approves or returns financial review
        -> if returned: JE resubmits for review
@@ -27,22 +29,28 @@ JE creates draft
 
 New tenders are stored with `WorkflowVersion = 2`. The current assigned stage and status are kept on the tender workflow assignment, with each transition recorded in workflow history and the audit log. Users can act only when the stage is assigned to their role (and, where applicable, their user and department) and they have the required permission.
 
+## Create and prepare the draft
+
+The tender form has five steps: Basic Information, Important Dates, Approvals (JE-only), GIS Location, and Review & Submit. Saving as Draft or choosing **Submit for processing** saves the tender as a draft; **Submit for processing** does not itself advance the workflow. From the workflow page, JE uses the separate **Submit tender** action to move the prepared draft from `Draft` to `Submitted`.
+
+Before that workflow submission, the portal requires at least one BOQ row, all four `TenderDocuments` categories (Tender Proposal, Tender Document, Technical Supporting Document, and Financial Supporting Document), and a bidder-document checklist. The wizard's Scope of Work, Technical Requirements, and Financial Requirements attachments are separate requirement documents; they do not replace those four categories. Publication is then scheduled in the workflow page with a future start and a later closing time.
+
 ## Detailed process
 
 | # | Stage / status | Responsible role | What happens and the main gate |
 |---|---|---|---|
-| 1 | Draft — `Final_JE_SubmitTender` | Junior Engineer (JE) | JE creates and saves the tender draft. The portal assigns a tender number, saves the tender information and supporting records, and creates the initial JE workflow assignment. Before submission, the portal requires a BOQ item, tender proposal, tender document, technical supporting document, financial supporting document, and a required bidder-document checklist. |
-| 2 | Submitted — `Final_JE_PublishTender` | JE | JE submits the prepared tender to workflow. JE then publishes it by setting a future publication start and closing date/time. The closing time must follow the start time. The approved publication schedule controls when the tender is publicly visible and when contractors may apply. |
-| 3 | Tender Published — `Final_JE_OpenTechnicalBids` | JE | During the approved publication window, contractors can view eligible tender details and create/update a draft application, upload the required documents, accept the current terms, and submit. Submitted applications are accepted only while the window is open. An extension request can be raised by the owning department officer before opening; CAFO or an administrator can approve/reject it. At most three extensions may be approved. |
+| 1 | Draft — `Final_JE_SubmitTender` | Junior Engineer (JE) | JE creates and saves the tender draft. The portal assigns a tender number, saves the tender information and supporting records, and creates the initial JE workflow assignment. The creation form's **Submit for processing** action still leaves the tender in Draft. |
+| 2 | Submitted — `Final_JE_PublishTender` | JE | JE uses **Submit tender** on the workflow page. This transition checks the BOQ, four required `TenderDocuments` categories, and bidder-document checklist. JE then publishes by setting a future publication start and a closing date/time after the start. The approved schedule controls public visibility and the application window. |
+| 3 | Tender Published — `Final_JE_OpenTechnicalBids` | JE | During the approved publication window, contractors can view eligible tender details and create/update a draft application, upload the required documents, accept the current terms, and submit. Submitted applications are accepted only while the window is open. The owning department officer may request an extension before the current closing time and before bid opening; only one request may be pending. CAFO or an administrator may approve/reject it. Approval updates the current closing time, and at most three extensions may be approved. |
 | 4 | Primary Verification Pending — `Final_JE_CompletePrimaryVerification` | JE | After the approved closing time, JE records the technical-bid opening. The portal requires a configured bidder-document checklist and at least one submitted application. JE records a review for every submitted bidder and a decision for every uploaded or missing required document. Bid contents remain confidential until opening. |
 | 5 | Primary Verification Completed — `Final_JE_ForwardToTenderCell` | JE | JE completes the primary verification only after all bidder and document decisions are recorded, then forwards the tender to Tender Cell. |
 | 6 | Tender Cell Verification Pending — `Final_Cell_CompleteSecondaryVerification` | Tender Cell | Tender Cell performs secondary checks for each submitted bidder and records decisions on the relevant documents/applications. If all checks pass, the stage advances to financial-opening approval. If corrections are needed, Tender Cell sends the process to shortfall creation. |
 | 7 | Shortfall Generation Pending — `Final_Cell_CreateShortfall` | Tender Cell | Tender Cell creates structured shortfall items with a document requirement, issue description, and corrective action. A shortfall is available only after a secondary review records a shortfall decision. |
-| 8 | Shortfall Pending JE Approval — `Final_JE_ApproveShortfall` | JE | JE approves the requested shortfall or returns it to Tender Cell for correction. An approved shortfall is sent to the contractor with a response deadline (configured to three days by default). |
-| 9 | Awaiting Contractor Submission — `Final_Contractor_SubmitShortfall` | Contractor | The contractor uploads the requested corrections and submits them before the deadline. The contractor can update a draft or an application with an open clarification; the service checks ownership and the active contractor profile. |
-| 10 | Shortfall Documents Submitted — `Final_Cell_ClearShortfall` | Tender Cell | Tender Cell reviews each submitted correction and clears or rejects it. A cleared shortfall returns to Tender Cell verification. A rejected or overdue response returns to the appropriate verification/shortfall handling stage. |
-| 11 | Shortfall Cleared — `Final_Cell_ResumeVerification` | Tender Cell | Tender Cell explicitly resumes secondary verification after clearing the shortfall. |
-| 12 | Financial Bid Opening Approval Pending — `Final_Samiti_ApproveFinancialOpening` | Nivida Samiti Adhaksha / Chairman | After secondary verification is complete, the Chairman approves or rejects the financial bid opening. Rejection returns the tender to Tender Cell for re-verification. |
+| 8 | Shortfall Pending JE Approval — `Final_JE_ApproveShortfall` | JE | JE approves the requested shortfall or returns it to Tender Cell for correction. Approval starts a three-calendar-day contractor deadline; this duration is currently fixed in the service, not an administrator-configurable setting. |
+| 9 | Awaiting Contractor Submission — `Final_Contractor_SubmitShortfall` | Contractor | The contractor uploads the requested corrections and submits them before the deadline. The service checks ownership and the active contractor profile. The seeded stage's role code is `TENDER_CELL`, but the assignment is bound to the contractor user and the contractor submits through the contractor service. |
+| 10 | Shortfall Documents Submitted — `Final_Cell_ClearShortfall` | Tender Cell | Tender Cell reviews each submitted correction. If all items are cleared, the workflow advances to **Shortfall Cleared**. If an item remains deficient while the deadline is open, it is returned to the contractor for another submission. If the deadline expires without clearance, the application is disqualified and the tender returns to Tender Cell verification. |
+| 11 | Shortfall Cleared — `Final_Cell_ResumeVerification` | Tender Cell | Tender Cell explicitly resumes secondary verification. The assignment returns to `Final_Cell_CompleteSecondaryVerification` with status `Tender Cell Verification Pending`. |
+| 12 | Financial Bid Opening Approval Pending — `Final_Samiti_ApproveFinancialOpening` | Nivida Samiti Adhaksha / Chairman | After secondary verification is complete, the Chairman approves or rejects the financial bid opening. Rejection creates a `Final_Cell_ReverifyRejectedOpening` assignment for Tender Cell. After re-verification, Tender Cell either returns the review to the Chairman or routes it to shortfall creation. |
 | 13 | Financial Bid Opening Approved — `Final_JE_OpenFinancialBids` | JE | JE records bidder-level financial bid amounts for eligible bidders. Only bidders approved by Tender Cell are listed for entry. |
 | 14 | Final Financial Approval Pending — `Final_Auditor_ApproveFinancialBids` | Chief Auditor / Director Auditor | The auditor reviews the financial bids and records approval with the selected bid, or returns the review. The return must be followed by a JE resubmission with an explanation. |
 | 15 | Final Financial Approval Completed — `Final_JE_StartWorkOrder` | JE | JE can start the work-order step only after the auditor-approved financial decision identifies an approved bid and amount. |
@@ -86,3 +94,4 @@ Existing tenders may have `WorkflowVersion = 1`. They use the older status-based
 4. Preserve transaction boundaries and write history/audit records whenever a workflow status or decision changes.
 5. Before changing an ordering or status, check existing assignments and tender records; a status change can strand a tender if its next stage is not configured.
 6. When implementing offline tenders, define the offline receipt, custody, opening, verification, confidentiality, and audit steps explicitly, then add a separate role-authorized path instead of routing offline tenders through contractor online submission.
+7. The contractor shortfall stage currently uses the `TENDER_CELL` role ID with a contractor-specific assigned user. Preserve and test that service-level ownership check if changing the stage's role configuration.
