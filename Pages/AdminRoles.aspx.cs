@@ -25,7 +25,7 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequirePermission("roles.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack)
             {
                 try
@@ -192,10 +192,11 @@ namespace DepartmentModule.Pages
                     string oldDescription = null;
                     List<string> oldPermissionKeys = new List<string>();
                     bool isSystemRole = false;
+                    bool isJeRole = false;
                     if (isEditing)
                     {
                         using (SqlCommand command = new SqlCommand(
-                            "SELECT RoleName,Description,IsSystemRole FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK) WHERE RoleId=@RoleId;", connection, transaction))
+                            "SELECT RoleName,Description,IsSystemRole,RoleCode FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK) WHERE RoleId=@RoleId;", connection, transaction))
                         {
                             ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
                             using (SqlDataReader reader = command.ExecuteReader())
@@ -208,6 +209,7 @@ namespace DepartmentModule.Pages
                                 oldName = Convert.ToString(reader["RoleName"]);
                                 oldDescription = reader["Description"] == DBNull.Value ? String.Empty : Convert.ToString(reader["Description"]);
                                 isSystemRole = Convert.ToBoolean(reader["IsSystemRole"]);
+                                isJeRole = String.Equals(Convert.ToString(reader["RoleCode"]), "JE", StringComparison.OrdinalIgnoreCase);
                             }
                         }
                         if (isSystemRole && !String.Equals(oldName, name, StringComparison.Ordinal))
@@ -233,25 +235,9 @@ namespace DepartmentModule.Pages
                         return;
                     }
 
-                    bool alreadyHasSystemAdmin = false;
-                    if (isEditing)
+                    if (permissionKeys.Contains("system.admin", StringComparer.OrdinalIgnoreCase) && !isJeRole)
                     {
-                        using (SqlCommand command = new SqlCommand(
-                            @"SELECT COUNT(*) FROM dbo.RolePermissions rp
-                              INNER JOIN dbo.Permissions p ON p.PermissionId=rp.PermissionId
-                              WHERE rp.RoleId=@RoleId AND p.PermissionKey=N'system.admin';", connection, transaction))
-                        {
-                            ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
-                            alreadyHasSystemAdmin = Convert.ToInt32(command.ExecuteScalar()) > 0;
-                        }
-                    }
-                    if (permissionKeys.Contains("system.admin", StringComparer.OrdinalIgnoreCase) &&
-                        !alreadyHasSystemAdmin &&
-                        !IsJeAdministrator &&
-                        !(String.Equals(name, "Super Admin", StringComparison.OrdinalIgnoreCase) &&
-                          String.Equals(CurrentRole, "Super Admin", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        ShowMessage("Only the JE administrator can grant the system administration permission.");
+                        ShowMessage("System administration access is reserved for the JE role.");
                         return;
                     }
 

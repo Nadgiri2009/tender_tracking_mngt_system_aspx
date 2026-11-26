@@ -93,6 +93,19 @@ namespace DepartmentModule.Helpers
 
     public static class TenderStatusBuckets
     {
+        public const string PublicationRecorded =
+            @"EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
+                    WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
+              OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowHistory wh
+                        WHERE wh.TenderId=t.TenderId AND wh.WorkflowVersion=2
+                          AND wh.NewStatus=N'Tender Published')";
+
+        public const string PublicTenderVisibility =
+            @"t.IsDeleted=0
+              AND t.CurrentStatus NOT LIKE N'%cancel%'
+              AND s.PublicationStartUtc<=SYSUTCDATETIME()
+              AND (" + PublicationRecorded + ")";
+
         public const string Approved =
                 "(t.CurrentStatus LIKE N'%Approved%' OR t.CurrentStatus IN " +
                 "(N'Tender Published',N'Final Approval',N'Agreement Completed',N'Work Order Generated'," +
@@ -102,6 +115,7 @@ namespace DepartmentModule.Helpers
                 "(N'Requirement Submitted',N'Estimate Prepared',N'Tender Draft Created',N'Bill Submitted'," +
                 "N'Budget Revision Required'))";
             public const string Rejected = "t.CurrentStatus=N'Rejected'";
+            public const string Draft = "t.CurrentStatus=N'Draft'";
             public const string UnderReview =
                 "t.CurrentStatus IN (N'Tender Committee Approval',N'Technical Bid Opening',N'Technical Evaluation'," +
                 "N'Financial Bid Opening',N'Financial Evaluation',N'CAFO Rate Opinion',N'MCA Opinion'," +
@@ -111,18 +125,21 @@ namespace DepartmentModule.Helpers
                 "N'Budget Revision Required')";
             public const string Published =
                     "(t.CurrentStatus NOT LIKE N'%cancel%' AND " +
-                    "(EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') " +
-                    "OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))";
+                    "(" + PublicationRecorded + "))";
             public const string Active =
                     "(t.CurrentStatus=N'Tender Published' AND s.PublicationStartUtc<=SYSUTCDATETIME() " +
-                    "AND s.CurrentClosingUtc>SYSUTCDATETIME() AND " +
-                    "(EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') " +
-                    "OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))";
+                    "AND s.CurrentClosingUtc>SYSUTCDATETIME() AND (" + PublicationRecorded + "))";
             public const string Closed =
-                    "(t.CurrentStatus NOT LIKE N'%cancel%' AND s.CurrentClosingUtc<=SYSUTCDATETIME() " +
-                    "AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published') " +
-                    "OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))";
+                    "(t.CurrentStatus NOT LIKE N'%cancel%' AND " +
+                    "(t.CurrentStatus LIKE N'%closed%' OR " +
+                    "(s.CurrentClosingUtc<=SYSUTCDATETIME() AND (" + PublicationRecorded + "))))";
             public const string Cancelled = "t.CurrentStatus LIKE N'%cancel%'";
+            public const string Awarded =
+                    "(t.CurrentStatus NOT LIKE N'%cancel%' AND " +
+                    "(t.CurrentStatus IN (N'Completed',N'Agreement Completed',N'Work Order Generated'," +
+                    "N'Work Started',N'Measurement Book Updated',N'Bill Submitted',N'Bill Approved',N'Payment Completed') " +
+                    "OR EXISTS(SELECT 1 FROM dbo.WorkOrder w WHERE w.TenderId=t.TenderId) " +
+                    "OR EXISTS(SELECT 1 FROM dbo.Agreement a WHERE a.TenderId=t.TenderId)))";
 
         public static string Predicate(string bucket)
         {
@@ -131,12 +148,14 @@ namespace DepartmentModule.Helpers
                 case "Approved": return Approved;
                 case "Pending": return Pending;
                 case "Rejected": return Rejected;
+                case "Draft": return Draft;
                 case "Under Review": return UnderReview;
                 case "Draft / Submitted": return DraftOrSubmitted;
                 case "Published": return Published;
                 case "Active": return Active;
                 case "Closed": return Closed;
                 case "Cancelled": return Cancelled;
+                case "Awarded": return Awarded;
                 default: return null;
             }
         }

@@ -21,14 +21,19 @@ namespace DepartmentModule.Pages
         protected Button SaveScheduleButton, SubmitExtensionButton;
 
         private int TenderId { get { return QueryId("tenderId"); } }
-        private bool IsAdministrator { get { return HasAnyRole("Admin"); } }
-        private bool CanReview { get { return HasAnyRole("CAFOOfficer", "Admin"); } }
-        private bool CanRequest { get { return HasAnyRole("DepartmentOfficer", "Admin"); } }
+        private bool IsAdministrator { get { return IsJeAdministrator; } }
+        private bool CanReview { get { return IsAdministrator || HasAnyRole("CAFOOfficer"); } }
+        private bool CanRequest { get { return IsAdministrator || HasAnyRole("DepartmentOfficer"); } }
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequireRoles("DepartmentOfficer", "CAFOOfficer", "Admin")) return;
-            EvaluationLink.Visible = HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection", "Admin");
+            if (!IsAdministrator && !HasAnyRole("DepartmentOfficer", "CAFOOfficer"))
+            {
+                RequireRoles("DepartmentOfficer", "CAFOOfficer");
+                return;
+            }
+            EvaluationLink.Visible = IsAdministrator ||
+                HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection");
             SchedulePanel.Visible = CanReview && TenderId > 0;
             ExtensionRequestPanel.Visible = CanRequest && TenderId > 0;
             PendingRequestsPanel.Visible = CanReview;

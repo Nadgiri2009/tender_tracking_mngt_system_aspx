@@ -14,7 +14,11 @@ namespace DepartmentModule.Pages
         private const int RecentTendersPerPage = 10;
 
         protected Literal Message, TotalTenders, DraftTenders, PublishedTenders, ActiveTenderCount,
-            ClosedTenders, Departments, PageSummary, RecentTendersPageSummary;
+            ClosedTenders, CancelledTenders, AwardedTenders, TotalContractors, ActiveContractors,
+            InactiveContractors, PendingDocumentVerification,
+            ShortfallsGenerated, ShortfallResponsesPending, PendingFinancialOpeningApprovals,
+            PendingAuditApprovals, PendingWorkOrders, PendingAgreements, TotalDepartmentUsers,
+            ActiveDepartmentUsers, TotalRoles, PendingAdminActions, PageSummary, RecentTendersPageSummary;
         protected GridView DashboardFeedGrid, CategoryStatsGrid, UpcomingDeadlinesGrid, RecentTendersGrid;
         protected LinkButton PreviousPageButton, NextPageButton;
         protected Repeater PageNumbers;
@@ -27,7 +31,7 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequireAnyPermission("masterdata.manage", "users.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack) LoadDashboard();
         }
 
@@ -42,26 +46,57 @@ namespace DepartmentModule.Pages
                             (SELECT COUNT(*) FROM dbo.Tender WHERE IsDeleted=0) AS TotalTenders,
                             (SELECT COUNT(*) FROM dbo.Tender WHERE IsDeleted=0 AND CurrentStatus=N'Draft') AS DraftTenders,
                             (SELECT COUNT(*) FROM dbo.Tender t
-                             WHERE t.IsDeleted=0 AND t.CurrentStatus NOT LIKE N'%cancel%'
-                               AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
-                                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
-                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published'))) AS PublishedTenders,
+                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Published + @") AS PublishedTenders,
                             (SELECT COUNT(*) FROM dbo.Tender t
                              INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                             WHERE t.IsDeleted=0 AND t.CurrentStatus=N'Tender Published'
-                               AND s.PublicationStartUtc<=SYSUTCDATETIME()
-                               AND s.CurrentClosingUtc>SYSUTCDATETIME()
-                               AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
-                                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
-                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published'))) AS ActiveTenders,
+                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Active + @") AS ActiveTenders,
                             (SELECT COUNT(*) FROM dbo.Tender t
-                             INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                             WHERE t.IsDeleted=0 AND t.CurrentStatus NOT LIKE N'%cancel%'
-                               AND s.CurrentClosingUtc<=SYSUTCDATETIME()
-                               AND (EXISTS(SELECT 1 FROM dbo.ApprovalHistory ah
-                                           WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
-                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published'))) AS ClosedTenders,
-                            (SELECT COUNT(*) FROM dbo.Departments) AS Departments;", connection))
+                             LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
+                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Closed + @") AS ClosedTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender t
+                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Cancelled + @") AS CancelledTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender t
+                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Awarded + @") AS AwardedTenders,
+                            (SELECT COUNT(*) FROM dbo.Contractors) AS TotalContractors,
+                            (SELECT COUNT(*) FROM dbo.Contractors c
+                             WHERE c.IsActive=1) AS ActiveContractors,
+                            (SELECT COUNT(*) FROM dbo.Contractors c
+                             WHERE c.IsActive=0) AS InactiveContractors,
+                            (SELECT COUNT(DISTINCT a.TenderId)
+                             FROM dbo.TenderWorkflowAssignments a
+                             INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                             INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.IsDeleted=0
+                             WHERE a.IsCurrent=1 AND s.StageName=N'Final_Cell_CompleteSecondaryVerification') AS PendingDocumentVerification,
+                            (SELECT COUNT(*) FROM dbo.TenderShortfalls) AS ShortfallsGenerated,
+                            (SELECT COUNT(*) FROM dbo.TenderShortfalls WHERE Status=N'Awaiting Contractor') AS ShortfallResponsesPending,
+                            (SELECT COUNT(DISTINCT a.TenderId)
+                             FROM dbo.TenderWorkflowAssignments a
+                             INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                             INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.IsDeleted=0
+                             WHERE a.IsCurrent=1 AND s.StageName=N'Final_Samiti_ApproveFinancialOpening') AS PendingFinancialOpeningApprovals,
+                            (SELECT COUNT(DISTINCT a.TenderId)
+                             FROM dbo.TenderWorkflowAssignments a
+                             INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                             INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.IsDeleted=0
+                             WHERE a.IsCurrent=1 AND s.StageName=N'Final_Auditor_ApproveFinancialBids') AS PendingAuditApprovals,
+                            (SELECT COUNT(DISTINCT a.TenderId)
+                             FROM dbo.TenderWorkflowAssignments a
+                             INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                             INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.IsDeleted=0
+                             WHERE a.IsCurrent=1 AND s.StageName=N'Final_JE_GenerateWorkOrder') AS PendingWorkOrders,
+                            (SELECT COUNT(DISTINCT a.TenderId)
+                             FROM dbo.TenderWorkflowAssignments a
+                             INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                             INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId AND t.IsDeleted=0
+                             WHERE a.IsCurrent=1 AND s.StageName=N'Final_JE_GenerateAgreement') AS PendingAgreements,
+                            (SELECT COUNT(*) FROM dbo.Users WHERE AccountType=N'Internal') AS TotalDepartmentUsers,
+                            (SELECT COUNT(*) FROM dbo.Users WHERE AccountType=N'Internal' AND IsActive=1) AS ActiveDepartmentUsers,
+                            (SELECT COUNT(*) FROM dbo.Roles) AS TotalRoles,
+                            (SELECT COUNT(*) FROM dbo.TenderWorkflowAssignments a
+                             INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                             INNER JOIN dbo.Tender t ON t.TenderId=a.TenderId
+                             INNER JOIN dbo.Roles r ON r.RoleId=a.AssignedRoleId AND r.RoleCode=N'JE'
+                             WHERE a.IsCurrent=1 AND t.IsDeleted=0) AS PendingAdminActions;", connection))
                     {
                         using (SqlDataReader reader = command.ExecuteReader())
                         {
@@ -72,7 +107,22 @@ namespace DepartmentModule.Pages
                                 PublishedTenders.Text = Convert.ToString(reader["PublishedTenders"]);
                                 ActiveTenderCount.Text = Convert.ToString(reader["ActiveTenders"]);
                                 ClosedTenders.Text = Convert.ToString(reader["ClosedTenders"]);
-                                Departments.Text = Convert.ToString(reader["Departments"]);
+                                CancelledTenders.Text = Convert.ToString(reader["CancelledTenders"]);
+                                AwardedTenders.Text = Convert.ToString(reader["AwardedTenders"]);
+                                TotalContractors.Text = Convert.ToString(reader["TotalContractors"]);
+                                ActiveContractors.Text = Convert.ToString(reader["ActiveContractors"]);
+                                InactiveContractors.Text = Convert.ToString(reader["InactiveContractors"]);
+                                PendingDocumentVerification.Text = Convert.ToString(reader["PendingDocumentVerification"]);
+                                ShortfallsGenerated.Text = Convert.ToString(reader["ShortfallsGenerated"]);
+                                ShortfallResponsesPending.Text = Convert.ToString(reader["ShortfallResponsesPending"]);
+                                PendingFinancialOpeningApprovals.Text = Convert.ToString(reader["PendingFinancialOpeningApprovals"]);
+                                PendingAuditApprovals.Text = Convert.ToString(reader["PendingAuditApprovals"]);
+                                PendingWorkOrders.Text = Convert.ToString(reader["PendingWorkOrders"]);
+                                PendingAgreements.Text = Convert.ToString(reader["PendingAgreements"]);
+                                TotalDepartmentUsers.Text = Convert.ToString(reader["TotalDepartmentUsers"]);
+                                ActiveDepartmentUsers.Text = Convert.ToString(reader["ActiveDepartmentUsers"]);
+                                TotalRoles.Text = Convert.ToString(reader["TotalRoles"]);
+                                PendingAdminActions.Text = Convert.ToString(reader["PendingAdminActions"]);
                             }
                         }
                     }

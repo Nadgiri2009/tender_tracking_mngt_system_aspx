@@ -23,13 +23,17 @@ namespace DepartmentModule.Pages
         protected Button StartEvaluationButton, SaveEvaluationButton, ForwardEvaluationButton, SaveDelayButton;
 
         private int TenderId { get { return QueryId("tenderId"); } }
-        private bool IsAdministrator { get { return HasAnyRole("Admin"); } }
-        private bool CanOpen { get { return HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection", "Admin"); } }
-        private bool CanEvaluate { get { return HasAnyRole("TenderSection", "TenderCommittee", "Admin"); } }
+        private bool IsAdministrator { get { return IsJeAdministrator; } }
+        private bool CanOpen { get { return IsAdministrator || HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection"); } }
+        private bool CanEvaluate { get { return IsAdministrator || HasAnyRole("TenderSection", "TenderCommittee"); } }
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequireRoles("CAFOOfficer", "TenderCommittee", "TenderSection", "Admin")) return;
+            if (!IsAdministrator && !HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection"))
+            {
+                RequireRoles("CAFOOfficer", "TenderCommittee", "TenderSection");
+                return;
+            }
             OpeningPanel.Visible = CanOpen;
             OpenedPanel.Visible = CanEvaluate;
             SettingsPanel.Visible = IsAdministrator;
@@ -147,7 +151,7 @@ namespace DepartmentModule.Pages
                         HttpUtility.HtmlEncode(TenderLifecycleFiles.FormatIndiaDateTime(reader["EvaluationEligibleAtUtc"])) +
                         " IST. Current status: " + HttpUtility.HtmlEncode(evaluationStatus) + ".";
                     BidDocumentsLink.NavigateUrl = "~/Pages/Bids.aspx?tenderId=" + TenderId.ToString(CultureInfo.InvariantCulture);
-                    BidDocumentsLink.Visible = HasAnyRole("TenderSection", "TenderCommittee", "Admin");
+                    BidDocumentsLink.Visible = CanEvaluate;
                     TechnicalOutcome.Text = Convert.ToString(reader["TechnicalOutcome"]);
                     FinancialOutcome.Text = Convert.ToString(reader["FinancialOutcome"]);
                     Observations.Text = Convert.ToString(reader["Observations"]);
@@ -161,7 +165,8 @@ namespace DepartmentModule.Pages
                     if (awaiting && !StartEvaluationButton.Enabled)
                         StartEvaluationButton.ToolTip = "Evaluation is unavailable until the configured eligibility time.";
                     SaveEvaluationButton.Visible = underway && CanEvaluate;
-                    ForwardEvaluationButton.Visible = underway && HasAnyRole("TenderSection", "Admin");
+                    ForwardEvaluationButton.Visible = underway &&
+                        (IsAdministrator || HasAnyRole("TenderSection"));
                     string reportPath = Convert.ToString(reader["ReportFilePath"]);
                     ForwardEvaluationButton.Enabled = !String.IsNullOrWhiteSpace(reportPath);
                     if (String.IsNullOrWhiteSpace(reportPath))
@@ -409,7 +414,7 @@ namespace DepartmentModule.Pages
 
         protected void ForwardEvaluationButton_Click(object sender, EventArgs e)
         {
-            if (!HasAnyRole("TenderSection", "Admin") || TenderId <= 0)
+            if (!(IsAdministrator || HasAnyRole("TenderSection")) || TenderId <= 0)
             {
                 ShowError("Only Tender Section or an administrator can submit the evaluation recommendation.");
                 return;
@@ -527,8 +532,9 @@ namespace DepartmentModule.Pages
                 {
                     using (SqlCommand command = new SqlCommand(
                         @"IF NOT EXISTS(SELECT 1 FROM dbo.Users u INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
-                                        WHERE u.UserId=@UserId AND u.IsActive=1 AND r.RoleName=N'Admin')
-                              THROW 51066, 'Only an administrator can change the evaluation delay.', 1;
+                                        WHERE u.UserId=@UserId AND u.IsActive=1 AND u.AccountType=N'Internal'
+                                          AND r.IsActive=1 AND r.RoleCode=N'JE')
+                              THROW 51066, 'Only a JE administrator can change the evaluation delay.', 1;
                           IF EXISTS(SELECT 1 FROM dbo.TenderEvaluationSettings WITH (UPDLOCK,HOLDLOCK) WHERE SettingsId=1)
                               UPDATE dbo.TenderEvaluationSettings
                               SET StartDelayDays=@Days,ModifiedBy=@UserId,ModifiedAtUtc=SYSUTCDATETIME()
@@ -539,7 +545,14 @@ namespace DepartmentModule.Pages
                     {
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         ModuleDb.AddParameter(command, "@Days", SqlDbType.Int, days);
-                        if (command.ExecuteNonQuery() != 1)
+                        command.ExecuteNonQuery();
+                    }
+                    using (SqlCommand verifyCommand = new SqlCommand(
+                        "SELECT StartDelayDays FROM dbo.TenderEvaluationSettings WHERE SettingsId=1;", connection, transaction))
+                    {
+                        object savedDays = verifyCommand.ExecuteScalar();
+                        if (savedDays == null || savedDays == DBNull.Value ||
+                            Convert.ToInt32(savedDays, CultureInfo.InvariantCulture) != days)
                             throw new InvalidOperationException("Evaluation settings could not be saved.");
                     }
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId, "UpdateEvaluationDelay",
@@ -548,10 +561,16 @@ namespace DepartmentModule.Pages
                 }
                 Message.Text = "<div class=\"message success\">Evaluation start delay saved. Existing eligibility times are unchanged.</div>";
             }
+            catch (InvalidOperationException ex)
+            {
+                ShowError(ex.Message);
+            }
             catch (SqlException ex)
             {
                 Trace.Warn("DepartmentModule", "Evaluation delay could not be saved.", ex);
-                ShowError("Evaluation delay could not be saved.");
+                ShowError(ex.Number == 51066
+                    ? "Only an active JE administrator can change the evaluation delay."
+                    : "Evaluation delay could not be saved.");
             }
         }
 

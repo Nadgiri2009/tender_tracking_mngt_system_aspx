@@ -22,6 +22,15 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            if (HasAnyRole("Contractor"))
+            {
+                Response.StatusCode = 403;
+                Response.TrySkipIisCustomErrors = true;
+                Response.Redirect("~/Pages/Error.aspx?code=403", true);
+                return;
+            }
+            if (!RequireAnyPermission("workorder.manage", "agreement.manage",
+                "tender.prebill.manage", "financial.approve.final")) return;
             if (TenderId <= 0) { Response.Redirect("~/Pages/Tenders.aspx", false); Context.ApplicationInstance.CompleteRequest(); return; }
             if (!RequireOwnedTenderForDepartmentOfficer(TenderId)) return;
             if (!IsPostBack) LoadPage();
@@ -58,12 +67,12 @@ namespace DepartmentModule.Pages
                     BindGrid(connection, PaymentsGrid,
                         @"SELECT p.Amount,p.TransactionNo,p.PaymentDate,b.BillNo FROM dbo.Payments p INNER JOIN dbo.Bills b ON b.BillId=p.BillId WHERE b.TenderId=@TenderId ORDER BY p.PaymentDate DESC;");
                     if (!IsPostBack) LoadApprovedBills(connection);
-                    PaymentPanel.Visible = HasAnyRole("CAFOOfficer", "Admin");
+                    PaymentPanel.Visible = IsJeAdministrator || HasAnyRole("CAFOOfficer");
                 }
-                CreateAgreementButton.Visible = HasAnyRole("DepartmentOfficer", "Admin");
-                CreateWorkOrderButton.Visible = HasAnyRole("DepartmentOfficer", "Admin");
-                UpdateProgressButton.Visible = HasAnyRole("DepartmentOfficer", "Admin");
-                CreateMeasurementButton.Visible = HasAnyRole("DepartmentOfficer", "Admin");
+                CreateAgreementButton.Visible = IsJeAdministrator || HasAnyRole("DepartmentOfficer");
+                CreateWorkOrderButton.Visible = IsJeAdministrator || HasAnyRole("DepartmentOfficer");
+                UpdateProgressButton.Visible = IsJeAdministrator || HasAnyRole("DepartmentOfficer");
+                CreateMeasurementButton.Visible = IsJeAdministrator || HasAnyRole("DepartmentOfficer");
             }
             catch (SqlException ex)
             {
@@ -119,7 +128,7 @@ namespace DepartmentModule.Pages
         protected void CreateAgreementButton_Click(object sender, EventArgs e)
         {
             int contractorId; DateTime date;
-            if (!HasAnyRole("DepartmentOfficer", "Admin") || String.IsNullOrWhiteSpace(AgreementNo.Text) ||
+            if (!(IsJeAdministrator || HasAnyRole("DepartmentOfficer")) || String.IsNullOrWhiteSpace(AgreementNo.Text) ||
                 AgreementNo.Text.Trim().Length > 50 || !Int32.TryParse(AgreementContractor.SelectedValue, out contractorId) ||
                 !DateTime.TryParse(AgreementDate.Text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out date) ||
                 AgreementDocument.Text.Length > 400)
@@ -141,7 +150,7 @@ namespace DepartmentModule.Pages
         protected void CreateWorkOrderButton_Click(object sender, EventArgs e)
         {
             int contractorId; DateTime date; decimal amount;
-            if (!HasAnyRole("DepartmentOfficer", "Admin") || String.IsNullOrWhiteSpace(OrderNo.Text) || OrderNo.Text.Trim().Length > 50 ||
+            if (!(IsJeAdministrator || HasAnyRole("DepartmentOfficer")) || String.IsNullOrWhiteSpace(OrderNo.Text) || OrderNo.Text.Trim().Length > 50 ||
                 !Int32.TryParse(OrderContractor.SelectedValue, out contractorId) ||
                 !DateTime.TryParse(IssueDate.Text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out date) ||
                 !Decimal.TryParse(OrderAmount.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out amount) || amount <= 0)
@@ -163,7 +172,7 @@ namespace DepartmentModule.Pages
         protected void UpdateProgressButton_Click(object sender, EventArgs e)
         {
             decimal progress;
-            if (!HasAnyRole("DepartmentOfficer", "Admin") || !Decimal.TryParse(Progress.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out progress) ||
+            if (!(IsJeAdministrator || HasAnyRole("DepartmentOfficer")) || !Decimal.TryParse(Progress.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out progress) ||
                 progress < 0 || progress > 100 || ProgressRemarks.Text.Length > 1000)
             {
                 ShowError("Progress percentage must be between 0 and 100. Remarks must not exceed 1,000 characters."); return;
@@ -182,7 +191,7 @@ namespace DepartmentModule.Pages
         protected void CreateMeasurementButton_Click(object sender, EventArgs e)
         {
             decimal quantity;
-            if (!HasAnyRole("DepartmentOfficer", "Admin") || String.IsNullOrWhiteSpace(MeasurementDescription.Text) ||
+            if (!(IsJeAdministrator || HasAnyRole("DepartmentOfficer")) || String.IsNullOrWhiteSpace(MeasurementDescription.Text) ||
                 MeasurementDescription.Text.Trim().Length > 500 ||
                 !Decimal.TryParse(MeasurementQuantity.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out quantity) || quantity <= 0)
             {
@@ -223,11 +232,11 @@ namespace DepartmentModule.Pages
         {
             int billId;
             if (!Int32.TryParse(Convert.ToString(e.CommandArgument), out billId) || billId <= 0) { ShowError("Invalid bill."); return; }
-            if (e.CommandName == "ApproveBill" && HasAnyRole("CAFOOfficer", "Admin"))
+            if (e.CommandName == "ApproveBill" && (IsJeAdministrator || HasAnyRole("CAFOOfficer")))
             {
                 UpdateBill(billId, "Approved");
             }
-            else if (e.CommandName == "PayBill" && HasAnyRole("CAFOOfficer", "Admin"))
+            else if (e.CommandName == "PayBill" && (IsJeAdministrator || HasAnyRole("CAFOOfficer")))
             {
                 BillSelect.SelectedValue = billId.ToString(CultureInfo.InvariantCulture);
                 PaymentAmount.Focus();
@@ -263,7 +272,7 @@ namespace DepartmentModule.Pages
         protected void ProcessPaymentButton_Click(object sender, EventArgs e)
         {
             int billId; decimal amount;
-            if (!HasAnyRole("CAFOOfficer", "Admin") || !Int32.TryParse(BillSelect.SelectedValue, out billId) ||
+            if (!(IsJeAdministrator || HasAnyRole("CAFOOfficer")) || !Int32.TryParse(BillSelect.SelectedValue, out billId) ||
                 !Decimal.TryParse(PaymentAmount.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out amount) || amount <= 0 ||
                 String.IsNullOrWhiteSpace(TransactionNo.Text) || TransactionNo.Text.Trim().Length > 100)
             {

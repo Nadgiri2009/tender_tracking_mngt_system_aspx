@@ -24,20 +24,35 @@ namespace DepartmentModule.Pages
             CurrentStatus, Message, ApplicationMessage, PublicationPeriod, ExtensionCount,
             PublicationScheduledDate, TechnicalBidOpeningDate, FinancialBidOpeningDate,
             ScopeOfWork, TechnicalRequirements, FinancialRequirements, AdditionalConditions, TermsAndConditions;
+        protected Literal GisLocationName, GisLatitude, GisLongitude, GisSelectedArea,
+            GisBoundaryCoordinatesText;
         protected GridView BoqGrid, DocumentsGrid, HistoryGrid, ApplicationRequirementsGrid, RevisionHistoryGrid;
         protected GridView BudgetOpinionsGrid;
         protected Panel AddBoqPanel, UploadPanel, AuthenticatedWorkflowPanel, EligibilityCriteriaPanel,
             ApplicationRequirementsPanel;
-        protected Panel BudgetOpinionPanel, BudgetOpinionHistoryPanel;
-        protected Panel RevisionHistoryPanel;
+        protected Panel ScopeOfWorkAttachmentPanel, TechnicalRequirementsAttachmentPanel,
+            FinancialRequirementsAttachmentPanel;
+        protected Literal ScopeOfWorkAttachmentStatus, TechnicalRequirementsAttachmentStatus,
+            FinancialRequirementsAttachmentStatus;
+        protected Panel BudgetOpinionPanel, BudgetOpinionHistoryPanel, DocumentTypesMissingPanel,
+            DocumentFormPanel, DocumentFilePanel;
+        protected Panel RevisionHistoryPanel, GisLocationPanel, GisBoundaryPanel;
         protected DropDownList DocumentTypeSelect;
-        protected TextBox ItemName, ItemDescription, Quantity, Unit, Rate, Remarks;
+        protected TextBox ItemName, ItemDescription, Quantity, Unit, Rate, Remarks,
+            DocumentNameText, DocumentRemarksText;
         protected TextBox ApprovedBudgetAmount;
         protected FileUpload DocumentFile;
         protected Button AddBoqButton, UploadButton, SubmitWorkflowButton, ApproveButton, RejectButton;
         protected Button DeleteTenderButton;
+        protected HiddenField EditingDocumentId, ReplacingDocumentFile;
+        protected Literal DocumentFormTitle;
+        protected LinkButton ShowDocumentFormButton, CancelDocumentFormButton, RefreshDocumentTypesButton;
         protected HyperLink BidsLink, WorkLink, EditTenderLink, ApplyTenderLink, FinalWorkflowLink,
-            BackToTendersLink;
+            BackToTendersLink, GisImageLink;
+        protected HyperLink ScopeOfWorkAttachmentViewLink, ScopeOfWorkAttachmentDownloadLink,
+            TechnicalRequirementsAttachmentViewLink, TechnicalRequirementsAttachmentDownloadLink,
+            FinancialRequirementsAttachmentViewLink, FinancialRequirementsAttachmentDownloadLink;
+        protected Image GisImagePreview;
         private int TenderId { get { return QueryId("id"); } }
         private string TenderStatus { get; set; }
         private int TenderDepartmentId { get; set; }
@@ -56,6 +71,14 @@ namespace DepartmentModule.Pages
                 return;
             }
             LoadTender();
+            if (IsAuthorizedTender && String.Equals(Request.QueryString["saved"], "1", StringComparison.Ordinal))
+            {
+                bool documentsSaved = String.Equals(Request.QueryString["documentsSaved"], "1",
+                    StringComparison.Ordinal);
+                Message.Text = documentsSaved
+                    ? "<div class=\"message success\">Tender and requirement documents saved successfully.</div>"
+                    : "<div class=\"message success\">Tender details saved successfully.</div>";
+            }
         }
 
         private void LoadTender()
@@ -72,6 +95,10 @@ namespace DepartmentModule.Pages
                                  t.PublicationScheduledUtc,t.TechnicalBidOpeningScheduledUtc,t.FinancialBidOpeningScheduledUtc,
                                  req.ScopeOfWork,req.TechnicalRequirements,req.FinancialRequirements,
                                  req.AdditionalConditions,req.TermsAndConditions,
+                                 gis.LocationName AS GisLocationName,gis.Latitude AS GisLatitude,
+                                 gis.Longitude AS GisLongitude,gis.SelectedAreaSquareMeters,
+                                 gis.BoundaryCoordinatesJson,gis.ImagePath AS GisImagePath,
+                                 gis.ImageOriginalFileName AS GisImageOriginalFileName,
                                  t.WorkflowVersion,t.DepartmentId,
                                  CAST(CASE WHEN t.CurrentStatus=N'Draft' AND
                                      (t.WorkflowVersion=1 OR
@@ -96,23 +123,28 @@ namespace DepartmentModule.Pages
                           INNER JOIN dbo.Users u ON u.UserId=t.CreatedBy
                           LEFT JOIN dbo.TenderSubcategories sub ON sub.SubcategoryId=t.TenderSubcategoryId
                           LEFT JOIN dbo.TenderRequirements req ON req.TenderId=t.TenderId
+                          LEFT JOIN dbo.TenderGisLocations gis ON gis.TenderId=t.TenderId
                           LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
                           WHERE t.TenderId=@TenderId AND t.IsDeleted=0
                             AND
                             (
                                 (@CurrentUserId=0 AND
                                  s.PublicationStartUtc<=SYSUTCDATETIME()
-                                 AND t.CurrentStatus IN
-                                    (N'Tender Published',N'Technical Bid Opening',N'Technical Evaluation',
-                                     N'Financial Bid Opening',N'CAFO Rate Opinion',N'Financial Evaluation',
-                                     N'MCA Opinion',N'Completed')
+                                 AND t.CurrentStatus NOT LIKE N'%cancel%'
                                  AND
                                     (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
                                             WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published')
-                                     OR (t.WorkflowVersion=2 AND t.CurrentStatus=N'Tender Published')))
+                                     OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowHistory publicWorkflowHistory
+                                               WHERE publicWorkflowHistory.TenderId=t.TenderId
+                                                 AND publicWorkflowHistory.WorkflowVersion=2
+                                                 AND publicWorkflowHistory.NewStatus=N'Tender Published')))
                                 OR (@CurrentUserId>0 AND @IsContractor=1 AND
                                     (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
                                             WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published')
+                                     OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowHistory publicWorkflowHistory
+                                               WHERE publicWorkflowHistory.TenderId=t.TenderId
+                                                 AND publicWorkflowHistory.WorkflowVersion=2
+                                                 AND publicWorkflowHistory.NewStatus=N'Tender Published')
                                      OR (t.WorkflowVersion=2 AND t.CurrentStatus IN (N'Tender Published',N'Completed'))
                                      OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments ownAssignment
                                                WHERE ownAssignment.TenderId=t.TenderId AND ownAssignment.IsCurrent=1
@@ -167,6 +199,31 @@ namespace DepartmentModule.Pages
                             FinancialRequirements.Text = ModuleDb.Html(reader["FinancialRequirements"]);
                             AdditionalConditions.Text = ModuleDb.Html(reader["AdditionalConditions"]);
                             TermsAndConditions.Text = ModuleDb.Html(reader["TermsAndConditions"]);
+                            GisLocationName.Text = ModuleDb.Html(reader["GisLocationName"]);
+                            GisLatitude.Text = FormatCoordinate(reader["GisLatitude"]);
+                            GisLongitude.Text = FormatCoordinate(reader["GisLongitude"]);
+                            GisSelectedArea.Text = FormatArea(reader["SelectedAreaSquareMeters"]);
+                            string boundaryCoordinates = reader["BoundaryCoordinatesJson"] == DBNull.Value
+                                ? String.Empty : Convert.ToString(reader["BoundaryCoordinatesJson"]);
+                            GisBoundaryCoordinatesText.Text = ModuleDb.Html(boundaryCoordinates);
+                            GisBoundaryPanel.Visible = !String.IsNullOrWhiteSpace(boundaryCoordinates);
+                            GisLocationPanel.Visible = reader["GisLocationName"] != DBNull.Value ||
+                                reader["GisLatitude"] != DBNull.Value || reader["GisLongitude"] != DBNull.Value ||
+                                reader["SelectedAreaSquareMeters"] != DBNull.Value || reader["GisImagePath"] != DBNull.Value;
+                            if (reader["GisImagePath"] != DBNull.Value)
+                            {
+                                string gisImageUrl = ResolveUrl("~/Pages/DocumentDownload.aspx?gisId=" +
+                                    TenderId.ToString(CultureInfo.InvariantCulture) + "&preview=true");
+                                GisImageLink.NavigateUrl = gisImageUrl;
+                                string gisImageName = reader["GisImageOriginalFileName"] == DBNull.Value
+                                    ? String.Empty
+                                    : Path.GetFileName(Convert.ToString(reader["GisImageOriginalFileName"]));
+                                GisImageLink.Text = String.IsNullOrWhiteSpace(gisImageName)
+                                    ? "View GIS location image" : "View " + ModuleDb.Html(gisImageName);
+                                GisImageLink.Visible = true;
+                                GisImagePreview.ImageUrl = gisImageUrl;
+                                GisImagePreview.Visible = true;
+                            }
                             TenderStatus = Convert.ToString(reader["CurrentStatus"]);
                             IsFinalWorkflow = Convert.ToInt16(reader["WorkflowVersion"]) == 2;
                             IsEditableDraft = Convert.ToBoolean(reader["IsEditableDraft"]);
@@ -205,20 +262,27 @@ namespace DepartmentModule.Pages
                 FinalWorkflowLink.NavigateUrl = "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
                 BudgetOpinionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
                 bool budgetApprovalPending = String.Equals(TenderStatus, "Budget Approval Pending", StringComparison.OrdinalIgnoreCase);
-                BudgetOpinionPanel.Visible = budgetApprovalPending && HasAnyRole("CAFOOfficer", "Admin");
+                BudgetOpinionPanel.Visible = budgetApprovalPending &&
+                    (IsJeAdministrator || HasAnyRole("CAFOOfficer"));
                 if (budgetApprovalPending)
                 {
                     ApproveButton.Text = "Positive budget opinion";
                     RejectButton.Text = "Negative budget opinion — return for revision";
                 }
-                bool isAdministrator = HasPermission("system.admin") || HasAnyRole("Admin");
+                bool isAdministrator = IsJeAdministrator;
                 EditTenderLink.Visible = (IsEditableDraft && isAdministrator) ||
-                    (isBudgetRevision && !IsFinalWorkflow && HasAnyRole("DepartmentOfficer", "Admin"));
+                    (isBudgetRevision && !IsFinalWorkflow &&
+                     (isAdministrator || HasAnyRole("DepartmentOfficer")));
                 EditTenderLink.Text = isBudgetRevision ? "Revise proposal" : "Edit draft";
                 EditTenderLink.NavigateUrl = "~/Pages/TenderForm.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
                 DeleteTenderButton.Visible = IsEditableDraft && isAdministrator;
                 AddBoqPanel.Visible = CanManageTenderPreparation();
-                UploadPanel.Visible = IsFinalWorkflow ? CanManageTenderPreparation() : HasAnyRole("DepartmentOfficer", "Admin");
+                UploadPanel.Visible = IsFinalWorkflow
+                    ? CanManageTenderPreparation()
+                    : IsJeAdministrator || HasAnyRole("DepartmentOfficer");
+                DocumentsGrid.Columns[6].Visible = UploadPanel.Visible;
+                DocumentTypesMissingPanel.Visible = UploadPanel.Visible &&
+                    DocumentTypeSelect.Items.Count <= 1;
                 bool acceptingBids = String.Equals(
                     TenderStatus, "Tender Published", StringComparison.OrdinalIgnoreCase) &&
                     IsPublicationWindowOpen;
@@ -241,7 +305,7 @@ namespace DepartmentModule.Pages
                     ApplyTenderLink.Text = CurrentUserId == 0 ? "Sign in to apply" : "Apply for this tender";
                 }
                 BoqGrid.Columns[6].Visible = AddBoqPanel.Visible;
-                WorkflowTransition transition = WorkflowRules.ForStatus(TenderStatus);
+                WorkflowTransition transition = IsFinalWorkflow ? null : WorkflowRules.ForStatus(TenderStatus);
                 SubmitWorkflowButton.Visible = transition != null && transition.SubmitRoles.Length > 0 &&
                     WorkflowRolesAllowed(transition.SubmitRoles);
                 if (String.Equals(TenderStatus, "Tender Published", StringComparison.OrdinalIgnoreCase))
@@ -274,14 +338,17 @@ namespace DepartmentModule.Pages
                     DocumentTypeSelect.Items.Add(new ListItem(value, value));
                 }
             }
+            DocumentTypesMissingPanel.Visible = UploadPanel.Visible &&
+                DocumentTypeSelect.Items.Count <= 1;
+            UploadButton.Enabled = DocumentTypeSelect.Items.Count > 1;
         }
 
         private void BindChildTables(SqlConnection connection)
         {
+            BindRequirementDocumentAttachments(connection);
             BindGrid(connection, BoqGrid,
                 @"SELECT BOQId,ItemName,Description,Quantity,Unit,Rate,Amount FROM dbo.BOQ WHERE TenderId=@TenderId ORDER BY BOQId;");
-            BindGrid(connection, DocumentsGrid,
-                @"SELECT DocumentId,DocumentType,FileName,UploadedDate FROM dbo.TenderDocuments WHERE TenderId=@TenderId ORDER BY UploadedDate DESC;");
+            BindTenderDocuments(connection);
             BindGrid(connection, HistoryGrid,
                 @"SELECT h.ApprovalStage,h.PreviousStatus,h.NewStatus,h.Status,h.RoleAtAction,h.Remarks,h.ApprovalDate,u.FullName AS ActionTakenBy
                   FROM dbo.ApprovalHistory h INNER JOIN dbo.Users u ON u.UserId=h.ApprovedBy
@@ -304,11 +371,265 @@ namespace DepartmentModule.Pages
             }
         }
 
+        private void BindRequirementDocumentAttachments(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT d.DocumentId,COALESCE(dt.TypeName,d.DocumentType) AS DocumentType,d.FileName
+                  FROM dbo.TenderDocuments d
+                  LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                  WHERE d.TenderId=@TenderId
+                    AND COALESCE(dt.TypeName,d.DocumentType) IN
+                        (N'Scope of Work',N'Technical Requirements',N'Financial Requirements')
+                  ORDER BY d.UploadedDate DESC,d.DocumentId DESC;", connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    HashSet<string> linkedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    while (reader.Read())
+                    {
+                        string documentType = Convert.ToString(reader["DocumentType"]).Trim();
+                        if (!linkedTypes.Add(documentType)) continue;
+
+                        int documentId = Convert.ToInt32(reader["DocumentId"], CultureInfo.InvariantCulture);
+                        string fileName = Path.GetFileName(Convert.ToString(reader["FileName"]));
+                        switch (documentType.ToLowerInvariant())
+                        {
+                            case "scope of work":
+                                SetRequirementDocumentAttachment(ScopeOfWorkAttachmentPanel,
+                                    ScopeOfWorkAttachmentStatus,
+                                    ScopeOfWorkAttachmentViewLink, ScopeOfWorkAttachmentDownloadLink,
+                                    documentId, fileName, "Scope of Work");
+                                break;
+                            case "technical requirements":
+                                SetRequirementDocumentAttachment(TechnicalRequirementsAttachmentPanel,
+                                    TechnicalRequirementsAttachmentStatus,
+                                    TechnicalRequirementsAttachmentViewLink, TechnicalRequirementsAttachmentDownloadLink,
+                                    documentId, fileName, "Technical Requirements");
+                                break;
+                            case "financial requirements":
+                                SetRequirementDocumentAttachment(FinancialRequirementsAttachmentPanel,
+                                    FinancialRequirementsAttachmentStatus,
+                                    FinancialRequirementsAttachmentViewLink, FinancialRequirementsAttachmentDownloadLink,
+                                    documentId, fileName, "Financial Requirements");
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void SetRequirementDocumentAttachment(Panel panel, Literal status, HyperLink viewLink,
+            HyperLink downloadLink, int documentId, string fileName, string documentType)
+        {
+            string documentUrl = ResolveUrl("~/Pages/DocumentDownload.aspx?id=" +
+                documentId.ToString(CultureInfo.InvariantCulture));
+            panel.Visible = true;
+            status.Visible = false;
+            viewLink.Text = HttpUtility.HtmlEncode(fileName);
+            viewLink.NavigateUrl = documentUrl + "&preview=true";
+            viewLink.Visible = true;
+            downloadLink.NavigateUrl = documentUrl;
+            downloadLink.Visible = true;
+            downloadLink.Attributes["aria-label"] = "Download " + documentType + " document";
+            downloadLink.Attributes["title"] = "Download " + documentType + " document";
+        }
+
+        private void BindTenderDocuments(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT d.DocumentId,d.DocumentTypeId,COALESCE(dt.TypeName,d.DocumentType) AS DocumentType,
+                         d.DocumentName,d.FileName,d.FilePath,d.FileExtension,d.FileSizeBytes,d.Remarks,d.UploadedDate
+                  FROM dbo.TenderDocuments d
+                  LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                  WHERE d.TenderId=@TenderId
+                  ORDER BY d.UploadedDate,d.DocumentId;", connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                DataTable documents = new DataTable();
+                using (SqlDataAdapter adapter = new SqlDataAdapter(command)) adapter.Fill(documents);
+                documents.Columns.Add("DocumentStatus", typeof(string));
+                foreach (DataRow document in documents.Rows)
+                {
+                    string fullPath;
+                    document["DocumentStatus"] =
+                        TenderLifecycleFiles.TryResolveStoredFilePath(this, Convert.ToString(document["FilePath"]), out fullPath)
+                            ? "Uploaded"
+                            : "Missing file";
+                }
+                DocumentsGrid.DataSource = documents;
+                DocumentsGrid.DataBind();
+            }
+        }
+
+        protected void DocumentsGrid_RowDataBound(object sender, GridViewRowEventArgs e)
+        {
+            if (e.Row.RowType != DataControlRowType.DataRow) return;
+            Literal serial = e.Row.FindControl("DocumentSerial") as Literal;
+            if (serial != null)
+                serial.Text = (DocumentsGrid.PageIndex * DocumentsGrid.PageSize + e.Row.RowIndex + 1)
+                    .ToString(CultureInfo.InvariantCulture);
+        }
+
+        protected void DocumentsGrid_PageIndexChanging(object sender, GridViewPageEventArgs e)
+        {
+            DocumentsGrid.PageIndex = e.NewPageIndex;
+            LoadTender();
+        }
+
+        protected void DocumentsGrid_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (e.CommandName != "EditDocument" && e.CommandName != "ReplaceDocument" &&
+                e.CommandName != "DeleteDocument") return;
+            if (!RequireTenderAccess() || !CanManageTenderDocuments())
+            {
+                ShowError("Your role is not authorized to manage documents for this tender.");
+                return;
+            }
+
+            int documentId;
+            if (!Int32.TryParse(Convert.ToString(e.CommandArgument, CultureInfo.InvariantCulture), out documentId) ||
+                documentId <= 0)
+            {
+                ShowError("The selected document is invalid.");
+                return;
+            }
+
+            if (e.CommandName == "DeleteDocument")
+            {
+                DeleteTenderDocument(documentId);
+                return;
+            }
+
+            LoadDocumentForEdit(documentId, e.CommandName == "ReplaceDocument");
+        }
+
+        protected void ShowDocumentFormButton_Click(object sender, EventArgs e)
+        {
+            if (!RequireTenderAccess() || !CanManageTenderDocuments()) return;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                    BindDocumentTypes(connection);
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document types could not be loaded for upload.", ex);
+                ShowError("Document types could not be loaded. Please retry.");
+                return;
+            }
+            ResetDocumentForm();
+            DocumentFormTitle.Text = "Upload tender document";
+            DocumentFilePanel.Visible = true;
+            DocumentFormPanel.Visible = true;
+        }
+
+        protected void CancelDocumentFormButton_Click(object sender, EventArgs e)
+        {
+            if (!RequireTenderAccess() || !CanManageTenderDocuments()) return;
+            ResetDocumentForm();
+            DocumentFormPanel.Visible = false;
+        }
+
+        protected void RefreshDocumentTypesButton_Click(object sender, EventArgs e)
+        {
+            if (!RequireTenderAccess() || !CanManageTenderDocuments()) return;
+            string selectedType = DocumentTypeSelect.SelectedValue;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                    BindDocumentTypes(connection);
+                ListItem selected = DocumentTypeSelect.Items.FindByValue(selectedType);
+                if (selected != null) DocumentTypeSelect.SelectedValue = selectedType;
+                DocumentTypesMissingPanel.Visible = DocumentTypeSelect.Items.Count <= 1;
+                Message.Text = DocumentTypesMissingPanel.Visible
+                    ? "<div class=\"message\">There are no active document types. Add or activate one in Master Management.</div>"
+                    : "<div class=\"message success\">Document types refreshed from the database.</div>";
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document types could not be refreshed.", ex);
+                ShowError("Document types could not be refreshed. Please retry.");
+            }
+        }
+
+        private void LoadDocumentForEdit(int documentId, bool replaceFile)
+        {
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT d.DocumentName,d.DocumentType,d.Remarks,d.DocumentTypeId
+                      FROM dbo.TenderDocuments d
+                      WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId;", connection))
+                {
+                    ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (!reader.Read())
+                        {
+                            ShowError("The selected document no longer exists on this tender.");
+                            return;
+                        }
+                        DocumentNameText.Text = Convert.ToString(reader["DocumentName"]);
+                        DocumentRemarksText.Text = reader["Remarks"] == DBNull.Value
+                            ? String.Empty
+                            : Convert.ToString(reader["Remarks"]);
+                        string documentType = Convert.ToString(reader["DocumentType"]);
+                        DocumentTypeSelect.ClearSelection();
+                        ListItem typeItem = DocumentTypeSelect.Items.FindByValue(documentType);
+                        if (typeItem != null) typeItem.Selected = true;
+                        else if (DocumentTypeSelect.Items.Count > 0) DocumentTypeSelect.SelectedIndex = 0;
+                    }
+                }
+                EditingDocumentId.Value = documentId.ToString(CultureInfo.InvariantCulture);
+                ReplacingDocumentFile.Value = replaceFile ? "true" : "false";
+                DocumentFormTitle.Text = replaceFile ? "Replace tender document file" : "Edit tender document details";
+                DocumentFilePanel.Visible = replaceFile;
+                DocumentFormPanel.Visible = true;
+                UploadButton.Text = replaceFile ? "Save replacement" : "Save changes";
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document details could not be loaded for editing.", ex);
+                ShowError("The selected document could not be loaded for editing.");
+            }
+        }
+
+        private void ResetDocumentForm()
+        {
+            EditingDocumentId.Value = String.Empty;
+            ReplacingDocumentFile.Value = "false";
+            DocumentNameText.Text = String.Empty;
+            DocumentRemarksText.Text = String.Empty;
+            DocumentFilePanel.Visible = true;
+            UploadButton.Text = "Save document";
+            if (DocumentTypeSelect.Items.Count > 0) DocumentTypeSelect.SelectedIndex = 0;
+        }
+
         private static string FormatMoney(object value)
         {
             return value == null || value == DBNull.Value
                 ? "—"
                 : "₹" + Convert.ToDecimal(value, CultureInfo.InvariantCulture).ToString("N2", CultureInfo.CurrentCulture);
+        }
+
+        private static string FormatCoordinate(object value)
+        {
+            return value == null || value == DBNull.Value
+                ? "—"
+                : Convert.ToDecimal(value, CultureInfo.InvariantCulture)
+                    .ToString("0.######", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatArea(object value)
+        {
+            if (value == null || value == DBNull.Value) return "—";
+            decimal squareMeters = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+            return squareMeters >= 10000m
+                ? (squareMeters / 10000m).ToString("N2", CultureInfo.CurrentCulture) + " hectares"
+                : squareMeters.ToString("N2", CultureInfo.CurrentCulture) + " m²";
         }
 
         private static string FormatIndiaDate(object value)
@@ -412,65 +733,315 @@ namespace DepartmentModule.Pages
 
         protected void UploadButton_Click(object sender, EventArgs e)
         {
-            if (!RequireTenderAccess()) return;
-            if (!(IsFinalWorkflow ? CanManageTenderPreparation() : HasAnyRole("DepartmentOfficer", "Admin")) ||
-                !DocumentFile.HasFile)
+            if (!RequireTenderAccess() || !CanManageTenderDocuments())
             {
-                ShowError("Select a document type and an attachment to upload.");
+                ShowError("Your role is not authorized to manage documents for this tender.");
                 return;
             }
-            string extension = Path.GetExtension(DocumentFile.FileName).ToLowerInvariant();
-            string[] allowed = { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png" };
-            if (DocumentFile.PostedFile.ContentLength <= 0 || DocumentFile.PostedFile.ContentLength > 20 * 1024 * 1024 ||
-                Array.IndexOf(allowed, extension) < 0 ||
-                !TenderLifecycleFiles.HasAllowedContentSignature(DocumentFile.PostedFile.InputStream, extension))
+            Page.Validate("TenderDocument");
+            if (!Page.IsValid) return;
+
+            int editingDocumentId;
+            bool isEditing = Int32.TryParse(EditingDocumentId.Value, out editingDocumentId) &&
+                editingDocumentId > 0;
+            bool isReplacement = String.Equals(ReplacingDocumentFile.Value, "true", StringComparison.OrdinalIgnoreCase);
+            bool hasFile = DocumentFile.HasFile;
+            if (DocumentNameText.Text.Trim().Length == 0 || DocumentNameText.Text.Trim().Length > 250 ||
+                DocumentRemarksText.Text.Length > 1000 ||
+                (!isEditing && !hasFile) || (isReplacement && !hasFile))
             {
-                ShowError("Choose a non-empty PDF, Office document, JPEG, or PNG file no larger than 20 MB.");
+                ShowError("Enter a document name and select a file for a new upload or replacement.");
                 return;
             }
-            string storedName = Guid.NewGuid().ToString("N") + extension;
-            string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
-            string folder = Server.MapPath(uploadRoot.TrimEnd('/', '\\') + "/tenders/" + TenderId.ToString(CultureInfo.InvariantCulture));
-            string fullPath = Path.Combine(folder, storedName);
-            string relativePath = "Uploads/tenders/" + TenderId.ToString(CultureInfo.InvariantCulture) + "/" + storedName;
-            try
+
+            string originalName = null;
+            string extension = null;
+            long fileSize = 0;
+            if (hasFile)
             {
-                if (!TenderLifecycleFiles.IsAllowedTenderDocumentType(DocumentTypeSelect.SelectedValue))
+                originalName = Path.GetFileName(DocumentFile.FileName);
+                extension = Path.GetExtension(originalName).ToLowerInvariant();
+                string[] allowed = { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png" };
+                fileSize = DocumentFile.PostedFile.ContentLength;
+                if (originalName.Length == 0 || originalName.Length > 260 || fileSize <= 0 ||
+                    fileSize > 20 * 1024 * 1024 || Array.IndexOf(allowed, extension) < 0 ||
+                    !TenderLifecycleFiles.HasAllowedContentSignature(DocumentFile.PostedFile.InputStream, extension))
                 {
-                    ShowError("Select an active document type.");
+                    ShowError("Choose a valid PDF, Office document, JPEG, or PNG no larger than 20 MB.");
                     return;
                 }
-                Directory.CreateDirectory(folder);
-                DocumentFile.SaveAs(fullPath);
+            }
+
+            string savedFullPath = null;
+            string savedRelativePath = null;
+            string oldStoredPath = null;
+            string oldFileName = null;
+            bool committed = false;
+            try
+            {
+                if (hasFile)
+                {
+                    string storedName = Guid.NewGuid().ToString("N") + extension;
+                    string uploadRoot = System.Configuration.ConfigurationManager.AppSettings["UploadRoot"] ?? "~/Uploads";
+                    string folder = Server.MapPath(uploadRoot.TrimEnd('/', '\\') + "/tenders/" +
+                        TenderId.ToString(CultureInfo.InvariantCulture));
+                    Directory.CreateDirectory(folder);
+                    savedFullPath = Path.Combine(folder, storedName);
+                    savedRelativePath = "Uploads/tenders/" +
+                        TenderId.ToString(CultureInfo.InvariantCulture) + "/" + storedName;
+                    DocumentFile.SaveAs(savedFullPath);
+                }
+
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 using (SqlTransaction transaction = connection.BeginTransaction())
-                using (SqlCommand command = new SqlCommand(
-                    @"INSERT INTO dbo.TenderDocuments (TenderId,DocumentType,FileName,FilePath,UploadedBy)
-                      VALUES (@TenderId,@DocumentType,@FileName,@FilePath,@UploadedBy);
-                      SELECT CAST(SCOPE_IDENTITY() AS int);", connection, transaction))
                 {
-                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                    AddText(command, "@DocumentType", SqlDbType.NVarChar, DocumentTypeSelect.SelectedValue, 160);
-                    AddText(command, "@FileName", SqlDbType.NVarChar, Path.GetFileName(DocumentFile.FileName), 260);
-                    AddText(command, "@FilePath", SqlDbType.NVarChar, relativePath, 400);
-                    ModuleDb.AddParameter(command, "@UploadedBy", SqlDbType.Int, CurrentUserId);
-                    int documentId = Convert.ToInt32(command.ExecuteScalar());
-                    ModuleDb.AddAudit(connection, transaction, CurrentUserId, "Upload", "TenderDocument", documentId, null, Request.UserHostAddress);
+                    int documentTypeId;
+                    using (SqlCommand command = new SqlCommand(
+                        @"SELECT DocumentTypeId FROM dbo.DocumentTypes WITH (UPDLOCK,HOLDLOCK)
+                          WHERE TypeName=@TypeName AND IsActive=1;", connection, transaction))
+                    {
+                        AddText(command, "@TypeName", SqlDbType.NVarChar, DocumentTypeSelect.SelectedValue, 80);
+                        object result = command.ExecuteScalar();
+                        if (result == null || result == DBNull.Value)
+                            throw new InvalidOperationException("Select an active document type. Refresh the list and retry.");
+                        documentTypeId = Convert.ToInt32(result, CultureInfo.InvariantCulture);
+                    }
+
+                    int documentId;
+                    string auditAction;
+                    string auditDetails;
+                    if (isEditing)
+                    {
+                        using (SqlCommand command = new SqlCommand(
+                            @"SELECT FilePath,FileName FROM dbo.TenderDocuments WITH (UPDLOCK,HOLDLOCK)
+                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                        {
+                            ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, editingDocumentId);
+                            ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                            using (SqlDataReader reader = command.ExecuteReader())
+                            {
+                                if (!reader.Read())
+                                    throw new InvalidOperationException("The selected document no longer exists on this tender.");
+                                oldStoredPath = Convert.ToString(reader["FilePath"]);
+                                oldFileName = Convert.ToString(reader["FileName"]);
+                            }
+                        }
+
+                        using (SqlCommand command = new SqlCommand(
+                            @"UPDATE dbo.TenderDocuments
+                              SET DocumentTypeId=@DocumentTypeId,DocumentType=@DocumentType,
+                                  DocumentName=@DocumentName,Remarks=@Remarks,
+                                  FileName=CASE WHEN @HasFile=1 THEN @FileName ELSE FileName END,
+                                  FilePath=CASE WHEN @HasFile=1 THEN @FilePath ELSE FilePath END,
+                                  FileExtension=CASE WHEN @HasFile=1 THEN @FileExtension ELSE FileExtension END,
+                                  FileSizeBytes=CASE WHEN @HasFile=1 THEN @FileSizeBytes ELSE FileSizeBytes END
+                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                        {
+                            AddTenderDocumentParameters(command, documentTypeId, originalName, savedRelativePath,
+                                extension, fileSize, hasFile);
+                            ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, editingDocumentId);
+                            ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                            if (command.ExecuteNonQuery() != 1)
+                                throw new InvalidOperationException("The selected document could not be updated.");
+                        }
+                        documentId = editingDocumentId;
+                        auditAction = hasFile ? "ReplaceFile" : "Update";
+                        auditDetails = String.Format(CultureInfo.InvariantCulture,
+                            "TenderId={0}; type={1}; name={2}; previous file={3}; new file={4}",
+                            TenderId, DocumentTypeSelect.SelectedValue, DocumentNameText.Text.Trim(),
+                            hasFile ? oldFileName : String.Empty, hasFile ? originalName : String.Empty);
+                    }
+                    else
+                    {
+                        using (SqlCommand command = new SqlCommand(
+                            @"INSERT INTO dbo.TenderDocuments
+                                (TenderId,DocumentTypeId,DocumentType,DocumentName,Remarks,FileName,FilePath,
+                                 FileExtension,FileSizeBytes,UploadedBy)
+                              VALUES
+                                (@TenderId,@DocumentTypeId,@DocumentType,@DocumentName,@Remarks,@FileName,@FilePath,
+                                 @FileExtension,@FileSizeBytes,@UploadedBy);
+                              SELECT CAST(SCOPE_IDENTITY() AS int);", connection, transaction))
+                        {
+                            AddTenderDocumentParameters(command, documentTypeId, originalName, savedRelativePath,
+                                extension, fileSize, true);
+                            ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                            ModuleDb.AddParameter(command, "@UploadedBy", SqlDbType.Int, CurrentUserId);
+                            documentId = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+                        }
+                        auditAction = "Upload";
+                        auditDetails = String.Format(CultureInfo.InvariantCulture,
+                            "TenderId={0}; type={1}; name={2}; file={3}",
+                            TenderId, DocumentTypeSelect.SelectedValue, DocumentNameText.Text.Trim(), originalName);
+                    }
+
+                    ModuleDb.AddAudit(connection, transaction, CurrentUserId, auditAction,
+                        "TenderDocument", documentId, auditDetails, Request.UserHostAddress);
                     transaction.Commit();
+                    committed = true;
                 }
-                Message.Text = "<div class=\"message success\">Attachment uploaded.</div>";
+
+                bool oldFileRemoved = !hasFile || DeleteStoredTenderDocument(oldStoredPath);
+                ResetDocumentForm();
+                DocumentFormPanel.Visible = false;
                 LoadTender();
+                Message.Text = oldFileRemoved
+                    ? "<div class=\"message success\">Tender document saved.</div>"
+                    : "<div class=\"message\">The document was saved, but the previous file could not be removed. Contact support to clean up the unused file.</div>";
             }
             catch (SqlException ex)
             {
-                if (File.Exists(fullPath)) File.Delete(fullPath);
-                Trace.Warn("DepartmentModule", "Tender document upload record failed.", ex);
-                ShowError("The attachment could not be recorded. Please retry.");
+                if (!committed) CleanupNewDocumentFile(savedFullPath);
+                Trace.Warn("DepartmentModule", "Tender document database operation failed.", ex);
+                ShowError("The tender document could not be saved. Please retry.");
             }
             catch (IOException ex)
             {
-                Trace.Warn("DepartmentModule", "Tender document file could not be stored.", ex);
-                ShowError("The attachment could not be saved.");
+                if (!committed) CleanupNewDocumentFile(savedFullPath);
+                Trace.Warn("DepartmentModule", "Tender document file operation failed.", ex);
+                ShowError("The tender document file could not be saved. Please retry.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                if (!committed) CleanupNewDocumentFile(savedFullPath);
+                Trace.Warn("DepartmentModule", "Tender document storage access was denied.", ex);
+                ShowError("The file storage location is not available to the application. Contact support.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!committed) CleanupNewDocumentFile(savedFullPath);
+                ShowError(ex.Message);
+            }
+        }
+
+        private bool CanManageTenderDocuments()
+        {
+            return IsFinalWorkflow
+                ? CanManageTenderPreparation()
+                : IsJeAdministrator || HasAnyRole("DepartmentOfficer");
+        }
+
+        private void DeleteTenderDocument(int documentId)
+        {
+            string storedPath = null;
+            string fileName = null;
+            string documentName = null;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlTransaction transaction = connection.BeginTransaction())
+                {
+                    using (SqlCommand command = new SqlCommand(
+                        @"SELECT FilePath,FileName,DocumentName
+                          FROM dbo.TenderDocuments WITH (UPDLOCK,HOLDLOCK)
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                    {
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        using (SqlDataReader reader = command.ExecuteReader())
+                        {
+                            if (!reader.Read())
+                                throw new InvalidOperationException("The selected document no longer exists on this tender.");
+                            storedPath = Convert.ToString(reader["FilePath"]);
+                            fileName = Convert.ToString(reader["FileName"]);
+                            documentName = Convert.ToString(reader["DocumentName"]);
+                        }
+                    }
+
+                    using (SqlCommand command = new SqlCommand(
+                        "DELETE FROM dbo.TenderDocuments WHERE DocumentId=@DocumentId AND TenderId=@TenderId;",
+                        connection, transaction))
+                    {
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        if (command.ExecuteNonQuery() != 1)
+                            throw new InvalidOperationException("The selected document could not be deleted.");
+                    }
+
+                    ModuleDb.AddAudit(connection, transaction, CurrentUserId, "Delete",
+                        "TenderDocument", documentId,
+                        String.Format(CultureInfo.InvariantCulture,
+                            "TenderId={0}; name={1}; file={2}", TenderId, documentName, fileName),
+                        Request.UserHostAddress);
+                    transaction.Commit();
+                }
+
+                DocumentsGrid.PageIndex = 0;
+                bool fileRemoved = DeleteStoredTenderDocument(storedPath);
+                LoadTender();
+                Message.Text = fileRemoved
+                    ? "<div class=\"message success\">Tender document deleted.</div>"
+                    : "<div class=\"message\">The document record was deleted, but its file could not be removed. Contact support to clean up the unused file.</div>";
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document deletion failed.", ex);
+                ShowError("The tender document could not be deleted. Please retry.");
+            }
+            catch (IOException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document file deletion failed.", ex);
+                ShowError("The document record was removed, but the file could not be deleted. Contact support.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document file deletion was denied.", ex);
+                ShowError("The document record was removed, but the file could not be deleted. Contact support.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowError(ex.Message);
+            }
+        }
+
+        private void AddTenderDocumentParameters(SqlCommand command, int documentTypeId,
+            string originalName, string relativePath, string extension, long fileSize, bool hasFile)
+        {
+            ModuleDb.AddParameter(command, "@DocumentTypeId", SqlDbType.Int, documentTypeId);
+            AddText(command, "@DocumentType", SqlDbType.NVarChar, DocumentTypeSelect.SelectedValue, 80);
+            AddText(command, "@DocumentName", SqlDbType.NVarChar, DocumentNameText.Text, 250);
+            AddText(command, "@Remarks", SqlDbType.NVarChar, DocumentRemarksText.Text, 1000);
+            AddText(command, "@FileName", SqlDbType.NVarChar, originalName, 260);
+            AddText(command, "@FilePath", SqlDbType.NVarChar, relativePath, 400);
+            AddText(command, "@FileExtension", SqlDbType.NVarChar, extension, 10);
+            ModuleDb.AddParameter(command, "@FileSizeBytes", SqlDbType.BigInt, hasFile ? (object)fileSize : null);
+            ModuleDb.AddParameter(command, "@HasFile", SqlDbType.Bit, hasFile);
+        }
+
+        private bool DeleteStoredTenderDocument(string storedPath)
+        {
+            string fullPath;
+            if (!TenderLifecycleFiles.TryResolveStoredFilePath(this, storedPath, out fullPath)) return true;
+            try
+            {
+                File.Delete(fullPath);
+                return true;
+            }
+            catch (IOException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document file could not be removed from storage.", ex);
+                return false;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender document file removal was denied.", ex);
+                return false;
+            }
+        }
+
+        private void CleanupNewDocumentFile(string fullPath)
+        {
+            if (String.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath)) return;
+            try
+            {
+                File.Delete(fullPath);
+            }
+            catch (IOException ex)
+            {
+                Trace.Warn("DepartmentModule", "An uncommitted tender document file could not be cleaned up.", ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Trace.Warn("DepartmentModule", "Cleanup of an uncommitted tender document file was denied.", ex);
             }
         }
 
@@ -481,7 +1052,7 @@ namespace DepartmentModule.Pages
         protected void DeleteTenderButton_Click(object sender, EventArgs e)
         {
             if (!RequireTenderAccess()) return;
-            if ((!HasPermission("system.admin") && !HasAnyRole("Admin")) ||
+            if (!IsJeAdministrator ||
                 !IsEditableDraft || !String.Equals(TenderStatus, "Draft", StringComparison.OrdinalIgnoreCase))
             {
                 ShowError("Only an administrator can delete a draft at its initial workflow stage.");
@@ -538,6 +1109,11 @@ namespace DepartmentModule.Pages
                 ShowError("Bid opening is managed by the authorized opening workflow after the approved publication closing time.");
                 return;
             }
+            if (IsFinalWorkflow)
+            {
+                ShowError("This tender uses the assigned workflow. Use the assigned workflow queue to submit or approve it.");
+                return;
+            }
             WorkflowTransition transition = WorkflowRules.ForStatus(TenderStatus);
             if (transition == null)
             {
@@ -547,7 +1123,7 @@ namespace DepartmentModule.Pages
 
             bool isSubmit = action == "Submitted";
             bool isBudgetOpinion = String.Equals(TenderStatus, "Budget Approval Pending", StringComparison.OrdinalIgnoreCase) &&
-                HasAnyRole("CAFOOfficer", "Admin");
+                (IsJeAdministrator || HasAnyRole("CAFOOfficer"));
             decimal? approvedBudgetAmount = null;
             if (isBudgetOpinion && action == "Approved")
             {
@@ -586,12 +1162,16 @@ namespace DepartmentModule.Pages
                 using (SqlTransaction transaction = connection.BeginTransaction())
                 {
                     string previousStatus;
-                    using (SqlCommand command = new SqlCommand("SELECT CurrentStatus FROM dbo.Tender WITH (UPDLOCK, ROWLOCK) WHERE TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
+                    using (SqlCommand command = new SqlCommand("SELECT CurrentStatus,WorkflowVersion FROM dbo.Tender WITH (UPDLOCK, ROWLOCK) WHERE TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                        object value = command.ExecuteScalar();
-                        if (value == null || value == DBNull.Value) throw new InvalidOperationException("Tender no longer exists.");
-                        previousStatus = Convert.ToString(value);
+                        using (SqlDataReader reader = command.ExecuteReader())
+                        {
+                            if (!reader.Read()) throw new InvalidOperationException("Tender no longer exists.");
+                            previousStatus = Convert.ToString(reader["CurrentStatus"]);
+                            if (Convert.ToInt16(reader["WorkflowVersion"], CultureInfo.InvariantCulture) != 1)
+                                throw new InvalidOperationException("This tender uses the assigned workflow. Use the assigned workflow queue.");
+                        }
                     }
                     if (!String.Equals(previousStatus, TenderStatus, StringComparison.Ordinal))
                         throw new InvalidOperationException("Tender status changed. Refresh the page before acting.");
@@ -601,7 +1181,7 @@ namespace DepartmentModule.Pages
 
                     using (SqlCommand command = new SqlCommand(
                         @"UPDATE dbo.Tender SET CurrentStatus=@NewStatus,ModifiedBy=@UserId,ModifiedDate=SYSUTCDATETIME()
-                          WHERE TenderId=@TenderId AND CurrentStatus=@PreviousStatus AND IsDeleted=0;", connection, transaction))
+                          WHERE TenderId=@TenderId AND CurrentStatus=@PreviousStatus AND WorkflowVersion=1 AND IsDeleted=0;", connection, transaction))
                     {
                         AddText(command, "@NewStatus", SqlDbType.NVarChar, nextStatus, 50);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
@@ -729,7 +1309,7 @@ namespace DepartmentModule.Pages
                     CurrentDepartmentId.Value == TenderDepartmentId;
             }
 
-            return HasAnyRole("DepartmentOfficer", "Admin") &&
+            return (IsJeAdministrator || HasAnyRole("DepartmentOfficer")) &&
                 (IsDraft || String.Equals(TenderStatus, "Budget Revision Required", StringComparison.OrdinalIgnoreCase));
         }
 

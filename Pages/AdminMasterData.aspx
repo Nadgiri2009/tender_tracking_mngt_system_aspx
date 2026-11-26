@@ -2,7 +2,7 @@
 <asp:Content ID="Title" ContentPlaceHolderID="TitleContent" runat="server">Master Data</asp:Content>
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <div class="page-heading">
-        <div><h1>Master data</h1><div class="muted">Manage tender categories, subcategories, methods, financial years, document types, units, and officer designations.</div></div>
+        <div><h1>Master data</h1><div class="muted">Manage tender categories, subcategories, methods, Budgeting Financial Years, document types, units, and officer designations.</div></div>
         <a class="button secondary" href="Admin.aspx">Back to administration</a>
     </div>
     <asp:Literal ID="Message" runat="server" />
@@ -18,8 +18,8 @@
         </asp:Panel>
         <asp:Panel ID="FinancialYearPanel" runat="server" Visible="false">
             <div class="row">
-                <div class="field"><label for="FinancialYearStartText">Financial year starts</label><asp:TextBox ID="FinancialYearStartText" runat="server" TextMode="Date" /></div>
-                <div class="field"><label for="FinancialYearEndText">Financial year ends</label><asp:TextBox ID="FinancialYearEndText" runat="server" TextMode="Date" /></div>
+                <div class="field"><label for="FinancialYearStartText">Budgeting Financial Year starts</label><asp:TextBox ID="FinancialYearStartText" runat="server" TextMode="Date" /></div>
+                <div class="field"><label for="FinancialYearEndText">Budgeting Financial Year ends</label><asp:TextBox ID="FinancialYearEndText" runat="server" TextMode="Date" /></div>
             </div>
         </asp:Panel>
         <div class="row">

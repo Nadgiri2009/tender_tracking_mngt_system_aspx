@@ -192,7 +192,9 @@ namespace DepartmentModule.Helpers
         protected bool HasPermission(string permissionKey)
         {
             return !String.IsNullOrWhiteSpace(permissionKey) &&
-                (IsJeAdministrator || CurrentPermissions.Contains(permissionKey));
+                (IsJeAdministrator ||
+                 (!String.Equals(permissionKey, "system.admin", StringComparison.OrdinalIgnoreCase) &&
+                  CurrentPermissions.Contains(permissionKey)));
         }
 
         protected bool IsJeAdministrator
@@ -207,6 +209,15 @@ namespace DepartmentModule.Helpers
         protected bool RequirePermission(string permissionKey)
         {
             if (HasPermission(permissionKey)) return true;
+            Response.StatusCode = 403;
+            Response.TrySkipIisCustomErrors = true;
+            Response.Redirect("~/Pages/Error.aspx?code=403", true);
+            return false;
+        }
+
+        protected bool RequireJeAdministrator()
+        {
+            if (IsJeAdministrator) return true;
             Response.StatusCode = 403;
             Response.TrySkipIisCustomErrors = true;
             Response.Redirect("~/Pages/Error.aspx?code=403", true);

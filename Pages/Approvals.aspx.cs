@@ -32,7 +32,8 @@ namespace DepartmentModule.Pages
             for (int i = 0; i < statuses.Length; i++) parameters[i] = "@Status" + i;
             string sql = @"SELECT t.TenderId,t.TenderNumber,t.Title,t.CurrentStatus,t.EstimatedAmount,d.DepartmentName,t.CreatedDate
                            FROM dbo.Tender t INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
-                           WHERE t.IsDeleted=0 AND t.CurrentStatus IN (" + String.Join(",", parameters) + @")
+                           WHERE t.IsDeleted=0 AND t.WorkflowVersion=1
+                             AND t.CurrentStatus IN (" + String.Join(",", parameters) + @")
                            ORDER BY t.CreatedDate DESC;";
             try
             {
@@ -58,6 +59,11 @@ namespace DepartmentModule.Pages
         {
             ApprovalGrid.PageIndex = e.NewPageIndex;
             BindApprovals();
+        }
+
+        protected int ApprovalSerialNumber(int rowIndex)
+        {
+            return ApprovalGrid.PageIndex * ApprovalGrid.PageSize + rowIndex + 1;
         }
     }
 }

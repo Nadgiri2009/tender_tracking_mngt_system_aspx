@@ -5,7 +5,7 @@
         <div class="auth-layout">
             <section class="auth-card auth-card-login">
                 <h1>Sign in</h1>
-                <p class="muted auth-description">Access your account with a one-time password sent to your registered mobile.</p>
+                <p class="muted auth-description">Access your account with a one-time password for your registered mobile.</p>
             <asp:Literal ID="Message" runat="server" />
             <div class="field">
                 <asp:Label ID="MobileLabel" runat="server" AssociatedControlID="MobileText">Mobile number</asp:Label>
@@ -19,7 +19,7 @@
                 </div>
                 <asp:RequiredFieldValidator ID="MobileRequired" runat="server" ControlToValidate="MobileText" ValidationGroup="LoginId" CssClass="validation" Display="Dynamic" ErrorMessage="Mobile number is required." />
                 <asp:CustomValidator ID="MobileFormat" runat="server" ControlToValidate="MobileText" ValidationGroup="LoginId" CssClass="validation" Display="Dynamic" OnServerValidate="Mobile_ServerValidate" ErrorMessage="Enter a valid 10-digit mobile number." />
-                <span class="field-help">Enter your registered 10-digit Indian mobile number.</span>
+                <span class="field-help">Enter your registered 10-digit mobile number.</span>
             </div>
             <asp:Button ID="RequestOtpButton" runat="server" Text="Send OTP" CssClass="button auth-submit"
                 ValidationGroup="LoginId" UseSubmitBehavior="false"
@@ -27,7 +27,11 @@
                 OnClick="RequestOtpButton_Click" />
             <span id="LoginOtpCooldown" class="auth-countdown" role="status" aria-live="polite"></span>
             <asp:Panel ID="OtpPanel" runat="server" Visible="false">
-                <p class="muted auth-otp-note">Enter the six-digit OTP sent to your mobile number.</p>
+                <p class="muted auth-otp-note">Enter the six-digit OTP for your registered mobile number.</p>
+                <asp:Panel ID="DevelopmentOtpPanel" runat="server" Visible="false" CssClass="message success" role="status">
+                    <strong>DEVELOPMENT MODE</strong><br />
+                    Development OTP: <code><asp:Literal ID="DevelopmentOtpText" runat="server" /></code>
+                </asp:Panel>
                 <div class="field">
                     <asp:Label ID="OtpLabel" runat="server" AssociatedControlID="OtpText">Login OTP</asp:Label>
                     <div class="auth-mobile-input">

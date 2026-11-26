@@ -37,15 +37,16 @@
         </div>
         <asp:Button ID="CreateContractorButton" runat="server" Text="Create and link profile" OnClick="CreateContractorButton_Click" />
     </section>
-    <section class="card">
+    <section class="card" id="contractor-profiles">
         <h2>Contractor profiles</h2>
         <div class="row">
             <div class="field"><asp:Label runat="server" AssociatedControlID="ContractorSearchText">Search contractors</asp:Label><asp:TextBox ID="ContractorSearchText" runat="server" MaxLength="100" /></div>
             <div class="field"><asp:Label runat="server" AssociatedControlID="ContractorStatusFilter">Status</asp:Label><asp:DropDownList ID="ContractorStatusFilter" runat="server"><asp:ListItem Text="All statuses" Value="" /><asp:ListItem Text="Active" Value="1" /><asp:ListItem Text="Inactive" Value="0" /></asp:DropDownList></div>
             <asp:Button ID="FilterContractorsButton" runat="server" Text="Filter contractors" CssClass="button secondary" CausesValidation="false" OnClick="FilterContractorsButton_Click" />
         </div>
-        <asp:GridView ID="ContractorsGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="20" GridLines="None" OnPageIndexChanging="ContractorsGrid_PageIndexChanging" OnRowCommand="ContractorsGrid_RowCommand" EmptyDataText="No contractor profiles found.">
+        <asp:GridView ID="ContractorsGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" OnPageIndexChanging="ContractorsGrid_PageIndexChanging" OnRowCommand="ContractorsGrid_RowCommand" EmptyDataText="No contractor profiles found.">
             <Columns>
+                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ContractorSerialNumber(Container.RowIndex) %></ItemTemplate></asp:TemplateField>
                 <asp:BoundField DataField="Name" HeaderText="Contractor" />
                 <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
                 <asp:BoundField DataField="Email" HeaderText="Email" />
@@ -56,15 +57,16 @@
             </Columns>
         </asp:GridView>
     </section>
-    <section class="card">
+    <section class="card" id="department-users">
         <h2>Staff and vendor users</h2>
         <div class="row">
             <div class="field"><asp:Label runat="server" AssociatedControlID="UserSearchText">Search users</asp:Label><asp:TextBox ID="UserSearchText" runat="server" MaxLength="100" /></div>
             <div class="field"><asp:Label runat="server" AssociatedControlID="UserStatusFilter">Status</asp:Label><asp:DropDownList ID="UserStatusFilter" runat="server"><asp:ListItem Text="All statuses" Value="" /><asp:ListItem Text="Active" Value="1" /><asp:ListItem Text="Inactive" Value="0" /></asp:DropDownList></div>
             <asp:Button ID="FilterUsersButton" runat="server" Text="Filter users" CssClass="button secondary" CausesValidation="false" OnClick="FilterUsersButton_Click" />
         </div>
-        <asp:GridView ID="UsersGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="20" GridLines="None" OnPageIndexChanging="UsersGrid_PageIndexChanging" OnRowCommand="UsersGrid_RowCommand" EmptyDataText="No users found.">
+        <asp:GridView ID="UsersGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" OnPageIndexChanging="UsersGrid_PageIndexChanging" OnRowCommand="UsersGrid_RowCommand" EmptyDataText="No users found.">
             <Columns>
+                <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# UserSerialNumber(Container.RowIndex) %></ItemTemplate></asp:TemplateField>
                 <asp:BoundField DataField="FullName" HeaderText="Name" />
                 <asp:BoundField DataField="Email" HeaderText="Email" />
                 <asp:BoundField DataField="Mobile" HeaderText="Mobile" />

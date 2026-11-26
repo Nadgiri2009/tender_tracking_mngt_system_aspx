@@ -4,16 +4,16 @@
 <head runat="server">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title><asp:ContentPlaceHolder ID="TitleContent" runat="server">Department Tender Management</asp:ContentPlaceHolder></title>
-    <link href="<%= ResolveUrl("~/Content/Styles.css?v=20261120-portal-admin-footer") %>" rel="stylesheet" />
+    <title><asp:ContentPlaceHolder ID="TitleContent" runat="server">Department Project & tender</asp:ContentPlaceHolder></title>
+    <link href="<%= ResolveUrl("~/Content/Styles.css?v=20261126-list-pagination-v1") %>" rel="stylesheet" />
     <asp:ContentPlaceHolder ID="HeadContent" runat="server" />
 </head>
 <body>
-    <form id="ModuleForm" runat="server">
+    <form id="ModuleForm" runat="server" enctype="multipart/form-data">
         <div id="AppLayout" runat="server" class="app-shell public-layout">
             <aside id="AdminSidebar" runat="server" class="sidebar" visible="false">
                 <div class="sidebar-top">
-                    <div class="sidebar-heading">Tender Management <span><asp:Literal ID="SidebarSubtitle" runat="server" /></span></div>
+                    <div class="sidebar-heading">Project & tender <span><asp:Literal ID="SidebarSubtitle" runat="server" /></span></div>
                     <button type="button" id="SidebarCollapseToggle" class="sidebar-collapse-toggle"
                         aria-controls="AdminSidebar" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">
                         <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
@@ -34,7 +34,7 @@
                     </button>
                     <a class="brand" href="<%= ResolveUrl("~/Pages/Home.aspx") %>">
                         <img class="brand-logo" src="<%= ResolveUrl("~/SMC.png") %>" alt="" />
-                        <span class="brand-copy">Solapur Municipal Corporation <span>Tender Management System</span></span>
+                        <span class="brand-copy">Solapur Municipal Corporation <span>Project & tender System</span></span>
                     </a>
                     <button type="button" id="PublicNavToggle" class="public-nav-toggle" aria-controls="PublicNavigation" aria-expanded="false" aria-label="Open navigation menu">
                         <span></span><span></span><span></span>
@@ -98,7 +98,7 @@
                         <p>The project does not contain a verified official address, telephone number, or email address.</p>
                     </section>
                     <div class="footer-bottom">
-                        <span>&copy; <%= DateTime.Now.Year %> Solapur Municipal Corporation | Tender Management Portal</span>
+                        <span>&copy; <%= DateTime.Now.Year %> Solapur Municipal Corporation | Project & tender Portal</span>
                         <span>Portal ownership: Solapur Municipal Corporation</span>
                     </div>
                 </footer>
@@ -197,6 +197,7 @@
                 });
             }());
         </script>
+        <script src="<%= ResolveUrl("~/Scripts/ListEnhancements.js?v=20261126-1") %>"></script>
     </form>
 </body>
 </html>

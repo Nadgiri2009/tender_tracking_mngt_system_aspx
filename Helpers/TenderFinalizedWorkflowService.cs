@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
@@ -42,6 +43,21 @@ namespace DepartmentModule.Helpers
         public delegate WorkflowTransitionMetadata StageAction(
             SqlConnection connection, SqlTransaction transaction, int departmentId,
             string previousStatus, string newStatus);
+
+        private static int GetShortfallResponseDurationDays()
+        {
+            string value = Environment.GetEnvironmentVariable("SMC_ShortfallResponseDurationDays");
+            if (String.IsNullOrWhiteSpace(value))
+                value = ConfigurationManager.AppSettings["ShortfallResponseDurationDays"];
+            if (String.IsNullOrWhiteSpace(value)) return 3;
+
+            int days;
+            if (!Int32.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out days) ||
+                days < 1 || days > 30)
+                throw new ConfigurationErrorsException(
+                    "ShortfallResponseDurationDays must be an integer from 1 through 30.");
+            return days;
+        }
 
         private sealed class StageAssignment
         {
@@ -375,9 +391,9 @@ namespace DepartmentModule.Helpers
                 @"DECLARE @DecisionAtUtc DATETIME2(0)=SYSUTCDATETIME();
                   UPDATE dbo.TenderShortfalls
                   SET Status=@Status,JeApprovedBy=@UserId,JeApprovedAtUtc=@DecisionAtUtc,
-                      SubmissionDurationDays=CASE WHEN @Approve=1 THEN 3 ELSE SubmissionDurationDays END,
+                      SubmissionDurationDays=CASE WHEN @Approve=1 THEN @DurationDays ELSE SubmissionDurationDays END,
                       SubmissionDeadlineUtc=CASE WHEN @Approve=1
-                          THEN DATEADD(DAY,3,@DecisionAtUtc) ELSE SubmissionDeadlineUtc END,
+                          THEN DATEADD(DAY,@DurationDays,@DecisionAtUtc) ELSE SubmissionDeadlineUtc END,
                       ClearanceStatus=CASE WHEN @Approve=1 THEN N'Pending' ELSE N'Continued Deficiency' END,
                       Remarks=CASE WHEN @Remarks IS NULL THEN Remarks ELSE @Remarks END
                   WHERE ShortfallId=@ShortfallId AND TenderId=@TenderId AND Status=N'Pending JE Approval';",
@@ -386,6 +402,7 @@ namespace DepartmentModule.Helpers
                 ModuleDb.AddParameter(command, "@Status", SqlDbType.NVarChar,
                     approve ? "Awaiting Contractor" : "Rejected", 40);
                 ModuleDb.AddParameter(command, "@Approve", SqlDbType.Bit, approve);
+                ModuleDb.AddParameter(command, "@DurationDays", SqlDbType.Int, GetShortfallResponseDurationDays());
                 ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
                 ModuleDb.AddParameter(command, "@Remarks", SqlDbType.NVarChar,
                     String.IsNullOrWhiteSpace(note) ? null : note, 2000);
@@ -400,7 +417,7 @@ namespace DepartmentModule.Helpers
                     @"INSERT INTO dbo.TenderNotifications
                         (UserId,TenderId,ShortfallId,NotificationType,Message,AvailableAtUtc)
                       SELECT @UserId,@TenderId,@ShortfallId,N'ShortfallReminder',
-                             N'This is your reminder: the three-calendar-day shortfall deadline is 24 hours away.',
+                             N'This is your reminder: the shortfall response deadline is 24 hours away.',
                              DATEADD(HOUR,-24,s.SubmissionDeadlineUtc)
                       FROM dbo.TenderShortfalls s
                       WHERE s.ShortfallId=@ShortfallId AND s.TenderId=@TenderId

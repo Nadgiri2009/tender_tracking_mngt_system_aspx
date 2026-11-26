@@ -88,6 +88,11 @@ namespace DepartmentModule.Pages
             BindApplications();
         }
 
+        protected int ApplicationSerialNumber(int rowIndex)
+        {
+            return ApplicationsGrid.PageIndex * ApplicationsGrid.PageSize + rowIndex + 1;
+        }
+
         protected void NotificationsGrid_RowCommand(object sender, GridViewCommandEventArgs e)
         {
             if (!String.Equals(e.CommandName, "MarkNotificationRead", StringComparison.Ordinal)) return;

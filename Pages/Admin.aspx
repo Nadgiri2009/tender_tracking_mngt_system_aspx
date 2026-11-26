@@ -3,31 +3,46 @@
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <div class="page-heading"><div><h1>JE Administration Dashboard</h1><div class="muted">Live system overview and recent activity.</div></div></div>
     <asp:Literal ID="Message" runat="server" />
-    <section class="cards dashboard-statistics admin-dashboard-statistics" aria-label="System summary">
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx") %>">
-            <span class="muted">Total tenders</span><strong><asp:Literal ID="TotalTenders" runat="server" /></strong>
-            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6" /></svg></span>
-        </a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?status=Draft") %>">
-            <span class="muted">Draft tenders</span><strong><asp:Literal ID="DraftTenders" runat="server" /></strong>
-            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5" /></svg></span>
-        </a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Published") %>">
-            <span class="muted">Published tenders</span><strong><asp:Literal ID="PublishedTenders" runat="server" /></strong>
-            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10" /></svg></span>
-        </a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Active") %>">
-            <span class="muted">Active tenders</span><strong><asp:Literal ID="ActiveTenderCount" runat="server" /></strong>
-            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M16 3h5v5" /></svg></span>
-        </a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Closed") %>">
-            <span class="muted">Closed tenders</span><strong><asp:Literal ID="ClosedTenders" runat="server" /></strong>
-            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19" /></svg></span>
-        </a>
-        <a class="stat" href="<%= ResolveUrl("~/Pages/AdminDepartments.aspx") %>">
-            <span class="muted">Departments</span><strong><asp:Literal ID="Departments" runat="server" /></strong>
-            <span class="dashboard-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h1M14 10h1M9 14h1M14 14h1M10 21v-4h4v4" /></svg></span>
-        </a>
+    <section class="card">
+        <h2>Tender overview</h2>
+        <div class="cards dashboard-statistics admin-dashboard-statistics" aria-label="Tender overview">
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx") %>"><span class="muted">Total tenders</span><strong><asp:Literal ID="TotalTenders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?status=Draft") %>"><span class="muted">Draft tenders</span><strong><asp:Literal ID="DraftTenders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Published") %>"><span class="muted">Published tenders</span><strong><asp:Literal ID="PublishedTenders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Active") %>"><span class="muted">Active tenders</span><strong><asp:Literal ID="ActiveTenderCount" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Closed") %>"><span class="muted">Closed tenders</span><strong><asp:Literal ID="ClosedTenders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Cancelled") %>"><span class="muted">Cancelled tenders</span><strong><asp:Literal ID="CancelledTenders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/Tenders.aspx?bucket=Awarded") %>"><span class="muted">Awarded tenders</span><strong><asp:Literal ID="AwardedTenders" runat="server" /></strong></a>
+        </div>
+    </section>
+    <section class="card">
+        <h2>Contractor overview</h2>
+        <div class="cards dashboard-statistics admin-dashboard-statistics" aria-label="Contractor overview">
+            <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx#contractor-profiles") %>"><span class="muted">Registered contractors</span><strong><asp:Literal ID="TotalContractors" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx?contractorStatus=1#contractor-profiles") %>"><span class="muted">Active contractors</span><strong><asp:Literal ID="ActiveContractors" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx?contractorStatus=0#contractor-profiles") %>"><span class="muted">Suspended / inactive contractors</span><strong><asp:Literal ID="InactiveContractors" runat="server" /></strong></a>
+        </div>
+    </section>
+    <section class="card">
+        <h2>Department workflow</h2>
+        <div class="cards dashboard-statistics admin-dashboard-statistics" aria-label="Department workflow">
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=verification") %>"><span class="muted">Pending document verification</span><strong><asp:Literal ID="PendingDocumentVerification" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=shortfall") %>"><span class="muted">Shortfalls generated</span><strong><asp:Literal ID="ShortfallsGenerated" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=shortfall&stage=Final_Contractor_SubmitShortfall") %>"><span class="muted">Shortfall responses pending</span><strong><asp:Literal ID="ShortfallResponsesPending" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=approval&stage=Final_Samiti_ApproveFinancialOpening") %>"><span class="muted">Financial bid opening approvals</span><strong><asp:Literal ID="PendingFinancialOpeningApprovals" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=approval&stage=Final_Auditor_ApproveFinancialBids") %>"><span class="muted">Pending audit approvals</span><strong><asp:Literal ID="PendingAuditApprovals" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?stage=Final_JE_GenerateWorkOrder") %>"><span class="muted">Pending work orders</span><strong><asp:Literal ID="PendingWorkOrders" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?stage=Final_JE_GenerateAgreement") %>"><span class="muted">Pending tender agreements</span><strong><asp:Literal ID="PendingAgreements" runat="server" /></strong></a>
+        </div>
+    </section>
+    <section class="card">
+        <h2>Administration</h2>
+        <div class="cards dashboard-statistics admin-dashboard-statistics" aria-label="Administration">
+            <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx?accountType=Internal#department-users") %>"><span class="muted">Department users</span><strong><asp:Literal ID="TotalDepartmentUsers" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/AdminUsers.aspx?accountType=Internal&userStatus=1#department-users") %>"><span class="muted">Active department users</span><strong><asp:Literal ID="ActiveDepartmentUsers" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/AdminRoles.aspx#role-catalog") %>"><span class="muted">System roles</span><strong><asp:Literal ID="TotalRoles" runat="server" /></strong></a>
+            <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=assigned") %>"><span class="muted">Pending administrative actions</span><strong><asp:Literal ID="PendingAdminActions" runat="server" /></strong></a>
+        </div>
     </section>
     <section class="card">
         <div class="page-heading"><div><h2>Tenders by category</h2><div class="muted">Counts use the existing tender type values.</div></div></div>

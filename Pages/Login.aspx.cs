@@ -13,8 +13,9 @@ namespace DepartmentModule.Pages
     public partial class Login : Page
     {
         protected Literal Message;
+        protected Literal DevelopmentOtpText;
         protected TextBox MobileText, OtpText;
-        protected Panel OtpPanel;
+        protected Panel OtpPanel, DevelopmentOtpPanel;
         protected Button RequestOtpButton, VerifyOtpButton;
         protected HyperLink RegisterLink;
 
@@ -24,11 +25,19 @@ namespace DepartmentModule.Pages
         private const string OtpSaltKey = "LoginOtpSalt";
         private const string OtpExpiresKey = "LoginOtpExpiresUtc";
         private const string OtpAttemptsKey = "LoginOtpAttempts";
+        private const string OtpModeKey = "LoginOtpMode";
+        private const string OtpDisplayKey = "LoginDevelopmentOtp";
         private const int OtpMaxAttempts = 5;
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            if (Session[OtpHashKey] != null &&
+                !String.Equals(Session[OtpModeKey] as string, OtpChallenge.GetDeliveryMode(),
+                    StringComparison.Ordinal))
+                ClearOtpChallenge();
+
             OtpPanel.Visible = Session[OtpHashKey] != null;
+            UpdateDevelopmentOtpDisplay();
             RequestOtpButton.Text = OtpPanel.Visible ? "Resend OTP" : "Send OTP";
             RequestOtpButton.Attributes["data-cooldown-seconds"] =
                 OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", DateTime.UtcNow)
@@ -118,7 +127,9 @@ namespace DepartmentModule.Pages
                 }
 
                 string otp = OtpChallenge.CreateCode();
-                if (!OtpChallenge.TryDeliver("login", otp, normalizedMobile))
+                string deliveryMode, developmentCode;
+                if (!OtpChallenge.TryDeliver("login", otp, normalizedMobile,
+                        out deliveryMode, out developmentCode))
                 {
                     Message.Text = "<div class=\"message\">Unable to send the OTP. Please try again later or contact support.</div>";
                     return;
@@ -131,12 +142,17 @@ namespace DepartmentModule.Pages
                 Session[OtpSaltKey] = salt;
                 Session[OtpExpiresKey] = now.AddMinutes(OtpChallenge.GetOtpLifetimeMinutes());
                 Session[OtpAttemptsKey] = 0;
+                Session[OtpModeKey] = deliveryMode;
+                Session[OtpDisplayKey] = developmentCode;
                 OtpPanel.Visible = true;
+                UpdateDevelopmentOtpDisplay();
                 RequestOtpButton.Text = "Resend OTP";
                 RequestOtpButton.Attributes["data-cooldown-seconds"] =
                     OtpChallenge.GetRequestRetryAfterSeconds(Session, "Login", now)
                         .ToString(CultureInfo.InvariantCulture);
-                Message.Text = "<div class=\"message success\">The OTP request was submitted to the SMS gateway. Check your registered mobile number; delivery may take a short time.</div>";
+                Message.Text = String.Equals(deliveryMode, "Development", StringComparison.Ordinal)
+                    ? "<div class=\"message success\">A development OTP was generated for this local session.</div>"
+                    : "<div class=\"message success\">The OTP request was submitted to the SMS gateway. Check your registered mobile number; delivery may take a short time.</div>";
 
             }
             catch (SqlException ex)
@@ -288,6 +304,21 @@ namespace DepartmentModule.Pages
             Session.Remove(OtpSaltKey);
             Session.Remove(OtpExpiresKey);
             Session.Remove(OtpAttemptsKey);
+            Session.Remove(OtpModeKey);
+            Session.Remove(OtpDisplayKey);
+            if (DevelopmentOtpPanel != null)
+                DevelopmentOtpPanel.Visible = false;
+        }
+
+        private void UpdateDevelopmentOtpDisplay()
+        {
+            bool showOtp = OtpChallenge.CanDisplayDevelopmentOtp() &&
+                String.Equals(Session[OtpModeKey] as string, "Development", StringComparison.Ordinal) &&
+                !String.IsNullOrEmpty(Session[OtpDisplayKey] as string);
+            DevelopmentOtpPanel.Visible = showOtp;
+            DevelopmentOtpText.Text = showOtp
+                ? ModuleDb.Html(Session[OtpDisplayKey] as string)
+                : String.Empty;
         }
 
         private int GetApplyTenderId()

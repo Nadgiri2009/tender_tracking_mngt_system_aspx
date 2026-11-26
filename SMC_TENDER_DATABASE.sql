@@ -1,5 +1,5 @@
 /*
-  SMC Tender Management - authoritative SQL Server setup
+  SMC Project & tender - authoritative SQL Server setup
   Target: SQL Server 2016 SP1+; run in SQLCMD mode.
 
   INSTALLATION SECTION MAP
@@ -44,10 +44,10 @@
   ASP.NET Web Forms code-behind. Upgrade mode drops legacy procedures only.
 
   Fresh example:
-    sqlcmd -S "localhost\SQLEXPRESS02" -E -b -v DatabaseName="SMC_Tender_Fresh" -v InstallMode=Fresh -v BackupVerified=NO -i "SMC_TENDER_DATABASE.sql"
+    sqlcmd -S "localhost\\SQLEXPRESS02" -E -b -v DatabaseName="SMC_Tender_Fresh" -v InstallMode=Fresh -v BackupVerified=NO -i "SMC_TENDER_DATABASE.sql"
 
   Existing database example (only after a verified backup and isolated rehearsal):
-    sqlcmd -S "localhost\SQLEXPRESS02" -E -b -v DatabaseName="TenderManagementDB" -v InstallMode=Upgrade -v BackupVerified=YES -i "SMC_TENDER_DATABASE.sql"
+    sqlcmd -S "localhost\\SQLEXPRESS02" -E -b -v DatabaseName="TenderManagementDB" -v InstallMode=Upgrade -v BackupVerified=YES -i "SMC_TENDER_DATABASE.sql"
 
   Upgrade mode does not recreate or drop existing tables. If the required
   legacy columns/tables differ, the script stops; prepare a separately reviewed

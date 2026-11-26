@@ -25,8 +25,8 @@
     <section class="card">
         <h2>Report results</h2>
         <div class="table-wrap">
-            <asp:GridView ID="ReportGrid" runat="server" AutoGenerateColumns="true" AllowPaging="true" PageSize="20" GridLines="None" OnPageIndexChanging="ReportGrid_PageIndexChanging" EmptyDataText="Run a report to display matching records." />
+            <asp:GridView ID="ReportGrid" runat="server" AutoGenerateColumns="true" AllowPaging="true" PageSize="10" GridLines="None" OnPageIndexChanging="ReportGrid_PageIndexChanging" EmptyDataText="Run a report to display matching records." />
         </div>
-        <div class="pagination"><asp:Literal ID="ResultSummary" runat="server" /><span>Page size: 20</span></div>
+        <div class="pagination"><asp:Literal ID="ResultSummary" runat="server" /><span>Page size: 10</span></div>
     </section>
 </asp:Content>

@@ -41,7 +41,7 @@ namespace DepartmentModule.Pages
             bool isContractor = String.Equals(accountType, "ExternalBidder", StringComparison.OrdinalIgnoreCase) ||
                 String.Equals(role, "Contractor", StringComparison.OrdinalIgnoreCase) ||
                 String.Equals(role, "Contractor / Vendor", StringComparison.OrdinalIgnoreCase);
-            bool isSystemAdministrator = isJe || HasPermission(permissionKeys, "system.admin");
+            bool isSystemAdministrator = isJe;
 
             AppLayout.Attributes["class"] = isWorkspace
                 ? "app-shell workspace-layout"
@@ -56,6 +56,7 @@ namespace DepartmentModule.Pages
             RegisterLink.Visible = !signedIn && !isLoginPage;
             PublicSignOutLink.Visible = false;
             SignOutLink.Visible = isWorkspace;
+            SignOutLink.Text = isContractor ? "Log out" : "Sign out";
             CurrentUser.Text = isWorkspace
                 ? "<span class=\"nav-user\">" + HttpUtility.HtmlEncode(Convert.ToString(Session["FullName"])) + "</span>"
                 : String.Empty;
@@ -83,12 +84,16 @@ namespace DepartmentModule.Pages
             else if (isContractor)
             {
                 AddLink(navigation, "Dashboard", "~/Pages/MyApplications.aspx", "dashboard");
-                HtmlGenericControl tenderGroup = AddGroup(navigation, "Tenders", IsRouteCurrent("~/Pages/Home.aspx"));
+                HtmlGenericControl tenderGroup = AddGroup(navigation, "Tenders",
+                    IsRouteCurrent("~/Pages/Home.aspx") || IsRouteCurrent("~/Pages/MyApplications.aspx"));
                 AddLink(tenderGroup, "Browse tenders", "~/Pages/Home.aspx#published-tenders", "tender");
-                AddLink(tenderGroup, "My applications", "~/Pages/MyApplications.aspx", "application");
+                AddLink(tenderGroup, "My applied tenders", "~/Pages/MyApplications.aspx#my-applications", "application");
+                AddLink(navigation, "My documents", "~/Pages/MyApplications.aspx#my-documents", "documents");
+                AddLink(navigation, "Payments / EMD details", "~/Pages/MyApplications.aspx#payments-emd", "payments");
+                AddLink(navigation, "Awarded tenders", "~/Pages/MyApplications.aspx#awarded-tenders", "award");
                 HtmlGenericControl accountGroup = AddGroup(navigation, "Account", IsRouteCurrent("~/Pages/Profile.aspx"));
-                AddLink(accountGroup, "Company profile", "~/Pages/Profile.aspx", "profile");
-                AddLink(accountGroup, "Account settings", "~/Pages/Profile.aspx", "settings");
+                AddLink(accountGroup, "Profile & account settings", "~/Pages/Profile.aspx", "profile");
+                AddLink(navigation, "Help & support", "~/Pages/Terms.aspx#portal-contact", "support");
             }
             else
             {
@@ -103,34 +108,28 @@ namespace DepartmentModule.Pages
         {
             AddLink(navigation, "Dashboard", "~/Pages/Admin.aspx", "dashboard");
 
-            HtmlGenericControl tenderGroup = AddGroup(navigation, "Tender management",
-                IsRouteCurrent("~/Pages/Tenders.aspx") || IsRouteCurrent("~/Pages/TenderForm.aspx") ||
-                IsRouteCurrent("~/Pages/TenderLifecycle.aspx") || IsRouteCurrent("~/Pages/TenderEvaluation.aspx"));
+            HtmlGenericControl tenderGroup = AddGroup(navigation, "Project & tender",
+                IsRouteCurrent("~/Pages/Tenders.aspx") || IsRouteCurrent("~/Pages/TenderForm.aspx"));
             AddLink(tenderGroup, "All tenders", "~/Pages/Tenders.aspx", "tender");
-            AddLink(tenderGroup, "New tender", "~/Pages/TenderForm.aspx", "add");
-            AddLink(tenderGroup, "Draft tenders", "~/Pages/Tenders.aspx?status=Draft", "draft");
-            AddLink(tenderGroup, "Published tenders", "~/Pages/Tenders.aspx?bucket=Published", "published");
-            AddLink(tenderGroup, "Active tenders", "~/Pages/Tenders.aspx?bucket=Active", "active");
-            AddLink(tenderGroup, "Closed tenders", "~/Pages/Tenders.aspx?bucket=Closed", "closed");
-            AddLink(tenderGroup, "Cancelled tenders", "~/Pages/Tenders.aspx?bucket=Cancelled", "cancelled");
-            AddLink(tenderGroup, "Corrigendum / extensions", "~/Pages/TenderLifecycle.aspx", "schedule");
 
             HtmlGenericControl masterGroup = AddGroup(navigation, "Master management",
-                IsRouteCurrent("~/Pages/AdminDepartments.aspx") || IsRouteCurrent("~/Pages/AdminMasterData.aspx"));
+                IsRouteCurrent("~/Pages/AdminDepartments.aspx") || IsRouteCurrent("~/Pages/AdminMasterData.aspx") ||
+                IsRouteCurrent("~/Pages/AdminUsers.aspx") || IsRouteCurrent("~/Pages/AdminRoles.aspx"));
             AddLink(masterGroup, "Departments", "~/Pages/AdminDepartments.aspx", "department");
-            AddLink(masterGroup, "Tender types and categories", "~/Pages/AdminMasterData.aspx", "master");
-
-            HtmlGenericControl usersGroup = AddGroup(navigation, "User management",
-                IsRouteCurrent("~/Pages/AdminUsers.aspx"));
-            AddLink(usersGroup, "Internal users and contractors", "~/Pages/AdminUsers.aspx", "users");
-            AddLink(navigation, "Roles and permissions", "~/Pages/AdminRoles.aspx", "roles");
+            AddLink(masterGroup, "Designations", "~/Pages/AdminMasterData.aspx?catalog=designations", "designation");
+            AddLink(masterGroup, "Tender types", "~/Pages/AdminMasterData.aspx?catalog=methods", "master");
+            AddLink(masterGroup, "Tender categories", "~/Pages/AdminMasterData.aspx?catalog=categories", "master");
+            AddLink(masterGroup, "User roles and management", "~/Pages/AdminUsers.aspx", "users");
+            AddLink(masterGroup, "Roles and permissions", "~/Pages/AdminRoles.aspx", "roles");
 
             HtmlGenericControl workflowGroup = AddGroup(navigation, "Applications and workflow",
                 IsRouteCurrent("~/Pages/Approvals.aspx") || IsRouteCurrent("~/Pages/Applications.aspx") ||
-                IsRouteCurrent("~/Pages/ApplicationDetails.aspx") || IsRouteCurrent("~/Pages/TenderWorkflow.aspx"));
+                IsRouteCurrent("~/Pages/ApplicationDetails.aspx") || IsRouteCurrent("~/Pages/TenderWorkflow.aspx") ||
+                IsRouteCurrent("~/Pages/TenderLifecycle.aspx") || IsRouteCurrent("~/Pages/TenderEvaluation.aspx"));
             AddLink(workflowGroup, "Pending approvals", "~/Pages/Approvals.aspx", "approval");
             AddLink(workflowGroup, "Contractor applications", "~/Pages/Applications.aspx", "application");
             AddLink(workflowGroup, "Assigned workflow queue", "~/Pages/TenderWorkflow.aspx", "workflow");
+            AddLink(workflowGroup, "Corrigendum / extensions", "~/Pages/TenderLifecycle.aspx", "schedule");
             AddLink(workflowGroup, "Bid opening and evaluation", "~/Pages/TenderEvaluation.aspx", "evaluation");
 
             HtmlGenericControl oversightGroup = AddGroup(navigation, "Reports and oversight",
@@ -146,12 +145,11 @@ namespace DepartmentModule.Pages
             AddLink(navigation, "Dashboard", "~/Pages/Default.aspx", "dashboard");
 
             bool canViewTenders = HasAnyPermission(permissionKeys,
-                "tenders.monitor", "tenders.manage.all", "tender.create.department",
+                "tenders.monitor", "tenders.manage.all", "tender.create.department", "tender.read.department",
                 "tender.publication.manage", "tender.primary.open", "tender.primary.verify",
                 "tender.cell.verify", "shortfall.create", "shortfall.approve", "shortfall.respond.own",
                 "shortfall.clear", "financial.open.approve", "financial.open.execute",
                 "financial.approve.final", "workorder.manage", "agreement.manage");
-            bool canCreateTender = HasAnyPermission(permissionKeys, "tender.create.department", "tenders.manage.all");
             bool canOpenApprovals = WorkflowRules.PendingStatusesForRole(role).Length > 0;
             bool canOpenWorkflow = HasAnyPermission(permissionKeys,
                 "tender.create.department", "tender.publication.manage", "tender.primary.open",
@@ -162,29 +160,26 @@ namespace DepartmentModule.Pages
             bool canOpenApplications =
                 HasAnyPermission(permissionKeys, "tender.cell.verify", "tenders.monitor") ||
                 String.Equals(role, "Tender Cell", StringComparison.OrdinalIgnoreCase);
+            bool canManagePublication = HasAnyPermission(permissionKeys, "tender.publication.manage");
+            bool canOpenEvaluation = HasAnyPermission(permissionKeys, "tender.primary.open", "tender.primary.verify",
+                "financial.open.approve", "financial.open.execute", "financial.approve.final");
 
             HtmlGenericControl tenderGroup = AddGroup(navigation, "Tenders",
                 IsRouteCurrent("~/Pages/Tenders.aspx") || IsRouteCurrent("~/Pages/TenderForm.aspx"));
-            if (canViewTenders) AddLink(tenderGroup, "Assigned / available tenders", "~/Pages/Tenders.aspx", "tender");
-            if (canCreateTender) AddLink(tenderGroup, "New tender", "~/Pages/TenderForm.aspx", "add");
             if (canViewTenders)
-            {
-                AddLink(tenderGroup, "Approved tenders", "~/Pages/Tenders.aspx?bucket=Approved", "approved");
-                AddLink(tenderGroup, "Rejected tenders", "~/Pages/Tenders.aspx?bucket=Rejected", "rejected");
-            }
-            if (canOpenApprovals) AddLink(tenderGroup, "Pending approvals", "~/Pages/Approvals.aspx", "approval");
-            if (canOpenWorkflow) AddLink(tenderGroup, "Assigned workflow queue", "~/Pages/TenderWorkflow.aspx", "workflow");
-            if (HasAnyPermission(permissionKeys, "tender.publication.manage"))
-                AddLink(tenderGroup, "Publication / extensions", "~/Pages/TenderLifecycle.aspx", "schedule");
-            if (HasAnyPermission(permissionKeys, "tender.primary.open", "tender.primary.verify",
-                "financial.open.approve", "financial.open.execute", "financial.approve.final"))
-                AddLink(tenderGroup, "Bid opening / evaluation", "~/Pages/TenderEvaluation.aspx", "evaluation");
+                AddLink(tenderGroup, "All tenders", "~/Pages/Tenders.aspx", "tender");
 
-            if (canOpenApplications)
+            if (canOpenApprovals || canOpenWorkflow || canOpenApplications || canManagePublication || canOpenEvaluation)
             {
-                HtmlGenericControl applicationsGroup = AddGroup(navigation, "Applications",
-                    IsRouteCurrent("~/Pages/Applications.aspx") || IsRouteCurrent("~/Pages/ApplicationDetails.aspx"));
-                AddLink(applicationsGroup, "Contractor applications", "~/Pages/Applications.aspx", "application");
+                HtmlGenericControl workflowGroup = AddGroup(navigation, "Applications and workflow",
+                    IsRouteCurrent("~/Pages/Approvals.aspx") || IsRouteCurrent("~/Pages/Applications.aspx") ||
+                    IsRouteCurrent("~/Pages/ApplicationDetails.aspx") || IsRouteCurrent("~/Pages/TenderWorkflow.aspx") ||
+                    IsRouteCurrent("~/Pages/TenderLifecycle.aspx") || IsRouteCurrent("~/Pages/TenderEvaluation.aspx"));
+                if (canOpenApprovals) AddLink(workflowGroup, "Pending approvals", "~/Pages/Approvals.aspx", "approval");
+                if (canOpenApplications) AddLink(workflowGroup, "Contractor applications", "~/Pages/Applications.aspx", "application");
+                if (canOpenWorkflow) AddLink(workflowGroup, "Assigned workflow queue", "~/Pages/TenderWorkflow.aspx", "workflow");
+                if (canManagePublication) AddLink(workflowGroup, "Publication / extensions", "~/Pages/TenderLifecycle.aspx", "schedule");
+                if (canOpenEvaluation) AddLink(workflowGroup, "Bid opening and evaluation", "~/Pages/TenderEvaluation.aspx", "evaluation");
             }
 
             if (HasAnyPermission(permissionKeys, "masterdata.manage"))
@@ -282,6 +277,7 @@ namespace DepartmentModule.Pages
                 case "cancelled": path = "M6 6l12 12M18 6 6 18"; break;
                 case "schedule": path = "M4 5h16v16H4zM8 3v4M16 3v4M4 10h16"; break;
                 case "department": path = "M3 21h18M5 21V7l7-4 7 4v14M9 10h1M14 10h1M9 14h1M14 14h1M10 21v-4h4v4"; break;
+                case "designation": path = "M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7zM9 12h6M12 9v6"; break;
                 case "master": path = "m12 3 9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5"; break;
                 case "users": path = "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M20 8v6M23 11h-6"; break;
                 case "roles": path = "M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7zM9 12l2 2 4-4"; break;
@@ -294,6 +290,10 @@ namespace DepartmentModule.Pages
                 case "notice": path = "M4 10v4h3l9 5V5l-9 5zM7 14l2 6h4l-3-5M19 9a4 4 0 0 1 0 6"; break;
                 case "profile": path = "M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8"; break;
                 case "settings": path = "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM19 13a7 7 0 0 0 0-2l2-1-2-4-2 1a7 7 0 0 0-2-1l-.5-2h-5L9 6a7 7 0 0 0-2 1L5 6l-2 4 2 1a7 7 0 0 0 0 2l-2 1 2 4 2-1a7 7 0 0 0 2 1l.5 2h5l.5-2a7 7 0 0 0 2-1l2 1 2-4z"; break;
+                case "documents": path = "M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6"; break;
+                case "payments": path = "M3 6h18v12H3zM3 10h18M7 15h4"; break;
+                case "award": path = "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M10 17h4"; break;
+                case "support": path = "M4 13v-2a8 8 0 0 1 16 0v2M4 13h3v6H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 1-2zM20 13h-3v6h2a2 2 0 0 0 2-2v-2a2 2 0 0 0-1-2z"; break;
                 default: path = "M4 12h16M12 4v16"; break;
             }
             return "<svg viewBox=\"0 0 24 24\" focusable=\"false\"><path d=\"" + path + "\"></path></svg>";

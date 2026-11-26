@@ -24,7 +24,7 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequirePermission("users.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack) BindAudit();
         }
 

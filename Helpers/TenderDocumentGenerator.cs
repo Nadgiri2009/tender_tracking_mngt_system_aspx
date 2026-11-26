@@ -40,14 +40,14 @@ namespace DepartmentModule.Helpers
             organization.Format.SpaceAfter = Unit.FromCentimeter(0.25);
 
             AddField(section, "Tender number", tenderNumber);
-            AddField(section, "Tender title", tenderTitle);
+            AddField(section, "Project title", tenderTitle);
             section.AddParagraph().Format.SpaceAfter = Unit.FromCentimeter(0.2);
 
             foreach (KeyValuePair<string, string> field in fields)
                 AddField(section, field.Key, field.Value);
 
             Paragraph footer = section.Footers.Primary.AddParagraph(
-                "Generated from the Tender Management System. Verify all details before signing.");
+                "Generated from the Project & tender System. Verify all details before signing.");
             footer.Format.Font.Name = "Arial";
             footer.Format.Font.Size = 8;
             footer.Format.Font.Italic = true;
@@ -90,7 +90,7 @@ namespace DepartmentModule.Helpers
             organization.Format.Font.Bold = true;
             organization.Format.SpaceAfter = Unit.FromCentimeter(0.25);
             AddField(section, "Tender number", tenderNumber);
-            AddField(section, "Tender title", tenderTitle);
+            AddField(section, "Project title", tenderTitle);
             section.AddParagraph().Format.SpaceAfter = Unit.FromCentimeter(0.2);
 
             Table table = section.AddTable();
@@ -146,7 +146,7 @@ namespace DepartmentModule.Helpers
             totalRow.Cells[5].Format.Font.Bold = true;
 
             Paragraph footer = section.Footers.Primary.AddParagraph(
-                "Generated from the Tender Management System. Verify all details before signing.");
+                "Generated from the Project & tender System. Verify all details before signing.");
             footer.Format.Font.Name = "Arial";
             footer.Format.Font.Size = 8;
             footer.Format.Font.Italic = true;

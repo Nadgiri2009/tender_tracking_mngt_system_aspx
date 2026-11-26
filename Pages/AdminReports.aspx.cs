@@ -20,7 +20,7 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequirePermission("masterdata.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack)
             {
                 try
@@ -124,6 +124,10 @@ namespace DepartmentModule.Pages
         {
             DataTable data;
             if (!TryGetReportData(out data)) return;
+            DataColumn serialColumn = data.Columns.Add("Sr. No.", typeof(int));
+            serialColumn.SetOrdinal(0);
+            for (int i = 0; i < data.Rows.Count; i++)
+                data.Rows[i][serialColumn] = ReportGrid.PageIndex * ReportGrid.PageSize + i + 1;
             ReportGrid.DataSource = data;
             ReportGrid.DataBind();
             ResultSummary.Text = String.Format(CultureInfo.CurrentCulture, "{0:N0} records", data.Rows.Count);

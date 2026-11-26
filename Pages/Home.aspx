@@ -1,4 +1,4 @@
-<%@ Page Title="Tender Management Portal" Language="C#" MasterPageFile="~/Pages/Site.Master" AutoEventWireup="true" CodeBehind="Home.aspx.cs" Inherits="DepartmentModule.Pages.Home" %>
+<%@ Page Title="Project & tender Portal" Language="C#" MasterPageFile="~/Pages/Site.Master" AutoEventWireup="true" CodeBehind="Home.aspx.cs" Inherits="DepartmentModule.Pages.Home" %>
 <asp:Content ID="Title" ContentPlaceHolderID="TitleContent" runat="server">Solapur Municipal Corporation Tender Portal</asp:Content>
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <asp:Literal ID="Message" runat="server" />
@@ -16,7 +16,7 @@
     <section class="cards home-statistics" aria-label="Live portal statistics">
         <div class="stat home-stat-card">
             <span class="home-stat-icon" aria-hidden="true">01</span>
-            <span><span class="muted">Active tenders</span><strong><asp:Literal ID="ActiveTenders" runat="server" /></strong></span>
+            <span><span class="muted">Total tenders</span><strong><asp:Literal ID="TotalTenders" runat="server" /></strong></span>
         </div>
         <div class="stat home-stat-card">
             <span class="home-stat-icon" aria-hidden="true">02</span>
@@ -24,13 +24,44 @@
         </div>
         <div class="stat home-stat-card">
             <span class="home-stat-icon" aria-hidden="true">03</span>
-            <span><span class="muted">Contractor applications</span><strong><asp:Literal ID="ContractorApplications" runat="server" /></strong></span>
+            <span><span class="muted">Active tenders</span><strong><asp:Literal ID="ActiveTenders" runat="server" /></strong></span>
         </div>
         <div class="stat home-stat-card">
             <span class="home-stat-icon" aria-hidden="true">04</span>
-            <span><span class="muted">Registered contractors</span><strong><asp:Literal ID="RegisteredContractors" runat="server" /></strong></span>
+            <span><span class="muted">Closed tenders</span><strong><asp:Literal ID="ClosedTenders" runat="server" /></strong></span>
+        </div>
+        <div class="stat home-stat-card">
+            <span class="home-stat-icon" aria-hidden="true">05</span>
+            <span><span class="muted">Registered contractors</span><strong><asp:Literal ID="TotalContractors" runat="server" /></strong></span>
+        </div>
+        <div class="stat home-stat-card">
+            <span class="home-stat-icon" aria-hidden="true">06</span>
+            <span><span class="muted">Completed / awarded tenders</span><strong><asp:Literal ID="CompletedAwardedTenders" runat="server" /></strong></span>
         </div>
     </section>
+    <asp:Panel ID="InternalTendersPanel" runat="server" Visible="false" CssClass="card">
+        <div class="page-heading">
+            <div>
+                <h2>Internal tenders</h2>
+                <p class="muted">Unpublished tender records are visible to authorized internal staff only.</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <asp:GridView ID="InternalTendersGrid" runat="server" AutoGenerateColumns="false"
+                GridLines="None" EmptyDataText="No unpublished tenders are available to your account.">
+                <Columns>
+                    <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId"
+                        DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
+                    <asp:BoundField DataField="Title" HeaderText="Title" />
+                    <asp:BoundField DataField="DepartmentName" HeaderText="Department" />
+                    <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
+                    <asp:BoundField DataField="CreatedDate" HeaderText="Created"
+                        DataFormatString="{0:dd MMM yyyy}" />
+                </Columns>
+            </asp:GridView>
+        </div>
+        <asp:Literal ID="InternalTendersSummary" runat="server" />
+    </asp:Panel>
     <section class="card" id="published-tenders">
         <div class="page-heading"><div><h2>Published tenders</h2><p class="muted">View tender details and check whether applications are open.</p></div></div>
         <div class="public-tender-filters" role="search" aria-label="Search and filter published tenders">
@@ -79,7 +110,7 @@
                     <ItemTemplate><%# TenderSerialNumber(Container.DataItemIndex) %></ItemTemplate>
                 </asp:TemplateField>
                 <asp:BoundField DataField="TenderNumber" HeaderText="Tender No." />
-                <asp:BoundField DataField="Title" HeaderText="Tender title" />
+                <asp:BoundField DataField="Title" HeaderText="Project title" />
                 <asp:BoundField DataField="DepartmentName" HeaderText="Department" />
                 <asp:BoundField DataField="TenderCategory" HeaderText="Category" />
                 <asp:BoundField DataField="TenderType" HeaderText="Tender method" />
@@ -119,7 +150,7 @@
         </nav>
     </section>
     <section class="card" id="announcements">
-        <div class="page-heading"><div><h2>Notices and Announcements</h2><p class="muted">Official updates from the tender management system.</p></div></div>
+        <div class="page-heading"><div><h2>Notices and Announcements</h2><p class="muted">Official updates from the Project & tender system.</p></div></div>
         <div class="table-wrap">
         <asp:GridView ID="AnnouncementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="There are no current announcements.">
             <Columns>

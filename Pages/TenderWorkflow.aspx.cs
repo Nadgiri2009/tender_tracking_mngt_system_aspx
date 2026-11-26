@@ -118,22 +118,51 @@ namespace DepartmentModule.Pages
 
         private string QueueStageFilter()
         {
+            string filter;
             switch ((Request.QueryString["queue"] ?? String.Empty).Trim().ToLowerInvariant())
             {
                 case "verification":
-                    return @" AND s.StageName IN
+                    filter = @" AND s.StageName IN
                         (N'Final_JE_OpenTechnicalBids',N'Final_JE_CompletePrimaryVerification',
                          N'Final_Cell_CompleteSecondaryVerification',N'Final_Cell_ClearShortfall')";
+                    break;
                 case "shortfall":
-                    return @" AND s.StageName IN
+                    filter = @" AND s.StageName IN
                         (N'Final_Cell_CreateShortfall',N'Final_JE_ApproveShortfall',
                          N'Final_Contractor_SubmitShortfall',N'Final_Cell_ClearShortfall')";
+                    break;
                 case "approval":
-                    return @" AND s.StageName IN
+                    filter = @" AND s.StageName IN
                         (N'Final_Samiti_ApproveFinancialOpening',N'Final_Auditor_ApproveFinancialBids')";
+                    break;
                 default:
-                    return String.Empty;
+                    filter = String.Empty;
+                    break;
             }
+
+            string requestedStage = (Request.QueryString["stage"] ?? String.Empty).Trim();
+            string exactStage = null;
+            switch (requestedStage)
+            {
+                case "Final_Contractor_SubmitShortfall":
+                    exactStage = "Final_Contractor_SubmitShortfall";
+                    break;
+                case "Final_Samiti_ApproveFinancialOpening":
+                    exactStage = "Final_Samiti_ApproveFinancialOpening";
+                    break;
+                case "Final_Auditor_ApproveFinancialBids":
+                    exactStage = "Final_Auditor_ApproveFinancialBids";
+                    break;
+                case "Final_JE_GenerateWorkOrder":
+                    exactStage = "Final_JE_GenerateWorkOrder";
+                    break;
+                case "Final_JE_GenerateAgreement":
+                    exactStage = "Final_JE_GenerateAgreement";
+                    break;
+            }
+            if (exactStage != null)
+                filter += " AND s.StageName=N'" + exactStage + "'";
+            return filter;
         }
 
         private void LoadTender()

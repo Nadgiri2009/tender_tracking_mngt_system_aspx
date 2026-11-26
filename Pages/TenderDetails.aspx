@@ -25,7 +25,7 @@
             <p><strong>Tender Method</strong><br /><asp:Literal ID="TenderType" runat="server" /></p>
             <p><strong>Tender Category</strong><br /><asp:Literal ID="TenderCategory" runat="server" /></p>
             <p><strong>Tender Subcategory</strong><br /><asp:Literal ID="TenderSubcategory" runat="server" /></p>
-            <p><strong>Financial year</strong><br /><asp:Literal ID="FinancialYear" runat="server" /></p>
+            <p><strong>Budgeting Financial Year</strong><br /><asp:Literal ID="FinancialYear" runat="server" /></p>
             <p><strong>Estimated Cost</strong><br />₹<asp:Literal ID="EstimatedAmount" runat="server" /></p>
             <p><strong>EMD</strong><br /><asp:Literal ID="EMDAmount" runat="server" /></p>
             <p><strong>Tender document fee</strong><br /><asp:Literal ID="TenderDocumentFee" runat="server" /></p>
@@ -47,11 +47,52 @@
     <section class="card">
         <h2>Tender requirements and conditions</h2>
         <p><strong>Scope of work</strong><br /><asp:Literal ID="ScopeOfWork" runat="server" /></p>
+        <asp:Panel ID="ScopeOfWorkAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
+            <asp:Literal ID="ScopeOfWorkAttachmentStatus" runat="server" Text="No file attached." />
+            <asp:HyperLink ID="ScopeOfWorkAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+            <asp:HyperLink ID="ScopeOfWorkAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
+                ToolTip="Download Scope of Work document" aria-label="Download Scope of Work document">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+            </asp:HyperLink>
+        </asp:Panel>
         <p><strong>Technical requirements</strong><br /><asp:Literal ID="TechnicalRequirements" runat="server" /></p>
+        <asp:Panel ID="TechnicalRequirementsAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
+            <asp:Literal ID="TechnicalRequirementsAttachmentStatus" runat="server" Text="No file attached." />
+            <asp:HyperLink ID="TechnicalRequirementsAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+            <asp:HyperLink ID="TechnicalRequirementsAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
+                ToolTip="Download Technical Requirements document" aria-label="Download Technical Requirements document">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+            </asp:HyperLink>
+        </asp:Panel>
         <p><strong>Financial requirements</strong><br /><asp:Literal ID="FinancialRequirements" runat="server" /></p>
+        <asp:Panel ID="FinancialRequirementsAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
+            <asp:Literal ID="FinancialRequirementsAttachmentStatus" runat="server" Text="No file attached." />
+            <asp:HyperLink ID="FinancialRequirementsAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+            <asp:HyperLink ID="FinancialRequirementsAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
+                ToolTip="Download Financial Requirements document" aria-label="Download Financial Requirements document">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+            </asp:HyperLink>
+        </asp:Panel>
         <p><strong>Additional conditions</strong><br /><asp:Literal ID="AdditionalConditions" runat="server" /></p>
         <p><strong>Terms and conditions</strong><br /><asp:Literal ID="TermsAndConditions" runat="server" /></p>
     </section>
+    <asp:Panel ID="GisLocationPanel" runat="server" CssClass="card" Visible="false">
+        <h2>GIS location details</h2>
+        <p><strong>Location</strong><br /><asp:Literal ID="GisLocationName" runat="server" /></p>
+        <div class="row">
+            <p><strong>Centroid latitude</strong><br /><asp:Literal ID="GisLatitude" runat="server" /></p>
+            <p><strong>Centroid longitude</strong><br /><asp:Literal ID="GisLongitude" runat="server" /></p>
+            <p><strong>Selected site area</strong><br /><asp:Literal ID="GisSelectedArea" runat="server" /></p>
+        </div>
+        <asp:HyperLink ID="GisImageLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+        <asp:Image ID="GisImagePreview" runat="server" CssClass="gis-image-preview" Visible="false" AlternateText="Tender GIS location image" />
+        <asp:Panel ID="GisBoundaryPanel" runat="server" Visible="false">
+            <details>
+                <summary>View selected boundary coordinates</summary>
+                <pre class="gis-boundary-coordinates"><asp:Literal ID="GisBoundaryCoordinatesText" runat="server" /></pre>
+            </details>
+        </asp:Panel>
+    </asp:Panel>
     <asp:Panel ID="ApplicationRequirementsPanel" runat="server" CssClass="card" Visible="false">
         <h2>Application document requirements</h2>
         <div class="table-wrap">
@@ -100,25 +141,135 @@
             </div>
         </asp:Panel>
     </section>
-    <section class="card">
-        <h2>Attachments</h2>
-        <div class="table-wrap"><asp:GridView ID="DocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No attachments.">
-            <Columns>
-                <asp:HyperLinkField DataTextField="FileName" DataNavigateUrlFields="DocumentId" DataNavigateUrlFormatString="DocumentDownload.aspx?id={0}" HeaderText="File" />
-                <asp:BoundField DataField="DocumentType" HeaderText="Type" />
-                <asp:BoundField DataField="UploadedDate" HeaderText="Uploaded" DataFormatString="{0:dd MMM yyyy HH:mm}" />
-            </Columns>
-        </asp:GridView></div>
-        <asp:Panel ID="UploadPanel" runat="server" CssClass="card">
-            <h3>Upload attachment</h3>
-            <div class="row">
-                <div class="field"><label for="DocumentTypeSelect">Document type</label><asp:DropDownList ID="DocumentTypeSelect" runat="server" /></div>
-                <div class="field"><asp:FileUpload ID="DocumentFile" runat="server" /></div>
-                <asp:Button ID="UploadButton" runat="server" Text="Upload" OnClick="UploadButton_Click" />
+    <section class="card tender-documents">
+        <div class="page-heading">
+            <div><h2>Tender documents</h2><p class="muted">Documents attached to this tender.</p></div>
+            <asp:Panel ID="UploadPanel" runat="server" CssClass="document-management-actions" Visible="false">
+                <asp:LinkButton ID="ShowDocumentFormButton" runat="server" CssClass="button document-upload-trigger"
+                    OnClick="ShowDocumentFormButton_Click" CausesValidation="false" ToolTip="Upload a tender document"
+                    aria-label="Upload a tender document">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" /></svg>
+                    <span>Upload document</span>
+                </asp:LinkButton>
+                <asp:LinkButton ID="RefreshDocumentTypesButton" runat="server" CssClass="icon-action"
+                    OnClick="RefreshDocumentTypesButton_Click" CausesValidation="false"
+                    ToolTip="Refresh document types from Master Management" aria-label="Refresh document types">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-3a8 8 0 0 1 13.2-2L20 12M4 12l1.9 5a8 8 0 0 0 13.2-2" /></svg>
+                </asp:LinkButton>
+            </asp:Panel>
+        </div>
+        <div class="table-wrap">
+            <asp:GridView ID="DocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                DataKeyNames="DocumentId" EmptyDataText="No documents are associated with this tender yet."
+                AllowPaging="true" PageSize="10" OnRowDataBound="DocumentsGrid_RowDataBound"
+                OnPageIndexChanging="DocumentsGrid_PageIndexChanging" OnRowCommand="DocumentsGrid_RowCommand">
+                <Columns>
+                    <asp:TemplateField HeaderText="Sr. No."><ItemTemplate>
+                        <asp:Literal ID="DocumentSerial" runat="server" />
+                    </ItemTemplate></asp:TemplateField>
+                    <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
+                    <asp:BoundField DataField="DocumentName" HeaderText="Document name" />
+                    <asp:BoundField DataField="FileName" HeaderText="File name" />
+                    <asp:BoundField DataField="UploadedDate" HeaderText="Uploaded date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                    <asp:TemplateField HeaderText="Status"><ItemTemplate>
+                        <span class='badge <%# Convert.ToString(Eval("DocumentStatus")) == "Uploaded" ? "status-approved" : "status-rejected" %>'>
+                            <%# HttpUtility.HtmlEncode(Convert.ToString(Eval("DocumentStatus"))) %>
+                        </span>
+                    </ItemTemplate></asp:TemplateField>
+                    <asp:TemplateField HeaderText="Actions" ItemStyle-CssClass="document-actions-cell">
+                        <ItemTemplate>
+                            <div class="document-icon-actions">
+                                <asp:HyperLink runat="server" CssClass="icon-action"
+                                    NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId") + "&preview=true") %>'
+                                    Target="_blank" rel="noopener" ToolTip="View document" aria-label="View document">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                                </asp:HyperLink>
+                                <asp:HyperLink runat="server" CssClass="icon-action"
+                                    NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId")) %>'
+                                    ToolTip="Download document" aria-label="Download document">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+                                </asp:HyperLink>
+                                <asp:LinkButton runat="server" CssClass="icon-action" CommandName="EditDocument"
+                                    CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false"
+                                    ToolTip="Edit document details" aria-label="Edit document details">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" /></svg>
+                                </asp:LinkButton>
+                                <asp:LinkButton runat="server" CssClass="icon-action" CommandName="ReplaceDocument"
+                                    CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false"
+                                    ToolTip="Re-upload document" aria-label="Re-upload document">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" /></svg>
+                                </asp:LinkButton>
+                                <asp:LinkButton runat="server" CssClass="icon-action danger" CommandName="DeleteDocument"
+                                    CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false"
+                                    ToolTip="Delete document" aria-label="Delete document"
+                                    OnClientClick="return confirm('Delete this document and its stored file? This cannot be undone.');">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" /></svg>
+                                </asp:LinkButton>
+                            </div>
+                        </ItemTemplate>
+                    </asp:TemplateField>
+                </Columns>
+            </asp:GridView>
+        </div>
+        <asp:Panel ID="DocumentTypesMissingPanel" runat="server" CssClass="message" Visible="false">
+            No active document types are configured. Add or activate types in <a href="AdminMasterData.aspx">Master Management</a>, then refresh the document types.
+        </asp:Panel>
+        <asp:Panel ID="DocumentFormPanel" runat="server" CssClass="document-editor" Visible="false">
+            <asp:HiddenField ID="EditingDocumentId" runat="server" />
+            <asp:HiddenField ID="ReplacingDocumentFile" runat="server" Value="false" />
+            <div class="document-editor-heading">
+                <h3><asp:Literal ID="DocumentFormTitle" runat="server">Upload tender document</asp:Literal></h3>
+                <asp:LinkButton ID="CancelDocumentFormButton" runat="server" CssClass="icon-action"
+                    OnClick="CancelDocumentFormButton_Click" CausesValidation="false"
+                    ToolTip="Close document form" aria-label="Close document form">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+                </asp:LinkButton>
             </div>
-            <span class="help">Select a document type. PDF, Office documents, JPEG, or PNG; maximum 20 MB.</span>
+            <div class="row document-form-fields">
+                <div class="field">
+                    <asp:Label runat="server" AssociatedControlID="DocumentTypeSelect">Document type</asp:Label>
+                    <asp:DropDownList ID="DocumentTypeSelect" runat="server" />
+                    <asp:RequiredFieldValidator runat="server" ControlToValidate="DocumentTypeSelect"
+                        InitialValue="" ValidationGroup="TenderDocument" CssClass="validation"
+                        ErrorMessage="Select an active document type." />
+                </div>
+                <div class="field">
+                    <asp:Label runat="server" AssociatedControlID="DocumentNameText">Document name</asp:Label>
+                    <asp:TextBox ID="DocumentNameText" runat="server" MaxLength="250" />
+                    <asp:RequiredFieldValidator runat="server" ControlToValidate="DocumentNameText"
+                        ValidationGroup="TenderDocument" CssClass="validation" ErrorMessage="Document name is required." />
+                </div>
+                <asp:Panel ID="DocumentFilePanel" runat="server" CssClass="field document-file-field">
+                    <asp:Label runat="server" AssociatedControlID="DocumentFile">Document file</asp:Label>
+                    <asp:FileUpload ID="DocumentFile" runat="server" />
+                    <span class="help">PDF, Office documents, JPEG, or PNG; maximum 20 MB.</span>
+                </asp:Panel>
+            </div>
+            <div class="field">
+                <asp:Label runat="server" AssociatedControlID="DocumentRemarksText">Remarks <span class="muted">(optional)</span></asp:Label>
+                <asp:TextBox ID="DocumentRemarksText" runat="server" TextMode="MultiLine" Rows="2" MaxLength="1000" />
+            </div>
+            <div class="document-form-footer">
+                <asp:Button ID="UploadButton" runat="server" Text="Save document" CssClass="button"
+                    ValidationGroup="TenderDocument" OnClick="UploadButton_Click"
+                    OnClientClick="return beginTenderDocumentUpload(this);" />
+                <span id="TenderDocumentUploadStatus" class="upload-status" role="status" aria-live="polite" hidden="hidden">Uploading document…</span>
+                <span class="help">A new document record is created for each upload.</span>
+            </div>
         </asp:Panel>
     </section>
+    <script type="text/javascript">
+        function beginTenderDocumentUpload(button) {
+            if (typeof Page_ClientValidate === "function" && !Page_ClientValidate("TenderDocument")) return false;
+            if (button.getAttribute("data-submitting") === "true") return false;
+            button.setAttribute("data-submitting", "true");
+            button.disabled = true;
+            button.setAttribute("aria-busy", "true");
+            var status = document.getElementById("TenderDocumentUploadStatus");
+            if (status) status.hidden = false;
+            return true;
+        }
+    </script>
     <asp:Panel ID="AuthenticatedWorkflowPanel" runat="server">
         <asp:Panel ID="RevisionHistoryPanel" runat="server" CssClass="card" Visible="false">
             <h2>Tender revision history</h2>

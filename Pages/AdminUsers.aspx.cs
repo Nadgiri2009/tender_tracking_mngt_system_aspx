@@ -24,7 +24,7 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequirePermission("users.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack) LoadPage();
         }
 
@@ -32,6 +32,18 @@ namespace DepartmentModule.Pages
         {
             using (SqlCommand command = new SqlCommand(
                 @"SELECT RoleName FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK)
+                  WHERE RoleId=@RoleId AND IsActive=1;", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
+                object value = command.ExecuteScalar();
+                return value == null || value == DBNull.Value ? null : Convert.ToString(value);
+            }
+        }
+
+        private static string GetAssignableRoleCode(SqlConnection connection, SqlTransaction transaction, int roleId)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT RoleCode FROM dbo.Roles WITH (UPDLOCK,HOLDLOCK)
                   WHERE RoleId=@RoleId AND IsActive=1;", connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
@@ -74,6 +86,8 @@ namespace DepartmentModule.Pages
                         while (reader.Read())
                             DepartmentSelect.Items.Add(new ListItem(reader.GetString(1), reader.GetInt32(0).ToString()));
                     }
+                    SelectQueryFilter(UserStatusFilter, Request.QueryString["userStatus"]);
+                    SelectQueryFilter(ContractorStatusFilter, Request.QueryString["contractorStatus"]);
                     BindUsers(connection);
                     BindContractorUserOptions(connection);
                     BindContractors(connection);
@@ -102,6 +116,7 @@ namespace DepartmentModule.Pages
                   WHERE (@Search=N'' OR u.FullName LIKE @SearchPattern OR u.Email LIKE @SearchPattern
                          OR u.Mobile LIKE @SearchPattern)
                     AND (@IsActive IS NULL OR u.IsActive=@IsActive)
+                    AND (@AccountType=N'' OR u.AccountType=@AccountType)
                   ORDER BY u.CreatedDate DESC,u.UserId DESC;", connection))
             using (SqlDataAdapter adapter = new SqlDataAdapter(command))
             {
@@ -119,8 +134,8 @@ namespace DepartmentModule.Pages
             ContractorUserSelect.Items.Add(new ListItem("Select contractor login", ""));
             using (SqlCommand command = new SqlCommand(
                 @"SELECT u.UserId,u.FullName,u.Email
-                  FROM dbo.Users u INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
-                  WHERE r.RoleName IN (N'Contractor',N'Contractor / Vendor') AND u.IsActive=1
+                  FROM dbo.Users u
+                  WHERE u.AccountType=N'ExternalBidder' AND u.IsActive=1
                     AND NOT EXISTS (SELECT 1 FROM dbo.Contractors c WHERE c.UserId=u.UserId)
                   ORDER BY u.FullName;", connection))
             using (SqlDataReader reader = command.ExecuteReader())
@@ -198,9 +213,21 @@ namespace DepartmentModule.Pages
             string search = UserSearchText.Text == null ? String.Empty : UserSearchText.Text.Trim();
             AddText(command, "@Search", SqlDbType.NVarChar, search, 100);
             AddText(command, "@SearchPattern", SqlDbType.NVarChar, "%" + search + "%", 102);
+            string accountType = Request.QueryString["accountType"];
+            if (!String.Equals(accountType, "Internal", StringComparison.OrdinalIgnoreCase) &&
+                !String.Equals(accountType, "ExternalBidder", StringComparison.OrdinalIgnoreCase))
+                accountType = String.Empty;
+            AddText(command, "@AccountType", SqlDbType.NVarChar, accountType, 30);
             ModuleDb.AddParameter(command, "@IsActive", SqlDbType.Bit,
                 UserStatusFilter.SelectedValue == "1" ? (object)true :
                 UserStatusFilter.SelectedValue == "0" ? (object)false : null);
+        }
+
+        private static void SelectQueryFilter(DropDownList filter, string value)
+        {
+            if (String.IsNullOrEmpty(value)) return;
+            ListItem item = filter.Items.FindByValue(value);
+            if (item != null) filter.SelectedValue = item.Value;
         }
 
         private void AddContractorFilterParameters(SqlCommand command)
@@ -248,7 +275,8 @@ namespace DepartmentModule.Pages
                 using (SqlTransaction transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
                 {
                     string selectedRoleName = GetAssignableRoleName(connection, transaction, roleId);
-                    if (selectedRoleName == null)
+                    string selectedRoleCode = GetAssignableRoleCode(connection, transaction, roleId);
+                    if (selectedRoleName == null || selectedRoleCode == null)
                     {
                         ShowMessage("The selected role is unavailable. Refresh the role list and retry.");
                         return;
@@ -305,6 +333,13 @@ namespace DepartmentModule.Pages
                         roleId != currentRoleId && GetActiveAdministratorCount(connection, transaction, userId) == 0)
                     {
                         ShowMessage("The last active JE administrator cannot be reassigned.");
+                        return;
+                    }
+                    if (String.Equals(selectedRoleCode, "JE", StringComparison.OrdinalIgnoreCase) &&
+                        !String.Equals(currentRoleCode, "JE", StringComparison.OrdinalIgnoreCase) &&
+                        GetJeAccountCount(connection, transaction, userId) > 0)
+                    {
+                        ShowMessage("The system is restricted to one JE main administrator account.");
                         return;
                     }
 
@@ -384,6 +419,18 @@ namespace DepartmentModule.Pages
             }
         }
 
+        private static int GetJeAccountCount(SqlConnection connection, SqlTransaction transaction, int exceptUserId)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT COUNT(*) FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK)
+                  INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
+                  WHERE r.RoleCode=N'JE' AND (@UserId=0 OR u.UserId<>@UserId);", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, exceptUserId);
+                return Convert.ToInt32(command.ExecuteScalar());
+            }
+        }
+
         protected void CreateUserButton_Click(object sender, EventArgs e)
         {
             Page.Validate("User");
@@ -419,12 +466,19 @@ namespace DepartmentModule.Pages
             try
             {
                 using (SqlConnection connection = ModuleDb.OpenConnection())
-                using (SqlTransaction transaction = connection.BeginTransaction())
+                using (SqlTransaction transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
                 {
                     string selectedRoleName = GetAssignableRoleName(connection, transaction, roleId);
-                    if (selectedRoleName == null)
+                    string selectedRoleCode = GetAssignableRoleCode(connection, transaction, roleId);
+                    if (selectedRoleName == null || selectedRoleCode == null)
                     {
                         ShowMessage("The selected role is unavailable. Refresh the role list and retry.");
+                        return;
+                    }
+                    if (String.Equals(selectedRoleCode, "JE", StringComparison.OrdinalIgnoreCase) &&
+                        GetJeAccountCount(connection, transaction, 0) > 0)
+                    {
+                        ShowMessage("The system is restricted to one JE main administrator account.");
                         return;
                     }
                     if (RequiresDepartment(selectedRoleName) && !optionalDepartmentId.HasValue)
@@ -594,6 +648,12 @@ namespace DepartmentModule.Pages
                         ShowMessage("The last active JE administrator account cannot be deactivated.");
                         return;
                     }
+                    if (!isActive && String.Equals(roleCode, "JE", StringComparison.OrdinalIgnoreCase) &&
+                        GetActiveAdministratorCount(connection, transaction, userId) > 0)
+                    {
+                        ShowMessage("Only one JE main administrator account may be active.");
+                        return;
+                    }
 
                     bool newStatus = !isActive;
                     using (SqlCommand command = new SqlCommand(
@@ -757,6 +817,16 @@ namespace DepartmentModule.Pages
         {
             ContractorsGrid.PageIndex = e.NewPageIndex;
             RebindContractors();
+        }
+
+        protected int UserSerialNumber(int rowIndex)
+        {
+            return UsersGrid.PageIndex * UsersGrid.PageSize + rowIndex + 1;
+        }
+
+        protected int ContractorSerialNumber(int rowIndex)
+        {
+            return ContractorsGrid.PageIndex * ContractorsGrid.PageSize + rowIndex + 1;
         }
 
         private void ShowMessage(string text, bool success = false)

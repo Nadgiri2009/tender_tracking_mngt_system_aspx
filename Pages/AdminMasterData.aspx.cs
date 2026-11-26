@@ -36,16 +36,21 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequirePermission("masterdata.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack)
             {
                 CatalogSelect.Items.Add(new ListItem("Tender categories", "categories"));
                 CatalogSelect.Items.Add(new ListItem("Tender subcategories", "subcategories"));
                 CatalogSelect.Items.Add(new ListItem("Tender methods", "methods"));
-                CatalogSelect.Items.Add(new ListItem("Financial years", "financialyears"));
+                CatalogSelect.Items.Add(new ListItem("Budgeting Financial Years", "financialyears"));
                 CatalogSelect.Items.Add(new ListItem("Document types", "documents"));
                 CatalogSelect.Items.Add(new ListItem("Units", "units"));
                 CatalogSelect.Items.Add(new ListItem("Officer designations", "designations"));
+                string requestedCatalogValue = Request.QueryString["catalog"];
+                ListItem requestedCatalog = String.IsNullOrWhiteSpace(requestedCatalogValue)
+                    ? null
+                    : CatalogSelect.Items.FindByValue(requestedCatalogValue);
+                if (requestedCatalog != null) CatalogSelect.SelectedValue = requestedCatalog.Value;
                 BindParentCategories();
                 SetCatalogControls();
                 BindCatalog();
@@ -80,7 +85,7 @@ namespace DepartmentModule.Pages
                 (!TryParseFinancialYear(value, out financialYearStart, out financialYearStartDate, out financialYearEndDate) ||
                  financialYearStartDate >= financialYearEndDate))
             {
-                ShowMessage("Enter a financial year as YYYY-YY with a valid date range.");
+                ShowMessage("Enter a Budgeting Financial Year as YYYY-YY with a valid date range.");
                 return;
             }
             if (catalog.IsFinancialYear && !isEditing &&
@@ -355,7 +360,7 @@ namespace DepartmentModule.Pages
                     return new CatalogDefinition
                     {
                         TableName = "dbo.FinancialYears", KeyColumn = "FinancialYear", MaxLength = 9,
-                        IsFinancialYear = true, DisplayName = "Financial year (YYYY-YY)",
+                        IsFinancialYear = true, DisplayName = "Budgeting Financial Year (YYYY-YY)",
                         UsageQuery = @"SELECT
                             (SELECT COUNT(*) FROM dbo.Tender WHERE FinancialYear=@Value) +
                             (SELECT COUNT(*) FROM dbo.TenderRevisions WHERE FinancialYear=@Value);"

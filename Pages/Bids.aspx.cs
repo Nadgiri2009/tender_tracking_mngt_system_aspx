@@ -33,8 +33,8 @@ namespace DepartmentModule.Pages
         protected FileUpload TechnicalDocumentUpload, ApplicationDocumentUpload;
         protected GridView TechnicalDocumentsGrid;
         private int TenderId { get { return QueryId("tenderId"); } }
-        private bool IsReviewer { get { return HasAnyRole("Junior Engineer (JE)", "TENDER_CELL", "CHAIRMAN",
-            "DIRECTOR_AUDITOR", "TenderSection", "TenderCommittee", "CAFOOfficer", "Admin"); } }
+        private bool IsReviewer { get { return IsJeAdministrator || HasAnyRole("TENDER_CELL", "CHAIRMAN",
+            "DIRECTOR_AUDITOR", "TenderSection", "TenderCommittee", "CAFOOfficer"); } }
         private bool IsContractor { get { return HasAnyRole("ExternalBidder", "Contractor"); } }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -63,7 +63,7 @@ namespace DepartmentModule.Pages
                         @"SELECT t.TenderNumber,t.Title,t.CurrentStatus,t.WorkflowVersion
                           FROM dbo.Tender t
                           WHERE t.TenderId=@TenderId AND t.IsDeleted=0
-                            AND (@Role=N'Admin' OR
+                            AND (@IsJeAdministrator=1 OR
                                  (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
                                              WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
                                   OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
@@ -71,7 +71,7 @@ namespace DepartmentModule.Pages
                         connection))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                        AddText(command, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
+                        ModuleDb.AddParameter(command, "@IsJeAdministrator", SqlDbType.Bit, IsJeAdministrator);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         using (SqlDataReader reader = command.ExecuteReader())
                         {
@@ -122,9 +122,10 @@ namespace DepartmentModule.Pages
                         FinancialGrid.DataSource = new DataTable();
                         FinancialGrid.DataBind();
                     }
-                    EvaluatePanel.Visible = HasAnyRole("TenderSection", "Admin") &&
+                    EvaluatePanel.Visible = (IsJeAdministrator || HasAnyRole("TenderSection")) &&
                         openingComplete && String.Equals(currentStatus, "Technical Evaluation", StringComparison.OrdinalIgnoreCase);
-                    SelectPanel.Visible = HasAnyRole("TenderCommittee", "Admin") && openingComplete && financialOpening;
+                    SelectPanel.Visible = (IsJeAdministrator || HasAnyRole("TenderCommittee")) &&
+                        openingComplete && financialOpening;
                     ConfigureSubmissionPanels(connection, canSubmit);
                     BindTechnicalDocuments(connection);
                 }
@@ -215,7 +216,7 @@ namespace DepartmentModule.Pages
         {
             FinancialBidAmountText.Attributes["step"] = "0.01";
             FinancialBidAmountText.Attributes["min"] = "0.01";
-            bool isAdmin = HasAnyRole("Admin");
+            bool isAdmin = IsJeAdministrator;
             int workflowVersion = GetWorkflowVersion(connection);
             bool isFinalWorkflow = workflowVersion >= 2;
             TechnicalSubmissionPanel.Visible = (IsContractor || isAdmin) && canSubmit && !isFinalWorkflow;
@@ -493,7 +494,7 @@ namespace DepartmentModule.Pages
             }
 
             int contractorId;
-            if (!HasAnyRole("Admin") || !Int32.TryParse(contractorList.SelectedValue, out contractorId) || contractorId <= 0)
+            if (!IsJeAdministrator || !Int32.TryParse(contractorList.SelectedValue, out contractorId) || contractorId <= 0)
             {
                 return null;
             }
@@ -508,7 +509,7 @@ namespace DepartmentModule.Pages
 
         protected void SubmitTechnicalButton_Click(object sender, EventArgs e)
         {
-            if (!HasAnyRole("Contractor", "Admin") || TechnicalDocumentPathText.Text.Trim().Length > 400 ||
+            if (!(HasAnyRole("Contractor") || IsJeAdministrator) || TechnicalDocumentPathText.Text.Trim().Length > 400 ||
                 TechnicalDocumentTypeText.Text.Trim().Length > 160)
             {
                 ShowError("A contractor or administrator must submit the bid; document details are too long.");
@@ -595,7 +596,7 @@ namespace DepartmentModule.Pages
 
         protected void UploadTechnicalDocumentButton_Click(object sender, EventArgs e)
         {
-            if (!HasAnyRole("Contractor", "Admin") || !TechnicalDocumentUpload.HasFile ||
+            if (!(HasAnyRole("Contractor") || IsJeAdministrator) || !TechnicalDocumentUpload.HasFile ||
                 String.IsNullOrWhiteSpace(TechnicalDocumentTypeText.Text) ||
                 TechnicalDocumentTypeText.Text.Trim().Length > 160)
             {
@@ -733,7 +734,7 @@ namespace DepartmentModule.Pages
         protected void SubmitFinancialButton_Click(object sender, EventArgs e)
         {
             decimal bidAmount;
-            if (!HasAnyRole("Contractor", "Admin") ||
+            if (!(HasAnyRole("Contractor") || IsJeAdministrator) ||
                 !Decimal.TryParse(FinancialBidAmountText.Text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out bidAmount) ||
                 bidAmount < 0.01m || bidAmount > 9999999999999999.99m || Decimal.Round(bidAmount, 2) != bidAmount)
             {
@@ -786,7 +787,7 @@ namespace DepartmentModule.Pages
         protected void EvaluateButton_Click(object sender, EventArgs e)
         {
             int bidId;
-            if (!HasAnyRole("TenderSection", "Admin") || !Int32.TryParse(TechnicalBidSelect.SelectedValue, out bidId) ||
+            if (!(IsJeAdministrator || HasAnyRole("TenderSection")) || !Int32.TryParse(TechnicalBidSelect.SelectedValue, out bidId) ||
                 (TechnicalStatus.SelectedValue != "Qualified" && TechnicalStatus.SelectedValue != "Disqualified") ||
                 TechnicalRemarks.Text.Length > 1000)
             {
@@ -801,7 +802,7 @@ namespace DepartmentModule.Pages
                     @"UPDATE dbo.TechnicalBid SET Status=@Status,Remarks=@Remarks,EvaluatedBy=@UserId,EvaluatedDate=SYSUTCDATETIME()
                       WHERE TechnicalBidId=@BidId AND TenderId=@TenderId AND Status=N'Submitted'
                         AND EXISTS(SELECT 1 FROM dbo.Tender t WHERE t.TenderId=@TenderId AND t.CurrentStatus=N'Technical Evaluation'
-                                   AND (@Role=N'Admin' OR
+                                   AND (@IsJeAdministrator=1 OR
                                         (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
                                                     WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
                                          OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
@@ -811,7 +812,7 @@ namespace DepartmentModule.Pages
                     AddText(command, "@Status", SqlDbType.NVarChar, TechnicalStatus.SelectedValue, 30);
                     AddText(command, "@Remarks", SqlDbType.NVarChar, TechnicalRemarks.Text, 1000);
                     ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                    AddText(command, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
+                    ModuleDb.AddParameter(command, "@IsJeAdministrator", SqlDbType.Bit, IsJeAdministrator);
                     ModuleDb.AddParameter(command, "@BidId", SqlDbType.Int, bidId);
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                     if (command.ExecuteNonQuery() != 1) throw new InvalidOperationException("The bid is no longer awaiting evaluation.");
@@ -828,7 +829,8 @@ namespace DepartmentModule.Pages
         protected void SelectContractorButton_Click(object sender, EventArgs e)
         {
             int contractorId;
-            if (!HasAnyRole("TenderCommittee", "Admin") || !Int32.TryParse(FinancialBidSelect.SelectedValue, out contractorId) || SelectionRemarks.Text.Length > 1000)
+            if (!(IsJeAdministrator || HasAnyRole("TenderCommittee")) ||
+                !Int32.TryParse(FinancialBidSelect.SelectedValue, out contractorId) || SelectionRemarks.Text.Length > 1000)
             {
                 ShowError("Select a bidder and enter no more than 1,000 characters of remarks.");
                 return;
@@ -845,7 +847,7 @@ namespace DepartmentModule.Pages
                                        AND t.CurrentStatus IN (N'Financial Bid Opening',N'CAFO Rate Opinion',
                                            N'Financial Evaluation',N'MCA Opinion',N'Tender Committee Recommendation',
                                            N'Final Approval',N'Agreement Completed')
-                                       AND (@Role=N'Admin' OR
+                                       AND (@IsJeAdministrator=1 OR
                                             (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
                                                         WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
                                              OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
@@ -853,7 +855,7 @@ namespace DepartmentModule.Pages
                     {
                         ModuleDb.AddParameter(command, "@ContractorId", SqlDbType.Int, contractorId);
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                        AddText(command, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
+                        ModuleDb.AddParameter(command, "@IsJeAdministrator", SqlDbType.Bit, IsJeAdministrator);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         if (command.ExecuteNonQuery() == 0) throw new InvalidOperationException("No financial bids are available for this tender.");
                     }

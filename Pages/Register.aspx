@@ -42,6 +42,10 @@
                                 <asp:Button ID="ChangeMobileButton" runat="server" Text="Change number" CssClass="button secondary auth-change-mobile" CausesValidation="false" OnClick="ChangeMobileButton_Click" />
                             </asp:Panel>
                             <asp:Panel ID="OtpPanel" runat="server" Visible="false" CssClass="auth-otp-panel">
+                                <asp:Panel ID="DevelopmentOtpPanel" runat="server" Visible="false" CssClass="message success" role="status">
+                                    <strong>DEVELOPMENT MODE</strong><br />
+                                    Development OTP: <code><asp:Literal ID="DevelopmentOtpText" runat="server" /></code>
+                                </asp:Panel>
                                 <div class="field">
                                     <asp:Label ID="OtpLabel" runat="server" AssociatedControlID="OtpText">Mobile verification code</asp:Label>
                                     <div class="auth-mobile-input">

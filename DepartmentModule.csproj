@@ -21,6 +21,7 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Data" />
     <Reference Include="System.Web" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="BCrypt.Net-Next">
       <HintPath>$(NuGetPackageRoot)bcrypt.net-next\4.0.3\lib\net48\BCrypt.Net-Next.dll</HintPath>
     </Reference>
@@ -137,10 +138,16 @@
     <Content Include="Pages\DocumentDownload.aspx" />
     <Content Include="Pages\Error.aspx" />
     <Content Include="Content\Styles.css" />
+    <Content Include="Scripts\ListEnhancements.js" />
     <Content Include="SMC.png" />
     <Content Include="Uploads\web.config" />
     <Content Include="SMC_TENDER_DATABASE.sql" />
     <Content Include="Migrations\20261120_TenderFormExtensions.sql" />
+    <Content Include="Migrations\20261125_TenderCreationWizard.sql" />
+    <Content Include="Migrations\20261125_TenderGisArea.sql" />
+    <Content Include="Migrations\20261125_TenderDocumentManagement.sql" />
+    <Content Include="Migrations\20261126_TenderRequirementDocuments.sql" />
+    <Content Include="Migrations\20261127_TenderWizardFiveSteps.sql" />
     <Content Include="README.md" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />

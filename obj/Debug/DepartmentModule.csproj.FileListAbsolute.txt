@@ -77,3 +77,10 @@ D:\Shreyas\tender_tracking_mngt_system_aspx\bin\System.ValueTuple.dll
 D:\Shreyas\tender_tracking_mngt_system_aspx\obj\Debug\DepartmentModule.csproj.AssemblyReference.cache
 D:\Shreyas\tender_tracking_mngt_system_aspx\obj\Debug\DepartmentModule.csproj.CoreCompileInputs.cache
 D:\Shreyas\tender_tracking_mngt_system_aspx\obj\Debug\Departme.AAD9A103.Up2Date
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\Microsoft.Extensions.Logging.Abstractions.dll
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\System.ValueTuple.dll
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\PdfSharp.Charting-gdi.dll
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\Microsoft.Bcl.AsyncInterfaces.dll
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\System.Threading.Tasks.Extensions.dll
+C:\Users\16507\Downloads\SMC_TenderManagement_WebForms\SMC_TenderManagement\bin\PdfSharp.Charting-gdi.pdb

@@ -19,7 +19,7 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!RequirePermission("masterdata.manage")) return;
+            if (!RequireJeAdministrator()) return;
             if (!IsPostBack) BindAnnouncements();
         }
 

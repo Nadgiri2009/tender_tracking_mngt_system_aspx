@@ -126,6 +126,15 @@ namespace DepartmentModule.Helpers
 
         public static bool IsValidLoginMobile(string mobile)
         {
+            if (CanDisplayDevelopmentOtp() && mobile != null && mobile.Length == 10)
+            {
+                for (int i = 0; i < mobile.Length; i++)
+                {
+                    if (mobile[i] < '0' || mobile[i] > '9') return false;
+                }
+                return true;
+            }
+
             return IsValidIndianMobile(mobile);
         }
 
@@ -142,6 +151,29 @@ namespace DepartmentModule.Helpers
             System.Diagnostics.Trace.TraceWarning(
                 "DepartmentModule: OtpLifetimeMinutes must be between 1 and 15; using the 5-minute default.");
             return 5;
+        }
+
+        public static string GetDeliveryMode()
+        {
+            string configuredMode = Environment.GetEnvironmentVariable("OTP_MODE");
+            if (configuredMode == null)
+                configuredMode = ConfigurationManager.AppSettings["OTP_MODE"];
+            if (String.IsNullOrWhiteSpace(configuredMode))
+                return "Production";
+
+            if (String.Equals(configuredMode, "Development", StringComparison.OrdinalIgnoreCase))
+                return "Development";
+            if (String.Equals(configuredMode, "Production", StringComparison.OrdinalIgnoreCase))
+                return "Production";
+
+            return String.Empty;
+        }
+
+        public static bool CanDisplayDevelopmentOtp()
+        {
+            HttpContext context = HttpContext.Current;
+            return String.Equals(GetDeliveryMode(), "Development", StringComparison.Ordinal) &&
+                context != null && context.Request != null && context.Request.IsLocal;
         }
 
         public static string CreateCode()
@@ -209,8 +241,32 @@ namespace DepartmentModule.Helpers
             return difference == 0;
         }
 
-        public static bool TryDeliver(string purpose, string code, string mobile)
+        public static bool TryDeliver(string purpose, string code, string mobile,
+            out string deliveryMode, out string developmentCode)
         {
+            deliveryMode = GetDeliveryMode();
+            developmentCode = String.Empty;
+
+            if (String.Equals(deliveryMode, "Development", StringComparison.Ordinal))
+            {
+                if (!CanDisplayDevelopmentOtp())
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        "DepartmentModule: Development OTP mode is restricted to local requests.");
+                    return false;
+                }
+
+                developmentCode = code;
+                return true;
+            }
+
+            if (!String.Equals(deliveryMode, "Production", StringComparison.Ordinal))
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "DepartmentModule: OTP_MODE must be Development or Production.");
+                return false;
+            }
+
             List<string> missingSettings = new List<string>();
             foreach (string setting in RequiredSmsSettings)
             {

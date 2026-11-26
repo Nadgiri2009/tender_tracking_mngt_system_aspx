@@ -41,6 +41,7 @@ namespace DepartmentModule.Pages
             }
             if (!HasPermission("system.admin") && !HasPermission("tenders.monitor") &&
                 !HasPermission("tenders.manage.all") && !HasPermission("tender.create.department") &&
+                !HasPermission("tender.read.department") &&
                 !HasPermission("tender.publication.manage") && !HasPermission("tender.primary.open") &&
                 !HasPermission("tender.primary.verify") && !HasPermission("tender.cell.verify") &&
                 !HasPermission("shortfall.create") && !HasPermission("shortfall.approve") &&
@@ -54,7 +55,7 @@ namespace DepartmentModule.Pages
             }
 
             NewTenderLink.Visible = HasPermission("tender.create.department") ||
-                HasPermission("tenders.manage.all") || HasAnyRole("DepartmentOfficer", "Admin");
+                HasPermission("tenders.manage.all") || HasAnyRole("DepartmentOfficer");
             if (!IsPostBack)
             {
                 LoadFilters();
@@ -66,16 +67,11 @@ namespace DepartmentModule.Pages
         {
             StatusFilter.Items.Clear();
             StatusFilter.Items.Add(new ListItem("All statuses", ""));
-            StatusFilter.Items.Add(new ListItem("Approved", "Approved"));
-            StatusFilter.Items.Add(new ListItem("Pending", "Pending"));
-            StatusFilter.Items.Add(new ListItem("Under Review", "Under Review"));
-            StatusFilter.Items.Add(new ListItem("Rejected", "Rejected"));
-            StatusFilter.Items.Add(new ListItem("Draft / Submitted", "Draft / Submitted"));
+            StatusFilter.Items.Add(new ListItem("Draft", "Draft"));
             StatusFilter.Items.Add(new ListItem("Published", "Published"));
             StatusFilter.Items.Add(new ListItem("Active", "Active"));
             StatusFilter.Items.Add(new ListItem("Closed", "Closed"));
             StatusFilter.Items.Add(new ListItem("Cancelled", "Cancelled"));
-            foreach (string status in WorkflowRules.Statuses) StatusFilter.Items.Add(new ListItem(status, status));
 
             using (SqlConnection connection = ModuleDb.OpenConnection())
             {
@@ -123,7 +119,7 @@ namespace DepartmentModule.Pages
                  String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase));
             string ownerFilter = isDepartmentOfficer ? " AND t.CreatedBy=@CurrentUserId" : String.Empty;
             string workflowScope = String.Empty;
-            if (!HasPermission("system.admin") && HasAnyRole("Junior Engineer (JE)"))
+            if (!HasPermission("system.admin") && HasPermission("tender.read.department"))
                 workflowScope = " AND @AuthorizedDepartmentId IS NOT NULL AND t.DepartmentId=@AuthorizedDepartmentId";
             else if (!HasPermission("system.admin") &&
                 HasAnyRole("Nivida Kaksh (Tender Cell)", "Nivida Samiti Adhyaksha", "Chief Auditor"))
@@ -258,7 +254,7 @@ namespace DepartmentModule.Pages
 
         private void AddWorkflowScopeParameters(SqlCommand command)
         {
-            if (!HasPermission("system.admin") && HasAnyRole("Junior Engineer (JE)"))
+            if (!HasPermission("system.admin") && HasPermission("tender.read.department"))
                 ModuleDb.AddParameter(command, "@AuthorizedDepartmentId", SqlDbType.Int,
                     CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
             else if (!HasPermission("system.admin") &&

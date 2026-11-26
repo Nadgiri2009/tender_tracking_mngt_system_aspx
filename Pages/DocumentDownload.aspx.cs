@@ -64,6 +64,7 @@ namespace DepartmentModule.Pages
             if (documentId <= 0) { NotFound(); return; }
             string storedPath;
             string fileName;
+            bool isContractor = String.Equals(CurrentAccountType, "ExternalBidder", StringComparison.OrdinalIgnoreCase);
             try
             {
                 using (SqlConnection connection = ModuleDb.OpenConnection())
@@ -73,13 +74,17 @@ namespace DepartmentModule.Pages
                       INNER JOIN dbo.Tender t ON t.TenderId=td.TenderId
                       WHERE td.DocumentId=@DocumentId AND t.IsDeleted=0
                         AND (
-                            ((@CurrentUserId=0 OR @CurrentRole=N'Contractor') AND EXISTS
-                                (SELECT 1 FROM dbo.ApprovalHistory publicHistory
-                                 WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published'))
-                            OR (@CurrentUserId>0 AND @CurrentRole<>N'Contractor'
+                            ((@CurrentUserId=0 OR @IsContractor=1) AND
+                                (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
+                                        WHERE publicHistory.TenderId=t.TenderId AND publicHistory.NewStatus=N'Tender Published')
+                                 OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowHistory publicWorkflowHistory
+                                           WHERE publicWorkflowHistory.TenderId=t.TenderId
+                                             AND publicWorkflowHistory.WorkflowVersion=2
+                                             AND publicWorkflowHistory.NewStatus=N'Tender Published')))
+                            OR (@CurrentUserId>0 AND @IsContractor=0
                                 AND (@CurrentRole<>N'DepartmentOfficer' OR t.CreatedBy=@CurrentUserId))
                         )
-                        AND (@CurrentUserId=0 OR @CurrentRole=N'Contractor' OR @CurrentRole=N'Admin'
+                        AND (@IsAdministrator=1 OR @CurrentUserId=0 OR @IsContractor=1
                              OR NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
                                            WHERE scopeUser.UserId=@CurrentUserId
                                              AND scopeUser.DepartmentId IS NOT NULL
@@ -88,6 +93,8 @@ namespace DepartmentModule.Pages
                     ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
                     ModuleDb.AddParameter(command, "@CurrentUserId", SqlDbType.Int, CurrentUserId);
                     ModuleDb.AddParameter(command, "@CurrentRole", SqlDbType.NVarChar, CurrentRole, 50);
+                    ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, isContractor);
+                    ModuleDb.AddParameter(command, "@IsAdministrator", SqlDbType.Bit, IsJeAdministrator);
                     using (SqlDataReader reader = command.ExecuteReader())
                     {
                         if (!reader.Read()) { NotFound(); return; }
@@ -109,9 +116,9 @@ namespace DepartmentModule.Pages
 
         private void DownloadExtensionDocument(int requestId, string kind)
         {
-            if (!HasAnyRole("DepartmentOfficer", "CAFOOfficer", "Admin")) { NotFound(); return; }
+            if (!IsJeAdministrator && !HasAnyRole("DepartmentOfficer", "CAFOOfficer")) { NotFound(); return; }
             string storedPath, fileName;
-            bool isAdmin = HasAnyRole("Admin");
+            bool isAdmin = IsJeAdministrator;
             string departmentScope = isAdmin ? String.Empty :
                 @" AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
                    AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
@@ -127,7 +134,7 @@ namespace DepartmentModule.Pages
                       FROM dbo.TenderExtensionRequests e
                       INNER JOIN dbo.Tender t ON t.TenderId=e.TenderId
                       WHERE e.ExtensionRequestId=@RequestId AND t.IsDeleted=0 AND
-                        (@Role=N'Admin'
+                        (@IsAdmin=1
                          OR (@Role=N'DepartmentOfficer' AND e.SubmittedBy=@UserId)
                          OR @Role=N'CAFOOfficer')" + departmentScope + ";", connection))
                 {
@@ -135,6 +142,7 @@ namespace DepartmentModule.Pages
                     ModuleDb.AddParameter(command, "@RequestId", SqlDbType.Int, requestId);
                     ModuleDb.AddParameter(command, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
                     ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                    ModuleDb.AddParameter(command, "@IsAdmin", SqlDbType.Bit, isAdmin);
                     if (!isAdmin)
                     {
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
@@ -161,9 +169,9 @@ namespace DepartmentModule.Pages
 
         private void DownloadEvaluationDocument(int documentId)
         {
-            if (!HasAnyRole("TenderSection", "TenderCommittee", "Admin")) { NotFound(); return; }
+            if (!IsJeAdministrator && !HasAnyRole("TenderSection", "TenderCommittee")) { NotFound(); return; }
             string storedPath, fileName;
-            bool isAdmin = HasAnyRole("Admin");
+            bool isAdmin = IsJeAdministrator;
             string departmentScope = isAdmin ? String.Empty :
                 @" AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
                    AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
@@ -208,9 +216,9 @@ namespace DepartmentModule.Pages
 
         private void DownloadTechnicalBidDocument(int technicalBidId)
         {
-            if (!HasAnyRole("TenderSection", "TenderCommittee", "Admin")) { NotFound(); return; }
+            if (!IsJeAdministrator && !HasAnyRole("TenderSection", "TenderCommittee")) { NotFound(); return; }
             string storedPath, fileName;
-            bool isAdmin = HasAnyRole("Admin");
+            bool isAdmin = IsJeAdministrator;
             string departmentScope = isAdmin ? String.Empty :
                 @" AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
                    AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser

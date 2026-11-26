@@ -16,28 +16,37 @@ namespace DepartmentModule.Pages
             FinalShortfallLabel, FinalApprovalLabel, FinalQueueHeading;
         protected HyperLink NewTenderLink, WorkflowQueueLink;
         protected Panel PendingApprovalsPanel, LifecycleSummaryPanel, LegacyDashboardPanel, FinalWorkflowDashboardPanel;
+        protected Panel FinalVerificationPanel, FinalShortfallPanel, FinalApprovalPanel;
         protected System.Web.UI.WebControls.PlaceHolder LifecycleReviewSummaryPanel;
         protected GridView PendingGrid, RecentGrid, CategoryStatsGrid, UpcomingGrid, FinalWorkflowGrid;
 
         protected void Page_Load(object sender, EventArgs e)
         {
+            if (IsJeAdministrator)
+            {
+                Response.Redirect(ResolveUrl("~/Pages/Admin.aspx"), false);
+                Context.ApplicationInstance.CompleteRequest();
+                return;
+            }
+            if (HasAnyRole("Contractor"))
+            {
+                Response.Redirect(ResolveUrl("~/Pages/MyApplications.aspx"), false);
+                Context.ApplicationInstance.CompleteRequest();
+                return;
+            }
+
             if (!IsPostBack)
             {
-                if (HasAnyRole("Contractor"))
-                {
-                    Response.Redirect(ResolveUrl("~/Pages/MyApplications.aspx"), false);
-                    Context.ApplicationInstance.CompleteRequest();
-                    return;
-                }
-
                 SetFinalWorkflowDashboardCopy();
-                bool isFinalWorkflowRole = HasAnyRole("Junior Engineer (JE)", "Nivida Kaksh (Tender Cell)",
-                    "Nivida Samiti Adhyaksha", "Chief Auditor", "Contractor");
+                bool isFinalWorkflowRole =
+                    String.Equals(CurrentRoleCode, "TENDER_CELL", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(CurrentRoleCode, "CHAIRMAN", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(CurrentRoleCode, "DIRECTOR_AUDITOR", StringComparison.OrdinalIgnoreCase);
                 LegacyDashboardPanel.Visible = !isFinalWorkflowRole;
                 FinalWorkflowDashboardPanel.Visible = isFinalWorkflowRole;
                 bool isRespOfficer = HasAnyRole("DepartmentOfficer");
                 NewTenderLink.Visible = HasPermission("tender.create.department") ||
-                    HasPermission("tenders.manage.all") || HasAnyRole("DepartmentOfficer", "Admin");
+                    HasPermission("tenders.manage.all") || HasAnyRole("DepartmentOfficer");
                 WorkflowQueueLink.Visible = HasPermission("tender.create.department") ||
                     HasPermission("tender.publication.manage") || HasPermission("tender.primary.open") ||
                     HasPermission("tender.primary.verify") || HasPermission("tender.cell.verify") ||
@@ -53,7 +62,7 @@ namespace DepartmentModule.Pages
                 }
                 PendingApprovalsPanel.Visible = !isRespOfficer;
                 LifecycleSummaryPanel.Visible = !HasAnyRole("Contractor");
-                LifecycleReviewSummaryPanel.Visible = HasAnyRole("CAFOOfficer", "TenderSection", "TenderCommittee", "Admin");
+                LifecycleReviewSummaryPanel.Visible = HasAnyRole("CAFOOfficer", "TenderSection", "TenderCommittee");
                 RecentHeading.Text = isRespOfficer ? "My recent tenders" : "Recently updated tenders";
                 LoadDashboard();
             }
@@ -61,45 +70,39 @@ namespace DepartmentModule.Pages
 
         private void SetFinalWorkflowDashboardCopy()
         {
-            if (HasAnyRole("Junior Engineer (JE)"))
-            {
-                DashboardTitle.Text = "Junior Engineer Tender Dashboard";
-                DashboardDescription.Text = "Manage tenders and follow department-scoped verification, shortfall, and approval work.";
-                FinalQueueHeading.Text = "My tender-management queue";
-                FinalQueueLabel.Text = "Assigned tenders";
-                FinalVerificationLabel.Text = "Verification stages";
-                FinalShortfallLabel.Text = "Shortfall actions";
-                FinalApprovalLabel.Text = "Financial approval stages";
-            }
-            else if (HasAnyRole("Tender Cell"))
+            if (String.Equals(CurrentRoleCode, "TENDER_CELL", StringComparison.OrdinalIgnoreCase))
             {
                 DashboardTitle.Text = "Tender Cell Verification Dashboard";
                 DashboardDescription.Text = "Re-verify assigned applications, review shortfall responses, and track cleared cases.";
                 FinalQueueHeading.Text = "My verification queue";
                 FinalQueueLabel.Text = "Assigned cases";
-                FinalVerificationLabel.Text = "Verification stages";
-                FinalShortfallLabel.Text = "Shortfall cases";
-                FinalApprovalLabel.Text = "Approval handoffs";
+                FinalVerificationLabel.Text = "Pending document verification";
+                FinalShortfallLabel.Text = "Shortfall workflow";
+                FinalVerificationPanel.Visible = true;
+                FinalShortfallPanel.Visible = true;
+                FinalApprovalPanel.Visible = false;
             }
-            else if (HasAnyRole("Nivida Samiti Adhyaksha"))
+            else if (String.Equals(CurrentRoleCode, "CHAIRMAN", StringComparison.OrdinalIgnoreCase))
             {
                 DashboardTitle.Text = "Financial Bid Opening Approvals";
                 DashboardDescription.Text = "Review and decide financial bid opening requests assigned to the Samiti.";
                 FinalQueueHeading.Text = "Pending opening requests";
-                FinalQueueLabel.Text = "Assigned requests";
-                FinalVerificationLabel.Text = "Technical review stages";
-                FinalShortfallLabel.Text = "Shortfall-related cases";
-                FinalApprovalLabel.Text = "Approval queue";
+                FinalQueueLabel.Text = "Pending opening requests";
+                FinalApprovalLabel.Text = "Financial bid opening approvals";
+                FinalVerificationPanel.Visible = false;
+                FinalShortfallPanel.Visible = false;
+                FinalApprovalPanel.Visible = true;
             }
-            else if (HasAnyRole("Chief Auditor"))
+            else if (String.Equals(CurrentRoleCode, "DIRECTOR_AUDITOR", StringComparison.OrdinalIgnoreCase))
             {
                 DashboardTitle.Text = "Chief Auditor Financial Review";
                 DashboardDescription.Text = "Review bidder-wise financial evaluations and record final decisions.";
                 FinalQueueHeading.Text = "Pending financial evaluations";
-                FinalQueueLabel.Text = "Assigned evaluations";
-                FinalVerificationLabel.Text = "Verification stages";
-                FinalShortfallLabel.Text = "Shortfall-related cases";
-                FinalApprovalLabel.Text = "Final approval queue";
+                FinalQueueLabel.Text = "Pending auditor reviews";
+                FinalApprovalLabel.Text = "Financial evaluation approvals";
+                FinalVerificationPanel.Visible = false;
+                FinalShortfallPanel.Visible = false;
+                FinalApprovalPanel.Visible = true;
             }
             else
             {
@@ -110,6 +113,9 @@ namespace DepartmentModule.Pages
                 FinalVerificationLabel.Text = "Verification stages";
                 FinalShortfallLabel.Text = "Shortfall actions";
                 FinalApprovalLabel.Text = "Approval stages";
+                FinalVerificationPanel.Visible = true;
+                FinalShortfallPanel.Visible = true;
+                FinalApprovalPanel.Visible = true;
             }
         }
 
@@ -249,7 +255,7 @@ namespace DepartmentModule.Pages
 
         private void BindLifecycleSummary(SqlConnection connection, string ownerFilter, bool isRespOfficer)
         {
-            bool isAdmin = HasAnyRole("Admin");
+            bool isAdmin = IsJeAdministrator;
             string departmentFilter = isAdmin ? String.Empty :
                 @" AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
                    AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
