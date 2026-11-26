@@ -202,15 +202,21 @@ namespace DepartmentModule.Pages
         private void AddFilterParameters(SqlCommand command, object dateFrom, object dateTo)
         {
             string search = SearchText.Text == null ? String.Empty : SearchText.Text.Trim();
-            AddText(command, "@Search", SqlDbType.NVarChar, search, 100);
+            AddFilterText(command, "@Search", search, 100);
             AddText(command, "@SearchPattern", SqlDbType.NVarChar, "%" + search + "%", 102);
-            AddText(command, "@Status", SqlDbType.NVarChar, StatusFilter.SelectedValue, 50);
-            AddText(command, "@Category", SqlDbType.NVarChar, CategoryFilter.SelectedValue, 50);
+            AddFilterText(command, "@Status", StatusFilter.SelectedValue, 50);
+            AddFilterText(command, "@Category", CategoryFilter.SelectedValue, 50);
             ModuleDb.AddParameter(command, "@DateFrom", SqlDbType.Date, dateFrom);
             ModuleDb.AddParameter(command, "@DateTo", SqlDbType.Date, dateTo);
             int departmentId;
             ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                 Int32.TryParse(DepartmentFilter.SelectedValue, out departmentId) ? departmentId : 0);
+        }
+
+        private static void AddFilterText(SqlCommand command, string name, string value, int size)
+        {
+            ModuleDb.AddParameter(command, name, SqlDbType.NVarChar,
+                String.IsNullOrWhiteSpace(value) ? String.Empty : value.Trim(), size);
         }
 
         private bool TryGetDateFilters(out object dateFrom, out object dateTo)
