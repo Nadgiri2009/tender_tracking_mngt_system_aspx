@@ -11,25 +11,28 @@
         <div class="tender-wizard-progress-scroll">
             <ol id="TenderWizardProgress" class="tender-wizard-progress" aria-label="Tender creation progress">
                 <li data-wizard-nav="1"><button type="button" aria-current="step"><span>1</span><strong>Basic Information</strong><small>Not started</small></button></li>
-                <li data-wizard-nav="2"><button type="button"><span>2</span><strong>Important Dates</strong><small>Not started</small></button></li>
-                <li data-wizard-nav="3" data-je-only="true"><button type="button"><span>3</span><strong>Approvals</strong><small>Not started</small></button></li>
-                <li data-wizard-nav="4"><button type="button"><span>4</span><strong>GIS Location</strong><small>Not started</small></button></li>
-                <li data-wizard-nav="5"><button type="button"><span>5</span><strong>Review & Submit</strong><small>Not started</small></button></li>
+                <li data-wizard-nav="2"><button type="button"><span>2</span><strong>Technical Verification & Approvals</strong><small>Not started</small></button></li>
+                <li data-wizard-nav="3"><button type="button"><span>3</span><strong>GIS Location</strong><small>Not started</small></button></li>
+                <li data-wizard-nav="4"><button type="button"><span>4</span><strong>Review & Submit</strong><small>Not started</small></button></li>
             </ol>
         </div>
         <asp:HiddenField ID="WizardCurrentStep" runat="server" Value="1" />
         <asp:HiddenField ID="WizardCompletedStepsMask" runat="server" Value="0" />
         <asp:HiddenField ID="RemoveGisImageFlag" runat="server" Value="false" />
         <asp:HiddenField ID="JeAdministratorFlag" runat="server" />
+        <asp:HiddenField ID="DocumentVerificationOnlyFlag" runat="server" />
         <asp:HiddenField ID="GisBoundaryCoordinates" runat="server" />
+        <asp:HiddenField ID="GisBoundaryLineCoordinates" runat="server" />
         <p id="TenderWizardNavigationMessage" class="message" role="alert" aria-live="assertive" hidden="hidden"></p>
         <div class="tender-wizard-panel" data-wizard-step="1">
         <h2>Basic tender information</h2>
         <p class="muted">The tender reference number is assigned automatically when the draft is saved.</p>
-        <div class="field"><label for="TitleText">Project title</label><asp:TextBox ID="TitleText" runat="server" MaxLength="250" />
+        <div class="field"><label for="TitleText">Project title</label><asp:TextBox ID="TitleText" runat="server" MaxLength="100" />
+            <span id="TitleCharacterCount" class="field-help" aria-live="polite">0/100</span>
             <asp:RequiredFieldValidator ID="TitleRequired" runat="server" ControlToValidate="TitleText" ErrorMessage="Title is required." CssClass="validation" />
-            <asp:CustomValidator ID="TitleLength" runat="server" ControlToValidate="TitleText" OnServerValidate="TitleLength_ServerValidate" ErrorMessage="Title must be 5 to 250 characters." CssClass="validation" /></div>
-        <div class="field"><label for="DescriptionText">Project description</label><asp:TextBox ID="DescriptionText" runat="server" TextMode="MultiLine" Rows="3" MaxLength="4000" /></div>
+            <asp:CustomValidator ID="TitleLength" runat="server" ControlToValidate="TitleText" OnServerValidate="TitleLength_ServerValidate" ErrorMessage="Title must be 5 to 100 characters." CssClass="validation" /></div>
+        <div class="field"><label for="DescriptionText">Project description</label><asp:TextBox ID="DescriptionText" runat="server" TextMode="MultiLine" Rows="3" MaxLength="4000" />
+            <span id="DescriptionCharacterCount" class="field-help" aria-live="polite">0/4000</span></div>
         <div class="row">
             <asp:Panel ID="DepartmentPanel" runat="server" CssClass="field"><label for="DepartmentSelect">Department</label><asp:DropDownList ID="DepartmentSelect" runat="server" />
                 <asp:RequiredFieldValidator ID="DepartmentRequired" runat="server" ControlToValidate="DepartmentSelect" InitialValue="" ErrorMessage="A valid Department must be selected." CssClass="validation" /></asp:Panel>
@@ -52,6 +55,86 @@
             No active Budgeting Financial Years are configured. <a href="AdminMasterData.aspx">Add a Budgeting Financial Year in Master Management</a>.
         </asp:Panel>
         <div class="field requirement-document">
+            <label for="RequirementDocumentsUpload">Tender documents</label>
+            <asp:FileUpload ID="RequirementDocumentsUpload" runat="server" ClientIDMode="Static" AllowMultiple="true"
+                CssClass="requirement-document-input visually-hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" />
+            <label for="RequirementDocumentsUpload" class="button secondary document-upload-trigger requirement-document-upload-trigger">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v4h16v-4" /></svg>
+                <span>Select tender documents</span>
+            </label>
+            <asp:HiddenField ID="RequirementDocumentCategories" runat="server" />
+            <p class="help">Select multiple files, then assign each to Scope of Work, Technical Requirements, or Financial Requirements. PDF, Office documents, JPEG or PNG; maximum 20 MB per file.</p>
+            <div id="RequirementDocumentSelectionList" class="requirement-document-list" aria-live="polite" aria-relevant="additions removals"></div>
+            <h3 class="requirement-document-list-heading">Uploaded tender documents</h3>
+            <div class="table-wrap requirement-document-table-wrap">
+            <asp:GridView ID="RequirementDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                CssClass="requirement-document-grid" DataKeyNames="DocumentId"
+                OnRowCommand="RequirementDocumentsGrid_RowCommand"
+                EmptyDataText="No tender requirement documents uploaded yet.">
+                <Columns>
+                    <asp:TemplateField HeaderText="Sr. No.">
+                        <HeaderStyle CssClass="grid-serial-cell" />
+                        <ItemStyle CssClass="grid-serial-cell" />
+                        <ItemTemplate><%# Container.DataItemIndex + 1 %></ItemTemplate>
+                    </asp:TemplateField>
+                    <asp:BoundField DataField="DocumentName" HeaderText="Document name" />
+                    <asp:TemplateField HeaderText="Category">
+                        <ItemTemplate>
+                            <asp:Literal runat="server" Text='<%# Eval("RequirementCategory") %>'
+                                Visible='<%# !CanManageRequirementDocuments %>' />
+                            <asp:DropDownList ID="RequirementDocumentCategorySelect" runat="server"
+                                CssClass="requirement-document-category" SelectedValue='<%# Eval("RequirementCategory") %>'
+                                aria-label='<%# "Category for " + Eval("DocumentName") %>'
+                                Visible='<%# CanManageRequirementDocuments %>'>
+                                <asp:ListItem Text="Scope of Work" Value="Scope of Work" />
+                                <asp:ListItem Text="Technical Requirements" Value="Technical Requirements" />
+                                <asp:ListItem Text="Financial Requirements" Value="Financial Requirements" />
+                            </asp:DropDownList>
+                        </ItemTemplate>
+                    </asp:TemplateField>
+                    <asp:BoundField DataField="FileExtension" HeaderText="File type" />
+                    <asp:BoundField DataField="UploadStatus" HeaderText="Uploaded" />
+                    <asp:TemplateField HeaderText="Actions">
+                        <ItemStyle CssClass="document-actions-cell" />
+                        <ItemTemplate>
+                        <span class="document-icon-actions">
+                        <asp:LinkButton runat="server" CssClass="icon-action"
+                            CommandName="UpdateRequirementDocumentCategory"
+                            CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false"
+                            ToolTip="Save category" aria-label="Save category"
+                            Visible='<%# CanManageRequirementDocuments %>'>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l3 3v13H4V4h1zm3 0v6h8V4M8 20v-6h8v6" /></svg>
+                            <span class="sr-only">Save category</span>
+                        </asp:LinkButton>
+                        <asp:HyperLink runat="server" CssClass="icon-action" Target="_blank" rel="noopener"
+                            NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId") + "&preview=true") %>'
+                            ToolTip="View document" aria-label="View document">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                            <span class="sr-only">View</span>
+                        </asp:HyperLink>
+                        <asp:HyperLink runat="server" CssClass="icon-action"
+                            NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId")) %>'
+                            ToolTip="Download document" aria-label="Download document">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m0 0 5-5m-5 5-5-5M4 16v4h16v-4" /></svg>
+                            <span class="sr-only">Download</span>
+                        </asp:HyperLink>
+                        <asp:LinkButton runat="server" CssClass="icon-action danger" CommandName="RemoveRequirementDocument"
+                            CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false"
+                            OnClientClick="return confirm('Remove this tender document?');"
+                            ToolTip="Remove document" aria-label="Remove document"
+                            Visible='<%# CanManageRequirementDocuments %>'>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg>
+                            <span class="sr-only">Remove</span>
+                        </asp:LinkButton>
+                        </span>
+                        </ItemTemplate>
+                    </asp:TemplateField>
+                </Columns>
+            </asp:GridView>
+            </div>
+        </div>
+        <asp:Panel ID="LegacyRequirementDocumentUploadsPanel" runat="server" Visible="false">
+        <div class="field requirement-document" hidden="hidden">
             <asp:Label runat="server" AssociatedControlID="ScopeOfWorkDocumentUpload">Scope of Work document</asp:Label>
             <asp:FileUpload ID="ScopeOfWorkDocumentUpload" runat="server" ClientIDMode="Static" CssClass="requirement-document-input visually-hidden"
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" />
@@ -79,7 +162,7 @@
             <asp:HiddenField ID="ScopeOfWorkDocumentRemoveFlag" runat="server" Value="false" />
             <span class="help">PDF, Office documents, JPEG or PNG; maximum 20 MB.</span>
         </div>
-        <div class="row">
+        <div class="row" hidden="hidden">
             <div class="field requirement-document">
                 <asp:Label runat="server" AssociatedControlID="TechnicalRequirementsDocumentUpload">Technical Requirements document</asp:Label>
                 <asp:FileUpload ID="TechnicalRequirementsDocumentUpload" runat="server" ClientIDMode="Static" CssClass="requirement-document-input visually-hidden"
@@ -137,13 +220,14 @@
                 <span class="help">PDF, Office documents, JPEG or PNG; maximum 20 MB.</span>
             </div>
         </div>
+        </asp:Panel>
         <div class="row">
             <div class="field"><label for="AdditionalConditionsText">Additional conditions</label><asp:TextBox ID="AdditionalConditionsText" runat="server" TextMode="MultiLine" Rows="3" MaxLength="4000" /></div>
             <div class="field"><label for="TermsAndConditionsText">Terms and conditions</label><asp:TextBox ID="TermsAndConditionsText" runat="server" TextMode="MultiLine" Rows="3" MaxLength="4000" /></div>
         </div>
         </div>
 
-        <div class="tender-wizard-panel" data-wizard-step="2" hidden="hidden">
+        <asp:Panel ID="LegacySchedulePanel" runat="server" Visible="false">
         <h2>Tender schedule dates (IST)</h2>
         <p class="muted">Enter dates only; times are not collected. Dates are optional, but submission start and closing must be entered together. When provided, follow this order: publication, submission start, submission closing, technical bid opening, then financial bid opening. A pre-bid meeting, if applicable, must be on or after publication and before closing.</p>
         <asp:Panel ID="ScheduleValidationPanel" runat="server" CssClass="message schedule-validation" Visible="false">
@@ -165,41 +249,80 @@
             </div>
             <div class="field"><label for="PreBidDetailsText">Meeting details</label><asp:TextBox ID="PreBidDetailsText" runat="server" TextMode="MultiLine" Rows="2" MaxLength="2000" /></div>
         </details>
-        </div>
+        </asp:Panel>
 
-        <asp:Panel ID="ApprovalsWizardPanel" runat="server" CssClass="tender-wizard-panel" data-wizard-step="3" data-je-only="true" Visible="false">
-            <h2>Administrative approval details</h2>
+        <div class="tender-wizard-panel" data-wizard-step="2" hidden="hidden">
+            <h2>Technical document verification and approval checklist</h2>
+            <p class="muted">Review the tender documents uploaded in Step 1. Authorized verifying officers can record a decision and remarks for each file.</p>
+            <asp:Panel ID="TechnicalDocumentVerificationPanel" runat="server" CssClass="technical-document-verification" Visible="false">
+                <h3>Tender document verification</h3>
+                <div class="table-wrap">
+                    <asp:GridView ID="TechnicalDocumentVerificationGrid" runat="server" AutoGenerateColumns="false"
+                        GridLines="None" DataKeyNames="DocumentId,TenderId"
+                        OnRowCommand="TechnicalDocumentVerificationGrid_RowCommand"
+                        EmptyDataText="No tender documents are available for verification.">
+                        <Columns>
+                            <asp:BoundField DataField="RequirementCategory" HeaderText="Category" />
+                            <asp:BoundField DataField="DocumentName" HeaderText="Document" />
+                            <asp:TemplateField HeaderText="File"><ItemTemplate>
+                                <asp:HyperLink runat="server" Text='<%# Eval("FileName") %>'
+                                    NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId")) %>' />
+                            </ItemTemplate></asp:TemplateField>
+                            <asp:BoundField DataField="VerificationStatusText" HeaderText="Status" />
+                            <asp:BoundField DataField="VerifiedByName" HeaderText="Verified by" NullDisplayText="-" />
+                            <asp:BoundField DataField="VerifiedAtUtc" HeaderText="Verified at (UTC)"
+                                DataFormatString="{0:dd MMM yyyy HH:mm}" NullDisplayText="-" />
+                            <asp:TemplateField HeaderText="Decision and remarks"><ItemTemplate>
+                                <asp:DropDownList ID="TechnicalDocumentDecision" runat="server"
+                                    SelectedValue='<%# Eval("VerificationStatus") %>'>
+                                    <asp:ListItem Value="">Pending</asp:ListItem>
+                                    <asp:ListItem Value="Verified">Verified</asp:ListItem>
+                                    <asp:ListItem Value="Not Verified">Not Verified</asp:ListItem>
+                                </asp:DropDownList>
+                                <asp:TextBox ID="TechnicalDocumentVerificationRemarks" runat="server"
+                                    TextMode="MultiLine" MaxLength="1000" Rows="2"
+                                    Text='<%# Eval("VerificationRemarks") %>' />
+                                <asp:Button ID="SaveTechnicalDocumentVerificationButton" runat="server"
+                                    Text="Save decision" CommandName="SaveTechnicalDocumentVerification"
+                                    CommandArgument='<%# Container.DataItemIndex %>' CausesValidation="false" />
+                            </ItemTemplate></asp:TemplateField>
+                        </Columns>
+                    </asp:GridView>
+                </div>
+            </asp:Panel>
+        <asp:Panel ID="ApprovalsWizardPanel" runat="server" data-je-only="true" Visible="false">
+            <h3>Approval checklist</h3>
             <p class="message">These checkboxes record JE's administrative status only. They are not a substitute for official approval documents or competent-authority approval.</p>
-            <div class="approval-wizard-grid">
-                <section class="approval-wizard-item">
+            <ul class="approval-checklist">
+                <li class="approval-checklist-item">
                     <div class="approval-wizard-check"><asp:CheckBox ID="AdministrativeApprovalCheck" runat="server" Text="Administrative Approval" /></div>
                     <asp:TextBox ID="AdministrativeApprovalReferenceText" runat="server" MaxLength="100" placeholder="Approval reference number" />
                     <asp:TextBox ID="AdministrativeApprovalDateText" runat="server" TextMode="Date" />
                     <asp:FileUpload ID="AdministrativeApprovalDocumentUpload" runat="server" />
                     <asp:HyperLink ID="AdministrativeApprovalDocumentLink" runat="server" Visible="false" Target="_blank" rel="noopener">View current approval document</asp:HyperLink>
-                </section>
-                <section class="approval-wizard-item">
+                </li>
+                <li class="approval-checklist-item">
                     <div class="approval-wizard-check"><asp:CheckBox ID="TechnicalSanctionApprovalCheck" runat="server" Text="Technical Sanction (TS) Approval" /></div>
                     <asp:TextBox ID="TechnicalSanctionApprovalReferenceText" runat="server" MaxLength="100" placeholder="Approval reference number" />
                     <asp:TextBox ID="TechnicalSanctionApprovalDateText" runat="server" TextMode="Date" />
                     <asp:FileUpload ID="TechnicalSanctionApprovalDocumentUpload" runat="server" />
                     <asp:HyperLink ID="TechnicalSanctionApprovalDocumentLink" runat="server" Visible="false" Target="_blank" rel="noopener">View current approval document</asp:HyperLink>
-                </section>
-                <section class="approval-wizard-item">
+                </li>
+                <li class="approval-checklist-item">
                     <div class="approval-wizard-check"><asp:CheckBox ID="GeneralBodyApprovalCheck" runat="server" Text="General Body (GB) Approval" /></div>
                     <asp:TextBox ID="GeneralBodyApprovalReferenceText" runat="server" MaxLength="100" placeholder="Approval reference number" />
                     <asp:TextBox ID="GeneralBodyApprovalDateText" runat="server" TextMode="Date" />
                     <asp:FileUpload ID="GeneralBodyApprovalDocumentUpload" runat="server" />
                     <asp:HyperLink ID="GeneralBodyApprovalDocumentLink" runat="server" Visible="false" Target="_blank" rel="noopener">View current approval document</asp:HyperLink>
-                </section>
-                <section class="approval-wizard-item">
+                </li>
+                <li class="approval-checklist-item">
                     <div class="approval-wizard-check"><asp:CheckBox ID="DpdcApprovalCheck" runat="server" Text="DPDC Approval" /></div>
                     <asp:TextBox ID="DpdcApprovalReferenceText" runat="server" MaxLength="100" placeholder="Approval reference number" />
                     <asp:TextBox ID="DpdcApprovalDateText" runat="server" TextMode="Date" />
                     <asp:FileUpload ID="DpdcApprovalDocumentUpload" runat="server" />
                     <asp:HyperLink ID="DpdcApprovalDocumentLink" runat="server" Visible="false" Target="_blank" rel="noopener">View current approval document</asp:HyperLink>
-                </section>
-            </div>
+                </li>
+            </ul>
             <details class="tender-form-optional">
                 <summary>Budget and technical sanction details</summary>
                 <div class="field"><label for="BudgetInformationText">Budget information</label><asp:TextBox ID="BudgetInformationText" runat="server" TextMode="MultiLine" Rows="2" MaxLength="2000" /></div>
@@ -210,8 +333,9 @@
                 </div>
             </details>
         </asp:Panel>
+        </div>
 
-        <div class="tender-wizard-panel" data-wizard-step="4" hidden="hidden">
+        <div class="tender-wizard-panel" data-wizard-step="3" hidden="hidden">
             <h2>GIS location details</h2>
             <p class="muted">Draw the site boundary with your cursor. The portal calculates its area and centroid, then captures a map image of the selected location. You can upload a site image to replace the map image.</p>
             <div class="row">
@@ -227,6 +351,17 @@
                 <button type="button" class="button secondary" onclick="finishGisAreaDrawing();" aria-label="Finish the GIS boundary">Finish selection</button>
                 <button type="button" class="button secondary" onclick="clearGisArea();" aria-label="Clear the GIS boundary">Clear boundary</button>
             </div>
+            <section class="gis-linear-boundary" aria-label="Two-point boundary selection">
+                <h3>Select Boundary Using Two Points (A to B)</h3>
+                <p class="help">This line tool is independent of the polygon boundary. Choose A or B, then click the map to set or reselect that point.</p>
+                <div class="gis-map-tools">
+                    <button type="button" class="button secondary" onclick="selectGisLinePoint('A');">Select Starting Point (A)</button>
+                    <button type="button" class="button secondary" onclick="selectGisLinePoint('B');">Select Ending Point (B)</button>
+                    <button type="button" class="button secondary" onclick="clearGisLineBoundary();">Clear A–B selection</button>
+                </div>
+                <p>Starting point A: <span id="GisLineStartSummary">Not selected</span></p>
+                <p>Ending point B: <span id="GisLineEndSummary">Not selected</span></p>
+            </section>
             <div id="TenderLocationMap" class="tender-location-map" role="application" aria-label="Map location picker"></div>
             <p id="TenderMapStatus" class="help" role="status" aria-live="polite">Select Draw boundary, click at least three points around the site, then choose Finish selection.</p>
             <p id="TenderGisAreaSummary" class="gis-area-summary" role="status" aria-live="polite" hidden="hidden"></p>
@@ -251,14 +386,24 @@
             </div>
         </div>
 
-        <div class="tender-wizard-panel" data-wizard-step="5" hidden="hidden">
+        <div class="tender-wizard-panel" data-wizard-step="4" hidden="hidden">
             <h2>Review and submit</h2>
             <p class="muted">Check the saved values before you continue. Use Edit to return to a section.</p>
             <div id="TenderReviewSummary" class="tender-review-summary"></div>
+            <div class="tender-review-schedule" hidden="hidden" aria-hidden="true">
+                <span id="ReviewPublicationDate"><asp:Literal ID="ReviewPublicationDateText" runat="server" /></span>
+                <span id="ReviewSubmissionStartDate"><asp:Literal ID="ReviewSubmissionStartDateText" runat="server" /></span>
+                <span id="ReviewSubmissionClosingDate"><asp:Literal ID="ReviewSubmissionClosingDateText" runat="server" /></span>
+                <span id="ReviewTechnicalOpeningDate"><asp:Literal ID="ReviewTechnicalOpeningDateText" runat="server" /></span>
+                <span id="ReviewFinancialOpeningDate"><asp:Literal ID="ReviewFinancialOpeningDateText" runat="server" /></span>
+                <span id="ReviewPreBidMeetingDate"><asp:Literal ID="ReviewPreBidMeetingDateText" runat="server" /></span>
+                <span id="ReviewPublicationWindow"><asp:Literal ID="ReviewPublicationWindowText" runat="server" /></span>
+            </div>
+            <p class="help">Important dates are managed by Tender Cell.</p>
             <progress id="RequirementDocumentUploadProgress" max="100" hidden="hidden"></progress>
             <p id="RequirementDocumentUploadStatus" class="upload-status" role="status" aria-live="polite" hidden="hidden"></p>
             <div class="tender-wizard-actions">
-                <button type="button" class="button secondary" onclick="showTenderWizardStep(1);">
+                <button type="button" class="button secondary" onclick="showTenderWizardStep(1, true);">
                     Edit details
                 </button>
                 <asp:Button ID="CreateButton" runat="server" Text="Save as Draft" CssClass="button"
@@ -268,6 +413,8 @@
             </div>
         </div>
         <nav class="tender-wizard-controls" aria-label="Tender form navigation">
+            <button type="button" id="TenderWizardReturnToReview" class="button secondary" hidden="hidden"
+                onclick="returnToTenderReview();">Return to Review &amp; Submit</button>
             <button type="button" id="TenderWizardPrevious" class="button secondary" onclick="moveTenderWizard(-1);" disabled="disabled">
                 Previous
             </button>
@@ -285,11 +432,17 @@
             var stepField = wizard.querySelector("input[id$='WizardCurrentStep']");
             var completedField = wizard.querySelector("input[id$='WizardCompletedStepsMask']");
             var jeAdministratorField = wizard.querySelector("input[id$='JeAdministratorFlag']");
+            var verificationOnlyField = wizard.querySelector("input[id$='DocumentVerificationOnlyFlag']");
             var jeOnly = jeAdministratorField && jeAdministratorField.value === "true";
+            var verificationOnly = verificationOnlyField &&
+                verificationOnlyField.value === "true";
             var panels = Array.prototype.slice.call(wizard.querySelectorAll("[data-wizard-step]"))
                 .filter(function (panel) { return panel.getAttribute("data-je-only") !== "true" || jeOnly; });
             var steps = panels.map(function (panel) { return panel.getAttribute("data-wizard-step"); });
+            if (verificationOnly)
+                steps = steps.filter(function (step) { return step === "2"; });
             var tenderMap = null;
+            var returningToReview = false;
             var current = stepField ? stepField.value : "1";
             if (steps.indexOf(current) < 0) current = steps[0] || "1";
 
@@ -311,6 +464,141 @@
                 return (mask & (1 << (parseInt(step, 10) - 1))) !== 0;
             }
 
+            function updateCharacterCounts() {
+                var title = wizard.querySelector("[id$='TitleText']");
+                var description = wizard.querySelector("[id$='DescriptionText']");
+                var titleCount = document.getElementById("TitleCharacterCount");
+                var descriptionCount = document.getElementById("DescriptionCharacterCount");
+                if (title && titleCount) titleCount.textContent = title.value.length + "/100";
+                if (description && descriptionCount) descriptionCount.textContent = description.value.length + "/4000";
+            }
+
+            var requirementUpload = wizard.querySelector("[id$='RequirementDocumentsUpload']");
+            var requirementCategoriesField = wizard.querySelector("[id$='RequirementDocumentCategories']");
+            var requirementSelectionList = document.getElementById("RequirementDocumentSelectionList");
+            var selectedRequirementFiles = [];
+
+            function requirementDocumentCategories() {
+                var categories = [];
+                var grid = wizard.querySelector("[id$='RequirementDocumentsGrid']");
+                if (grid) {
+                    Array.prototype.forEach.call(grid.querySelectorAll("tr"), function (row) {
+                        var cells = row.querySelectorAll("td");
+                        if (cells.length > 1) categories.push(cells[1].textContent.trim());
+                    });
+                }
+                selectedRequirementFiles.forEach(function (item) {
+                    if (item.category) categories.push(item.category);
+                });
+                return categories;
+            }
+
+            function requirementDocumentsAreComplete() {
+                var required = ["Scope of Work", "Technical Requirements", "Financial Requirements"];
+                var categories = requirementDocumentCategories();
+                return required.every(function (category) {
+                    return categories.indexOf(category) >= 0;
+                }) && selectedRequirementFiles.every(function (item) { return !!item.category; });
+            }
+
+            function renderRequirementUploads() {
+                if (!requirementSelectionList) return;
+                requirementSelectionList.textContent = "";
+                if (!selectedRequirementFiles.length) return;
+
+                var table = document.createElement("table");
+                table.className = "requirement-document-selection-grid";
+                table.innerHTML = "<thead><tr><th scope='col'>Sr. No.</th><th scope='col'>Selected file</th>" +
+                    "<th scope='col'>Category</th><th scope='col'>Status</th><th scope='col'>Actions</th></tr></thead>";
+                var body = document.createElement("tbody");
+                selectedRequirementFiles.forEach(function (item, index) {
+                    var row = document.createElement("tr");
+                    var name = document.createElement("span");
+                    var serial = document.createElement("td");
+                    serial.className = "grid-serial-cell";
+                    serial.textContent = String(index + 1);
+                    row.appendChild(serial);
+                    var fileCell = document.createElement("td");
+                    name.textContent = item.file.name;
+                    name.className = "requirement-document-selection-name";
+                    fileCell.appendChild(name);
+                    row.appendChild(fileCell);
+                    var category = document.createElement("select");
+                    category.setAttribute("aria-label", "Category for " + item.file.name);
+                    category.className = "requirement-document-category";
+                    [["", "Select document category"], ["Scope of Work", "Scope of Work"],
+                     ["Technical Requirements", "Technical Requirements"],
+                     ["Financial Requirements", "Financial Requirements"]].forEach(function (optionData) {
+                        var option = document.createElement("option");
+                        option.value = optionData[0];
+                        option.textContent = optionData[1];
+                        category.appendChild(option);
+                    });
+                    category.value = item.category;
+                    category.addEventListener("change", function () {
+                        selectedRequirementFiles[index].category = category.value;
+                        if (requirementCategoriesField)
+                            requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
+                                return entry.category;
+                            }));
+                        render();
+                    });
+                    var categoryCell = document.createElement("td");
+                    categoryCell.appendChild(category);
+                    row.appendChild(categoryCell);
+                    var status = document.createElement("span");
+                    status.className = "upload-status is-ready";
+                    status.textContent = "Ready to upload";
+                    var statusCell = document.createElement("td");
+                    statusCell.appendChild(status);
+                    row.appendChild(statusCell);
+
+                    var actionsCell = document.createElement("td");
+                    actionsCell.className = "document-actions-cell";
+                    var actions = document.createElement("span");
+                    actions.className = "document-icon-actions";
+                    var remove = document.createElement("button");
+                    remove.type = "button";
+                    remove.className = "icon-action danger";
+                    remove.title = "Remove selected file";
+                    remove.setAttribute("aria-label", "Remove " + item.file.name + " from upload");
+                    remove.innerHTML = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5' /></svg>" +
+                            "<span class='sr-only'>Remove</span>";
+                    remove.addEventListener("click", function () {
+                            var updatedFiles = new DataTransfer();
+                            selectedRequirementFiles.forEach(function (entry, fileIndex) {
+                                if (fileIndex !== index) updatedFiles.items.add(entry.file);
+                            });
+                            requirementUpload.files = updatedFiles.files;
+                            selectedRequirementFiles.splice(index, 1);
+                            renderRequirementUploads();
+                            render();
+                    });
+                    actions.appendChild(remove);
+                    actionsCell.appendChild(actions);
+                    row.appendChild(actionsCell);
+                    body.appendChild(row);
+                });
+                table.appendChild(body);
+                var heading = document.createElement("h3");
+                heading.className = "requirement-document-list-heading";
+                heading.textContent = "Files selected for upload";
+                requirementSelectionList.appendChild(heading);
+                requirementSelectionList.appendChild(table);
+                if (requirementCategoriesField)
+                    requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
+                        return entry.category;
+                    }));
+            }
+
+            if (requirementUpload) requirementUpload.addEventListener("change", function () {
+                selectedRequirementFiles = Array.prototype.map.call(requirementUpload.files || [], function (file) {
+                    return { file: file, category: "" };
+                });
+                renderRequirementUploads();
+                render();
+            });
+
             function stepIsComplete(step) {
                 var panel = getPanel(step);
                 if (!panel) return false;
@@ -321,15 +609,22 @@
                     var department = panel.querySelector("[id$='DepartmentSelect']");
                     var year = panel.querySelector("[id$='FinancialYearSelect']");
                     var amount = panel.querySelector("[id$='AmountText']");
-                    return title && title.value.trim().length >= 5 && method && method.value &&
+                    return title && title.value.trim().length >= 5 && title.value.trim().length <= 100 &&
+                        method && method.value &&
                         category && category.value && year && year.value && amount &&
                         amount.value !== "" && Number(amount.value) > 0 &&
-                        (!department || !department.offsetParent || department.value);
+                        (!department || !department.offsetParent || department.value) &&
+                        requirementDocumentsAreComplete();
                 }
-                if (step === "2") {
-                    return !getScheduleValidationMessage();
-                }
-                if (step === "4") {
+                if (step === "2") return true;
+                if (step === "3") {
+                    if (lineBoundaryField && lineBoundaryField.value) {
+                        try {
+                            if (JSON.parse(lineBoundaryField.value).type !== "LineString") return false;
+                        } catch (error) {
+                            return false;
+                        }
+                    }
                     var latitude = panel.querySelector("[id$='LatitudeText']");
                     var longitude = panel.querySelector("[id$='LongitudeText']");
                     if (!latitude || !longitude) return true;
@@ -350,30 +645,6 @@
                 status.hidden = !message;
             }
 
-            function getScheduleValidationMessage() {
-                var publication = wizard.querySelector("[id$='PublicationDateText']").value;
-                var submissionStart = wizard.querySelector("[id$='StartText']").value;
-                var submissionClosing = wizard.querySelector("[id$='DeadlineText']").value;
-                var technicalOpening = wizard.querySelector("[id$='TechnicalBidOpeningText']").value;
-                var financialOpening = wizard.querySelector("[id$='FinancialBidOpeningText']").value;
-                var preBid = wizard.querySelector("[id$='PreBidMeetingText']").value;
-                if (!!submissionStart !== !!submissionClosing)
-                    return "Enter both the submission start date and submission closing date.";
-                if (publication && submissionStart && publication >= submissionStart)
-                    return "Set the publication date before the submission start date.";
-                if (submissionStart && submissionClosing && submissionClosing <= submissionStart)
-                    return "Set the submission closing date after the submission start date.";
-                if (technicalOpening && (!submissionClosing || technicalOpening <= submissionClosing))
-                    return "Set the technical bid opening date after the submission closing date.";
-                if (financialOpening && (!technicalOpening || financialOpening <= technicalOpening))
-                    return "Set the financial bid opening date after the technical bid opening date.";
-                if (preBid && submissionClosing && preBid >= submissionClosing)
-                    return "Set the pre-bid meeting date before the submission closing date.";
-                if (preBid && publication && preBid < publication)
-                    return "Set the pre-bid meeting date on or after the publication date.";
-                return "";
-            }
-
             function navigateToStep(step) {
                 var targetIndex = steps.indexOf(String(step));
                 var currentIndex = steps.indexOf(current);
@@ -384,11 +655,9 @@
                             var blockedPanel = getPanel(steps[i]);
                             var message = steps[i] === "1"
                                 ? "Complete the required basic tender information before continuing."
-                                : (steps[i] === "2"
-                                    ? getScheduleValidationMessage()
-                                    : (steps[i] === "4"
-                                        ? "Enter both valid coordinates, or leave both blank, before continuing."
-                                        : "Complete the current step before continuing."));
+                                : (steps[i] === "3"
+                                    ? "Enter both valid coordinates, or leave both blank, before continuing."
+                                    : "Complete the current step before continuing.");
                             setNavigationMessage(message);
                             current = steps[i];
                             render();
@@ -413,7 +682,9 @@
                 if (stepField) stepField.value = current;
                 var allNavItems = Array.prototype.slice.call(wizard.querySelectorAll("[data-wizard-nav]"));
                 allNavItems.forEach(function (item) {
-                    item.hidden = item.getAttribute("data-je-only") === "true" && !jeOnly;
+                    var step = item.getAttribute("data-wizard-nav");
+                    item.hidden = (item.getAttribute("data-je-only") === "true" && !jeOnly) ||
+                        steps.indexOf(step) < 0;
                 });
                 var navItems = allNavItems.filter(function (item) { return !item.hidden; });
                 var activeIndex = Math.max(0, steps.indexOf(current));
@@ -453,16 +724,25 @@
                 var next = document.getElementById("TenderWizardNext");
                 var atFirst = steps.indexOf(current) === 0;
                 var atLast = steps.indexOf(current) === steps.length - 1;
+                var returnToReviewButton = document.getElementById("TenderWizardReturnToReview");
+                if (returnToReviewButton) {
+                    if (current === "4") returningToReview = false;
+                    returnToReviewButton.hidden = !returningToReview || current === "4";
+                }
                 previous.disabled = atFirst;
                 next.hidden = atLast;
                 var review = document.getElementById("TenderReviewSummary");
                 if (review) renderTenderReviewSummary(review);
-                if (current === "4" && tenderMap)
+                if (current === "3" && tenderMap)
                     window.setTimeout(function () { tenderMap.invalidateSize(); }, 0);
             }
 
             window.showTenderWizardStep = function (step) {
+                if (arguments.length > 1 && arguments[1]) returningToReview = true;
                 navigateToStep(step);
+            };
+            window.returnToTenderReview = function () {
+                if (returningToReview) navigateToStep("4");
             };
             window.moveTenderWizard = function (direction) {
                 var index = steps.indexOf(current);
@@ -470,17 +750,14 @@
                 navigateToStep(steps[target]);
             };
             window.prepareTenderWizardSubmit = function (button, submit) {
-                if (!stepIsComplete("1") || !stepIsComplete("2")) {
-                    setNavigationMessage(!stepIsComplete("1")
-                        ? "Complete the required basic tender information before saving."
-                        : getScheduleValidationMessage());
-                    var incompleteStep = !stepIsComplete("1") ? "1" : "2";
-                    current = incompleteStep;
+                if (!stepIsComplete("1")) {
+                    setNavigationMessage("Complete the required basic tender information before saving.");
+                    current = "1";
                     render();
                     wizard.scrollIntoView({ behavior: "smooth", block: "start" });
                     return false;
                 }
-                if (stepField) stepField.value = "5";
+                if (stepField) stepField.value = "4";
                 button.setAttribute("aria-busy", "true");
                 var uploadProgress = document.getElementById("RequirementDocumentUploadProgress");
                 var uploadStatus = document.getElementById("RequirementDocumentUploadStatus");
@@ -495,6 +772,7 @@
                 return true;
             };
             wizard.addEventListener("input", function () {
+                updateCharacterCounts();
                 setMask(current, stepIsComplete(current));
                 render();
             });
@@ -502,6 +780,8 @@
                 setMask(current, stepIsComplete(current));
                 render();
             });
+            updateCharacterCounts();
+            renderRequirementUploads();
             render();
 
             [
@@ -531,6 +811,7 @@
             var latitude = wizard.querySelector("[id$='LatitudeText']");
             var longitude = wizard.querySelector("[id$='LongitudeText']");
             var boundaryField = wizard.querySelector("input[id$='GisBoundaryCoordinates']");
+            var lineBoundaryField = wizard.querySelector("input[id$='GisBoundaryLineCoordinates']");
             var imageInput = wizard.querySelector("[id$='GisImageUpload']");
             var preview = document.getElementById("GisImagePreview");
             var mapStatus = document.getElementById("TenderMapStatus");
@@ -539,6 +820,12 @@
             var draftBoundary = [];
             var boundaryLayer = null;
             var draftLayer = null;
+            var lineLayer = null;
+            var lineStartMarker = null;
+            var lineEndMarker = null;
+            var lineStartPoint = null;
+            var lineEndPoint = null;
+            var lineSelectionTarget = "";
             var drawingArea = false;
             var boundaryAreaSquareMeters = null;
             var generatedGisMapImage = false;
@@ -606,6 +893,59 @@
                     if (fitMap && boundaryLayer)
                         tenderMap.fitBounds(boundaryLayer.getBounds(), { padding: [24, 24], animate: false });
                 }
+
+                function renderGisLine() {
+                    if (lineLayer) tenderMap.removeLayer(lineLayer);
+                    if (lineStartMarker) tenderMap.removeLayer(lineStartMarker);
+                    if (lineEndMarker) tenderMap.removeLayer(lineEndMarker);
+                    lineStartMarker = lineStartPoint
+                        ? L.circleMarker(lineStartPoint, { radius: 7, color: "#1d4ed8", fillColor: "#ffffff", fillOpacity: 1 })
+                            .bindTooltip("A - Starting point").addTo(tenderMap)
+                        : null;
+                    lineEndMarker = lineEndPoint
+                        ? L.circleMarker(lineEndPoint, { radius: 7, color: "#b91c1c", fillColor: "#ffffff", fillOpacity: 1 })
+                            .bindTooltip("B - Ending point").addTo(tenderMap)
+                        : null;
+                    lineLayer = lineStartPoint && lineEndPoint
+                        ? L.polyline([lineStartPoint, lineEndPoint], { color: "#0f766e", weight: 5 }).addTo(tenderMap)
+                        : null;
+                    var startSummary = document.getElementById("GisLineStartSummary");
+                    var endSummary = document.getElementById("GisLineEndSummary");
+                    if (startSummary) startSummary.textContent = lineStartPoint
+                        ? lineStartPoint[0].toFixed(6) + ", " + lineStartPoint[1].toFixed(6) : "Not selected";
+                    if (endSummary) endSummary.textContent = lineEndPoint
+                        ? lineEndPoint[0].toFixed(6) + ", " + lineEndPoint[1].toFixed(6) : "Not selected";
+                    if (lineBoundaryField) {
+                        if (!lineStartPoint && !lineEndPoint) lineBoundaryField.value = "";
+                        else {
+                            var coordinates = [];
+                            if (lineStartPoint) coordinates.push([Number(lineStartPoint[1].toFixed(6)), Number(lineStartPoint[0].toFixed(6))]);
+                            if (lineEndPoint) coordinates.push([Number(lineEndPoint[1].toFixed(6)), Number(lineEndPoint[0].toFixed(6))]);
+                            lineBoundaryField.value = JSON.stringify({
+                                type: coordinates.length === 2 ? "LineString" : "PendingLineString",
+                                coordinates: coordinates
+                            });
+                        }
+                    }
+                }
+
+                window.selectGisLinePoint = function (pointName) {
+                    if (!tenderMap || drawingArea) {
+                        if (mapStatus) mapStatus.textContent = "Finish or clear the in-progress polygon before selecting a line point.";
+                        return;
+                    }
+                    lineSelectionTarget = pointName === "B" ? "B" : "A";
+                    if (mapStatus) mapStatus.textContent = "Click the map to set or reselect point " + lineSelectionTarget + ".";
+                    render();
+                };
+                window.clearGisLineBoundary = function () {
+                    lineSelectionTarget = "";
+                    lineStartPoint = null;
+                    lineEndPoint = null;
+                    renderGisLine();
+                    if (mapStatus) mapStatus.textContent = "Two-point boundary selection cleared. The polygon boundary is unchanged.";
+                    render();
+                };
 
                 function calculateBoundaryArea(points) {
                     var earthRadius = 6378137;
@@ -851,6 +1191,7 @@
                         if (mapStatus) mapStatus.textContent = "Map selection is unavailable; verify the map connection and retry.";
                         return;
                     }
+                    lineSelectionTarget = "";
                     drawingArea = true;
                     draftBoundary = [];
                     if (draftLayer) tenderMap.removeLayer(draftLayer);
@@ -915,9 +1256,21 @@
                 };
 
                 tenderMap.on("click", function (event) {
-                    if (!drawingArea) return;
-                    draftBoundary.push([event.latlng.lat, event.latlng.lng]);
-                    renderDraftBoundary();
+                    if (drawingArea) {
+                        draftBoundary.push([event.latlng.lat, event.latlng.lng]);
+                        renderDraftBoundary();
+                        return;
+                    }
+                    if (lineSelectionTarget) {
+                        if (lineSelectionTarget === "A") lineStartPoint = [event.latlng.lat, event.latlng.lng];
+                        else lineEndPoint = [event.latlng.lat, event.latlng.lng];
+                        var selectedTarget = lineSelectionTarget;
+                        lineSelectionTarget = "";
+                        renderGisLine();
+                        if (mapStatus) mapStatus.textContent = "Point " + selectedTarget +
+                            " selected. Choose the other endpoint or reselect either point.";
+                        render();
+                    }
                 });
                 if (boundaryField && boundaryField.value) {
                     try {
@@ -951,6 +1304,24 @@
                         if (mapStatus) mapStatus.textContent = "The saved boundary could not be displayed; redraw it to replace.";
                     }
                 }
+                if (lineBoundaryField && lineBoundaryField.value) {
+                    try {
+                        var savedLine = JSON.parse(lineBoundaryField.value);
+                        if (savedLine && savedLine.type === "LineString" &&
+                            Array.isArray(savedLine.coordinates) && savedLine.coordinates.length === 2) {
+                            lineStartPoint = [Number(savedLine.coordinates[0][1]), Number(savedLine.coordinates[0][0])];
+                            lineEndPoint = [Number(savedLine.coordinates[1][1]), Number(savedLine.coordinates[1][0])];
+                            if (lineStartPoint.every(isFinite) && lineEndPoint.every(isFinite)) {
+                                renderGisLine();
+                                if (!hasLocation)
+                                    tenderMap.fitBounds(L.latLngBounds([lineStartPoint, lineEndPoint]),
+                                        { padding: [24, 24], animate: false });
+                            }
+                        }
+                    } catch (error) {
+                        if (mapStatus) mapStatus.textContent = "The saved two-point boundary could not be displayed.";
+                    }
+                }
                 [latitude, longitude].forEach(function (input) {
                     input.addEventListener("change", function () {
                         if (selectedBoundary.length) return;
@@ -969,69 +1340,56 @@
 
         function renderTenderReviewSummary(container) {
             var groups = [
-                {
-                    title: "Basic tender information", step: "1",
-                    fields: [
-                        ["Tender title", "TitleText"], ["Project description", "DescriptionText"],
-                        ["Department", "DepartmentSelect"], ["Budgeting Financial Year", "FinancialYearSelect"],
-                        ["Tender method", "TenderTypeSelect"], ["Tender category", "TenderCategorySelect"],
-                        ["Estimated value (₹)", "AmountText"],
-                        ["Additional conditions", "AdditionalConditionsText"],
-                        ["Terms and conditions", "TermsAndConditionsText"]
-                    ],
-                    documents: [
-                        ["Scope of Work", "ScopeOfWorkDocumentUpload", "ScopeOfWorkCurrentFileName", "ScopeOfWorkDocumentRemoveFlag"],
-                        ["Technical Requirements", "TechnicalRequirementsDocumentUpload", "TechnicalRequirementsCurrentFileName", "TechnicalRequirementsDocumentRemoveFlag"],
-                        ["Financial Requirements", "FinancialRequirementsDocumentUpload", "FinancialRequirementsCurrentFileName", "FinancialRequirementsDocumentRemoveFlag"]
-                    ]
-                },
-                {
-                    title: "Important dates and times", step: "2",
-                    fields: [
-                        ["Publication date", "PublicationDateText"], ["Submission start", "StartText"],
-                        ["Submission closing", "DeadlineText"], ["Technical bid opening", "TechnicalBidOpeningText"],
-                        ["Financial bid opening", "FinancialBidOpeningText"], ["Pre-bid meeting", "PreBidMeetingText"],
-                        ["Pre-bid location", "PreBidLocationText"], ["Pre-bid details", "PreBidDetailsText"]
-                    ]
-                },
-                {
-                    title: "Administrative approvals", step: "3",
-                    fields: [
-                        ["Administrative Approval", "AdministrativeApprovalCheck"],
-                        ["Administrative approval reference", "AdministrativeApprovalReferenceText"],
-                        ["Administrative approval date", "AdministrativeApprovalDateText"],
-                        ["Technical Sanction (TS) Approval", "TechnicalSanctionApprovalCheck"],
-                        ["Technical sanction approval reference", "TechnicalSanctionApprovalReferenceText"],
-                        ["Technical sanction approval date", "TechnicalSanctionApprovalDateText"],
-                        ["General Body (GB) Approval", "GeneralBodyApprovalCheck"],
-                        ["General Body approval reference", "GeneralBodyApprovalReferenceText"],
-                        ["General Body approval date", "GeneralBodyApprovalDateText"],
-                        ["DPDC Approval", "DpdcApprovalCheck"],
-                        ["DPDC approval reference", "DpdcApprovalReferenceText"],
-                        ["DPDC approval date", "DpdcApprovalDateText"],
-                        ["Budget information", "BudgetInformationText"],
-                        ["Technical sanction number", "TechnicalSanctionNumberText"],
-                        ["Technical sanction authority", "TechnicalSanctionAuthorityText"],
-                        ["Technical sanction date", "TechnicalSanctionDateText"]
-                    ],
-                    files: [
-                        ["Administrative approval document", "AdministrativeApprovalDocumentUpload", "AdministrativeApprovalDocumentLink"],
-                        ["Technical sanction approval document", "TechnicalSanctionApprovalDocumentUpload", "TechnicalSanctionApprovalDocumentLink"],
-                        ["General Body approval document", "GeneralBodyApprovalDocumentUpload", "GeneralBodyApprovalDocumentLink"],
-                        ["DPDC approval document", "DpdcApprovalDocumentUpload", "DpdcApprovalDocumentLink"]
-                    ]
-                },
-                {
-                    title: "GIS location", step: "4",
-                    fields: [
-                        ["Site address", "LocationNameText"], ["Latitude", "LatitudeText"],
-                        ["Longitude", "LongitudeText"]
-                    ],
-                    files: [["GIS image", "GisImageUpload", "CurrentGisImageLink"]]
-                }
+                { number: 1, title: "Tender Details", step: "1", fields: [
+                    ["Project title", "TitleText"], ["Description", "DescriptionText"],
+                    ["Department", "DepartmentSelect"], ["Tender type", "TenderTypeSelect"],
+                    ["Tender category", "TenderCategorySelect"],
+                    ["Planned publication date", "ReviewPublicationDate"],
+                    ["Submission start date", "ReviewSubmissionStartDate"],
+                    ["Submission closing date", "ReviewSubmissionClosingDate"],
+                    ["Technical bid opening date", "ReviewTechnicalOpeningDate"],
+                    ["Financial bid opening date", "ReviewFinancialOpeningDate"],
+                    ["Pre-bid meeting date", "ReviewPreBidMeetingDate"],
+                    ["Publication window", "ReviewPublicationWindow"],
+                    ["Additional conditions", "AdditionalConditionsText"],
+                    ["Terms and conditions", "TermsAndConditionsText"]
+                ] },
+                { number: 2, title: "Technical Details & Approvals", step: "2", fields: [
+                    ["Administrative Approval", "AdministrativeApprovalCheck"],
+                    ["Administrative approval reference", "AdministrativeApprovalReferenceText"],
+                    ["Administrative approval date", "AdministrativeApprovalDateText"],
+                    ["Technical Sanction", "TechnicalSanctionApprovalCheck"],
+                    ["Technical sanction reference", "TechnicalSanctionApprovalReferenceText"],
+                    ["Technical sanction date", "TechnicalSanctionApprovalDateText"],
+                    ["General Body Approval", "GeneralBodyApprovalCheck"],
+                    ["General Body approval reference", "GeneralBodyApprovalReferenceText"],
+                    ["General Body approval date", "GeneralBodyApprovalDateText"],
+                    ["DPDC Approval", "DpdcApprovalCheck"],
+                    ["DPDC approval reference", "DpdcApprovalReferenceText"],
+                    ["DPDC approval date", "DpdcApprovalDateText"],
+                    ["Budget information", "BudgetInformationText"],
+                    ["Technical sanction number", "TechnicalSanctionNumberText"],
+                    ["Technical sanction authority", "TechnicalSanctionAuthorityText"]
+                ], files: [
+                    ["Administrative approval document", "AdministrativeApprovalDocumentUpload", "AdministrativeApprovalDocumentLink"],
+                    ["Technical sanction document", "TechnicalSanctionApprovalDocumentUpload", "TechnicalSanctionApprovalDocumentLink"],
+                    ["General Body approval document", "GeneralBodyApprovalDocumentUpload", "GeneralBodyApprovalDocumentLink"],
+                    ["DPDC approval document", "DpdcApprovalDocumentUpload", "DpdcApprovalDocumentLink"]
+                ] },
+                { number: 3, title: "Financial Details", step: "1", fields: [
+                    ["Budgeting Financial Year", "FinancialYearSelect"],
+                    ["Estimated tender value", "AmountText"]
+                ] },
+                { number: 4, title: "Tender Documents", step: "1", documents: true },
+                { number: 5, title: "GIS / Project Location", step: "3", fields: [
+                    ["Project location", "LocationNameText"], ["Latitude", "LatitudeText"],
+                    ["Longitude", "LongitudeText"]
+                ], files: [["GIS / site image", "GisImageUpload", "CurrentGisImageLink"]] }
             ];
             function fieldRow(item) {
                 var input = document.querySelector("[id$='" + item[1] + "']");
+                if (!input && item[1] === "DepartmentSelect")
+                    input = document.getElementById("DepartmentReadOnlyName");
                 if (!input) return "";
                 var value = input.tagName === "SELECT"
                     ? (input.selectedIndex >= 0 ? input.options[input.selectedIndex].text : "")
@@ -1039,17 +1397,6 @@
                         (typeof input.value === "undefined" ? input.textContent : input.value));
                 return "<div class='tender-review-row'><dt>" + escapeTenderReviewText(item[0]) +
                     "</dt><dd>" + escapeTenderReviewText(value || "Not provided") + "</dd></div>";
-            }
-            function requirementDocumentRow(entry) {
-                var input = document.querySelector("[id$='" + entry[1] + "']");
-                var existing = document.querySelector("[id$='" + entry[2] + "']");
-                var removeFlag = document.querySelector("input[id$='" + entry[3] + "']");
-                var fileName = input && input.files && input.files.length
-                    ? input.files[0].name
-                    : (removeFlag && removeFlag.value === "true" ? "Will be removed" :
-                        (existing && existing.textContent ? existing.textContent : "Not uploaded"));
-                return "<div class='tender-review-row'><dt>" + escapeTenderReviewText(entry[0]) +
-                    "</dt><dd>" + escapeTenderReviewText(fileName) + "</dd></div>";
             }
             function fileRow(entry) {
                 var input = document.querySelector("[id$='" + entry[1] + "']");
@@ -1060,27 +1407,79 @@
                 return "<div class='tender-review-row'><dt>" + escapeTenderReviewText(entry[0]) +
                     "</dt><dd>" + escapeTenderReviewText(fileName || "Not uploaded") + "</dd></div>";
             }
-            var department = document.querySelector("[id$='DepartmentSelect']");
-            var departmentLabel = document.getElementById("DepartmentReadOnlyName");
-            if (!department && departmentLabel)
-                groups[0].fields.push(["Department", "DepartmentReadOnlyName"]);
+            function documentRows() {
+                var rows = [];
+                var grid = wizard.querySelector("[id$='RequirementDocumentsGrid']");
+                if (grid) Array.prototype.forEach.call(grid.querySelectorAll("tr"), function (row) {
+                    var cells = row.querySelectorAll("td");
+                    if (cells.length >= 4)
+                        rows.push("<div class='tender-review-row'><dt>" +
+                            escapeTenderReviewText(cells[1].textContent.trim()) + "</dt><dd>" +
+                            escapeTenderReviewText(cells[0].textContent.trim() + " · " +
+                                cells[2].textContent.trim() + " · " + cells[3].textContent.trim()) +
+                            "</dd></div>");
+                });
+                selectedRequirementFiles.forEach(function (item) {
+                    rows.push("<div class='tender-review-row'><dt>" +
+                        escapeTenderReviewText(item.category || "Uncategorized") + "</dt><dd>" +
+                        escapeTenderReviewText(item.file.name + " · Ready to upload") + "</dd></div>");
+                });
+                return rows.length ? rows.join("") :
+                    "<div class='tender-review-row'><dt>Documents</dt><dd>Not uploaded</dd></div>";
+            }
+            function groupComplete(group) {
+                if (group.number === 1)
+                    return wizard.querySelector("[id$='TitleText']").value.trim().length >= 5 &&
+                        !!wizard.querySelector("[id$='TenderTypeSelect']").value &&
+                        !!wizard.querySelector("[id$='TenderCategorySelect']").value;
+                if (group.number === 2) {
+                    var names = ["AdministrativeApprovalCheck", "TechnicalSanctionApprovalCheck",
+                        "GeneralBodyApprovalCheck", "DpdcApprovalCheck"];
+                    return names.every(function (name) {
+                        var input = wizard.querySelector("[id$='" + name + "']");
+                        return input && input.checked;
+                    });
+                }
+                if (group.number === 3)
+                    return !!wizard.querySelector("[id$='FinancialYearSelect']").value &&
+                        Number(wizard.querySelector("[id$='AmountText']").value) > 0;
+                if (group.number === 4) return requirementDocumentsAreComplete();
+                var latitude = wizard.querySelector("[id$='LatitudeText']");
+                var longitude = wizard.querySelector("[id$='LongitudeText']");
+                return !!wizard.querySelector("[id$='LocationNameText']").value.trim() ||
+                    !!(boundaryField && boundaryField.value) ||
+                    !!(lineBoundaryField && lineBoundaryField.value) ||
+                    !!(latitude && latitude.value && longitude && longitude.value);
+            }
             var groupMarkup = groups.map(function (group) {
                 var rows = group.fields.map(fieldRow);
-                (group.documents || []).forEach(function (entry) { rows.push(requirementDocumentRow(entry)); });
                 (group.files || []).forEach(function (entry) { rows.push(fileRow(entry)); });
-                if (group.title === "GIS location") {
+                if (group.documents) rows.push(documentRows());
+                if (group.number === 5) {
                     var selectedArea = document.getElementById("TenderGisAreaSummary");
                     if (selectedArea && !selectedArea.hidden)
                         rows.push("<div class='tender-review-row'><dt>Selected area</dt><dd>" +
                             escapeTenderReviewText(selectedArea.textContent) + "</dd></div>");
+                    var lineStart = document.getElementById("GisLineStartSummary");
+                    var lineEnd = document.getElementById("GisLineEndSummary");
+                    if (lineStart && lineEnd) {
+                        rows.push("<div class='tender-review-row'><dt>Starting Point A</dt><dd>" +
+                            escapeTenderReviewText(lineStart.textContent) + "</dd></div>");
+                        rows.push("<div class='tender-review-row'><dt>Ending Point B</dt><dd>" +
+                            escapeTenderReviewText(lineEnd.textContent) + "</dd></div>");
+                    }
                 }
                 rows = rows.filter(Boolean);
                 if (!rows.length) return "";
-                return "<section class='tender-review-card'><header><h3>" +
-                    escapeTenderReviewText(group.title) + "</h3><button type='button' class='button secondary' " +
-                    "onclick='showTenderWizardStep(" + escapeTenderReviewText(group.step) +
-                    ")' aria-label='Edit " + escapeTenderReviewText(group.title) + "'>Edit section</button></header>" +
-                    "<dl class='tender-review-fields'>" + rows.join("") + "</dl></section>";
+                var complete = groupComplete(group);
+                return "<details class='tender-review-section'" + (group.number === 1 ? " open" : "") +
+                    "><summary><span>Section " + group.number + " — " +
+                    escapeTenderReviewText(group.title) + "</span><span class='tender-review-status " +
+                    (complete ? "is-complete" : "is-incomplete") + "'>" +
+                    (complete ? "Complete" : "Incomplete") + "</span></summary><button type='button' class='button secondary' " +
+                    "onclick='showTenderWizardStep(" + escapeTenderReviewText(group.step) + ", true" +
+                    ")' aria-label='Edit " + escapeTenderReviewText(group.title) + "'>Edit section</button>" +
+                    "<dl class='tender-review-fields'>" + rows.join("") + "</dl></details>";
             }).join("");
             var method = document.querySelector("[id$='TenderTypeSelect']");
             var offlineNote = method && method.value === "Offline"

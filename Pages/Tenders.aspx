@@ -3,6 +3,7 @@
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <div class="page-heading">
         <div><h1>Tenders</h1><div class="muted">Search, filter, sort, and page through tender records.</div></div>
+        <a href="Default.aspx" class="button secondary">Back to dashboard</a>
         <asp:HyperLink ID="NewTenderLink" runat="server" NavigateUrl="~/Pages/TenderForm.aspx" CssClass="button">New Tender</asp:HyperLink>
     </div>
     <asp:Literal ID="Message" runat="server" />

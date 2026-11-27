@@ -72,6 +72,7 @@
     <Compile Include="Helpers\TenderFinalizedWorkflowService.cs" />
     <Compile Include="Helpers\TenderDocumentGenerator.cs" />
     <Compile Include="Helpers\TenderLifecycleFiles.cs" />
+    <Compile Include="Helpers\TenderDateRules.cs" />
     <Compile Include="Helpers\WorkflowRules.cs" />
     <Compile Include="Pages\Site.Master.cs"><DependentUpon>Site.Master</DependentUpon></Compile>
     <Compile Include="Pages\Home.aspx.cs"><DependentUpon>Home.aspx</DependentUpon></Compile>
@@ -89,6 +90,7 @@
     <Compile Include="Pages\Default.aspx.cs"><DependentUpon>Default.aspx</DependentUpon></Compile>
     <Compile Include="Pages\Tenders.aspx.cs"><DependentUpon>Tenders.aspx</DependentUpon></Compile>
     <Compile Include="Pages\TenderForm.aspx.cs"><DependentUpon>TenderForm.aspx</DependentUpon></Compile>
+    <Compile Include="Pages\TenderCellDates.aspx.cs"><DependentUpon>TenderCellDates.aspx</DependentUpon></Compile>
     <Compile Include="Pages\TenderDetails.aspx.cs"><DependentUpon>TenderDetails.aspx</DependentUpon></Compile>
     <Compile Include="Pages\Approvals.aspx.cs"><DependentUpon>Approvals.aspx</DependentUpon></Compile>
     <Compile Include="Pages\Bids.aspx.cs"><DependentUpon>Bids.aspx</DependentUpon></Compile>
@@ -123,6 +125,7 @@
     <Content Include="Pages\Default.aspx" />
     <Content Include="Pages\Tenders.aspx" />
     <Content Include="Pages\TenderForm.aspx" />
+    <Content Include="Pages\TenderCellDates.aspx" />
     <Content Include="Pages\TenderDetails.aspx" />
     <Content Include="Pages\Approvals.aspx" />
     <Content Include="Pages\Bids.aspx" />
@@ -148,6 +151,10 @@
     <Content Include="Migrations\20261125_TenderDocumentManagement.sql" />
     <Content Include="Migrations\20261126_TenderRequirementDocuments.sql" />
     <Content Include="Migrations\20261127_TenderWizardFiveSteps.sql" />
+    <Content Include="Migrations\20261128_TenderGisLinearBoundary.sql" />
+    <Content Include="Migrations\20261129_TenderImportantDateHistory.sql" />
+    <Content Include="Migrations\20261130_TenderDocumentVerification.sql" />
+    <Content Include="Migrations\20261201_TenderInitialDocumentVerification.sql" />
     <Content Include="README.md" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />

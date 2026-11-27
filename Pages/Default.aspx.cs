@@ -14,11 +14,12 @@ namespace DepartmentModule.Pages
             FinalQueueCount, FinalVerificationCount, FinalShortfallCount, FinalApprovalCount,
             DashboardTitle, DashboardDescription, FinalQueueLabel, FinalVerificationLabel,
             FinalShortfallLabel, FinalApprovalLabel, FinalQueueHeading;
-        protected HyperLink NewTenderLink, WorkflowQueueLink;
+        protected HyperLink NewTenderLink, WorkflowQueueLink, TenderCellDatesLink;
         protected Panel PendingApprovalsPanel, LifecycleSummaryPanel, LegacyDashboardPanel, FinalWorkflowDashboardPanel;
         protected Panel FinalVerificationPanel, FinalShortfallPanel, FinalApprovalPanel;
         protected System.Web.UI.WebControls.PlaceHolder LifecycleReviewSummaryPanel;
         protected GridView PendingGrid, RecentGrid, CategoryStatsGrid, UpcomingGrid, FinalWorkflowGrid;
+        protected GridView DepartmentTendersGrid;
 
         protected void Page_Load(object sender, EventArgs e)
         {
@@ -55,6 +56,10 @@ namespace DepartmentModule.Pages
                     HasPermission("financial.open.approve") || HasPermission("financial.open.execute") ||
                     HasPermission("financial.approve.final") || HasPermission("workorder.manage") ||
                     HasPermission("agreement.manage");
+                TenderCellDatesLink.Visible =
+                    String.Equals(CurrentRoleCode, "TENDER_CELL", StringComparison.OrdinalIgnoreCase) &&
+                    CurrentDepartmentId.HasValue;
+                BindDepartmentTenderSummary();
                 if (isFinalWorkflowRole)
                 {
                     LoadFinalWorkflowDashboard();
@@ -158,6 +163,7 @@ namespace DepartmentModule.Pages
                                 FinalShortfallCount.Text = Convert.ToString(reader["ShortfallCount"] == DBNull.Value ? 0 : reader["ShortfallCount"]);
                                 FinalApprovalCount.Text = Convert.ToString(reader["ApprovalCount"] == DBNull.Value ? 0 : reader["ApprovalCount"]);
                             }
+
                         }
                     }
                     using (SqlCommand command = new SqlCommand(
@@ -183,6 +189,42 @@ namespace DepartmentModule.Pages
             {
                 Trace.Warn("DepartmentModule", "Finalized workflow dashboard could not be loaded.", ex);
                 Message.Text = "<div class=\"message\">Your workflow dashboard could not be loaded. Please retry or contact support.</div>";
+            }
+        }
+
+        private void BindDepartmentTenderSummary()
+        {
+            bool isRespOfficer = HasAnyRole("DepartmentOfficer");
+            string departmentScope = CurrentDepartmentId.HasValue
+                ? " AND t.DepartmentId=@DepartmentId"
+                : (HasPermission("tenders.manage.all") ? String.Empty : " AND 1=0");
+            string ownerScope = isRespOfficer ? " AND t.CreatedBy=@UserId" : String.Empty;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT d.DepartmentId,d.DepartmentName,COUNT(*) AS TenderCount
+                      FROM dbo.Tender t
+                      INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
+                      WHERE t.IsDeleted=0" + departmentScope + ownerScope + @"
+                      GROUP BY d.DepartmentId,d.DepartmentName
+                      ORDER BY d.DepartmentName;", connection))
+                using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+                {
+                    if (CurrentDepartmentId.HasValue)
+                        ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, CurrentDepartmentId.Value);
+                    if (isRespOfficer)
+                        ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                    DataTable data = new DataTable();
+                    adapter.Fill(data);
+                    DepartmentTendersGrid.DataSource = data;
+                    DepartmentTendersGrid.DataBind();
+                }
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Department tender counts could not be loaded.", ex);
+                Message.Text = "<div class=\"message\">Department tender counts could not be loaded. Please retry or contact support.</div>";
             }
         }
 

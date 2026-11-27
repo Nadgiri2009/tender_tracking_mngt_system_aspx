@@ -103,6 +103,12 @@ namespace DepartmentModule.Pages
 
             string requestedBucket = Request.QueryString["bucket"];
             string requestedStatus = Request.QueryString["status"];
+            int requestedDepartmentId;
+            string requestedDepartment = Request.QueryString["departmentId"];
+            if (Int32.TryParse(requestedDepartment, NumberStyles.None, CultureInfo.InvariantCulture,
+                    out requestedDepartmentId) &&
+                DepartmentFilter.Items.FindByValue(requestedDepartmentId.ToString(CultureInfo.InvariantCulture)) != null)
+                DepartmentFilter.SelectedValue = requestedDepartmentId.ToString(CultureInfo.InvariantCulture);
             if (!String.IsNullOrWhiteSpace(requestedBucket) && StatusFilter.Items.FindByValue(requestedBucket) != null)
                 StatusFilter.SelectedValue = requestedBucket;
             else if (!String.IsNullOrWhiteSpace(requestedStatus) && StatusFilter.Items.FindByValue(requestedStatus) != null)

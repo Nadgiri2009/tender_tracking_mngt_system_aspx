@@ -15,34 +15,87 @@
     </div>
     <asp:Literal ID="ApplicationMessage" runat="server" />
     <asp:Literal ID="Message" runat="server" />
-    <section class="card">
-        <h2>Details</h2>
-        <p><strong>Description</strong><br /><asp:Literal ID="Description" runat="server" /></p>
-        <asp:Panel ID="EligibilityCriteriaPanel" runat="server" Visible="false">
-            <p><strong>Eligibility criteria</strong><br /><asp:Literal ID="EligibilityCriteria" runat="server" /></p>
-        </asp:Panel>
-        <div class="row">
-            <p><strong>Tender Method</strong><br /><asp:Literal ID="TenderType" runat="server" /></p>
-            <p><strong>Tender Category</strong><br /><asp:Literal ID="TenderCategory" runat="server" /></p>
-            <p><strong>Tender Subcategory</strong><br /><asp:Literal ID="TenderSubcategory" runat="server" /></p>
-            <p><strong>Budgeting Financial Year</strong><br /><asp:Literal ID="FinancialYear" runat="server" /></p>
-            <p><strong>Estimated Cost</strong><br />₹<asp:Literal ID="EstimatedAmount" runat="server" /></p>
-            <p><strong>EMD</strong><br /><asp:Literal ID="EMDAmount" runat="server" /></p>
-            <p><strong>Tender document fee</strong><br /><asp:Literal ID="TenderDocumentFee" runat="server" /></p>
-            <p><strong>Processing fee</strong><br /><asp:Literal ID="ProcessingFee" runat="server" /></p>
-            <p><strong>Security deposit</strong><br /><asp:Literal ID="SecurityDepositAmount" runat="server" /></p>
-            <p><strong>Planned publication</strong><br /><asp:Literal ID="PublicationScheduledDate" runat="server" /></p>
-            <p><strong>Publication Date</strong><br /><asp:Literal ID="PublicationDate" runat="server" /></p>
-            <p><strong>Approved publication period (IST)</strong><br /><asp:Literal ID="PublicationPeriod" runat="server" /></p>
-            <p><strong>Approved extensions</strong><br /><asp:Literal ID="ExtensionCount" runat="server" /></p>
-            <p><strong>Submission Start Date</strong><br /><asp:Literal ID="SubmissionStartDate" runat="server" /></p>
-            <p><strong>Legacy submission deadline</strong><br /><asp:Literal ID="SubmissionDeadline" runat="server" /></p>
-            <p><strong>Technical bid opening</strong><br /><asp:Literal ID="TechnicalBidOpeningDate" runat="server" /></p>
-            <p><strong>Financial bid opening</strong><br /><asp:Literal ID="FinancialBidOpeningDate" runat="server" /></p>
-            <p><strong>Created By</strong><br /><asp:Literal ID="CreatedBy" runat="server" /></p>
-            <p><strong>Created Date</strong><br /><asp:Literal ID="CreatedDate" runat="server" /></p>
-            <p><strong>Status</strong><br /><span class="badge"><asp:Literal ID="CurrentStatus" runat="server" /></span></p>
+    <section class="card tender-workflow-tracker" aria-labelledby="workflowTrackerHeading">
+        <div class="workflow-tracker-heading">
+            <div>
+                <span class="role-section-kicker">TENDER APPROVAL &amp; PROCESS TRACKER</span>
+                <h2 id="workflowTrackerHeading">Approval and process tracker</h2>
+            </div>
+            <div class="workflow-current-stage"><asp:Literal ID="TrackerCurrentStage" runat="server" /></div>
         </div>
+        <asp:Panel ID="CurrentDocumentShortfallPanel" runat="server" CssClass="workflow-shortfall" Visible="false">
+            <asp:Literal ID="DocumentShortfallSummary" runat="server" />
+        </asp:Panel>
+        <ol class="workflow-timeline">
+            <asp:Repeater ID="WorkflowTimeline" runat="server">
+                <ItemTemplate>
+                    <li class='workflow-step <%# Eval("StatusClass") %>'>
+                        <span class="workflow-step-number"><%#: Eval("StageNumber") %></span>
+                        <div class="workflow-step-content">
+                            <div class="workflow-step-heading">
+                                <div>
+                                    <h3><%#: Eval("ResponsibleRole") %> — <%#: Eval("StageTitle") %></h3>
+                                    <p class="workflow-assignee">Assigned officer: <%#: Eval("AssignedOfficer") %></p>
+                                </div>
+                                <span class="workflow-status"><%#: Eval("Status") %></span>
+                            </div>
+                            <div class="workflow-step-meta">
+                                <span><strong>Submitted:</strong> <%#: Eval("SubmissionDate") %></span>
+                                <span><strong>Approved:</strong> <%#: Eval("ApprovalDate") %></span>
+                            </div>
+                            <p class="workflow-remarks"><strong>Remarks:</strong> <%#: Eval("Remarks") %></p>
+                            <details class="workflow-history">
+                                <summary>Action history</summary>
+                                <pre><%#: Eval("ActionHistory") %></pre>
+                            </details>
+                        </div>
+                    </li>
+                </ItemTemplate>
+            </asp:Repeater>
+        </ol>
+    </section>
+    <section class="card tender-details-card">
+        <div class="tender-details-heading">
+            <div>
+                <span class="role-section-kicker">TENDER OVERVIEW</span>
+                <h2>Details</h2>
+            </div>
+            <span class="badge"><asp:Literal ID="CurrentStatus" runat="server" /></span>
+        </div>
+        <div class="tender-description">
+            <h3>Description</h3>
+            <p><asp:Literal ID="Description" runat="server" /></p>
+        </div>
+        <asp:Panel ID="EligibilityCriteriaPanel" runat="server" Visible="false">
+            <div class="tender-description">
+                <h3>Eligibility criteria</h3>
+                <p><asp:Literal ID="EligibilityCriteria" runat="server" /></p>
+            </div>
+        </asp:Panel>
+        <dl class="tender-detail-grid">
+            <div><dt>Tender Method</dt><dd><asp:Literal ID="TenderType" runat="server" /></dd></div>
+            <div><dt>Tender Category</dt><dd><asp:Literal ID="TenderCategory" runat="server" /></dd></div>
+            <div><dt>Tender Subcategory</dt><dd><asp:Literal ID="TenderSubcategory" runat="server" /></dd></div>
+            <div><dt>Budgeting Financial Year</dt><dd><asp:Literal ID="FinancialYear" runat="server" /></dd></div>
+            <div><dt>Estimated Cost</dt><dd>₹<asp:Literal ID="EstimatedAmount" runat="server" /></dd></div>
+            <div><dt>EMD</dt><dd><asp:Literal ID="EMDAmount" runat="server" /></dd></div>
+            <div><dt>Tender document fee</dt><dd><asp:Literal ID="TenderDocumentFee" runat="server" /></dd></div>
+            <div><dt>Processing fee</dt><dd><asp:Literal ID="ProcessingFee" runat="server" /></dd></div>
+            <div><dt>Security deposit</dt><dd><asp:Literal ID="SecurityDepositAmount" runat="server" /></dd></div>
+            <div><dt>Planned publication</dt><dd><asp:Literal ID="PublicationScheduledDate" runat="server" /></dd></div>
+            <div><dt>Publication Date</dt><dd><asp:Literal ID="PublicationDate" runat="server" /></dd></div>
+            <div><dt>Approved publication period (IST)</dt><dd><asp:Literal ID="PublicationPeriod" runat="server" /></dd></div>
+            <div><dt>Approved extensions</dt><dd><asp:Literal ID="ExtensionCount" runat="server" /></dd></div>
+            <div><dt>Submission Start Date</dt><dd><asp:Literal ID="SubmissionStartDate" runat="server" /></dd></div>
+            <div><dt>Legacy submission deadline</dt><dd><asp:Literal ID="SubmissionDeadline" runat="server" /></dd></div>
+            <div><dt>Technical bid opening</dt><dd><asp:Literal ID="TechnicalBidOpeningDate" runat="server" /></dd></div>
+            <div><dt>Financial bid opening</dt><dd><asp:Literal ID="FinancialBidOpeningDate" runat="server" /></dd></div>
+            <div><dt>Pre-bid meeting</dt><dd><asp:Literal ID="PreBidMeetingDate" runat="server" /></dd></div>
+            <div><dt>Pre-bid location</dt><dd><asp:Literal ID="PreBidLocation" runat="server" /></dd></div>
+            <div><dt>Pre-bid details</dt><dd><asp:Literal ID="PreBidDetails" runat="server" /></dd></div>
+            <div><dt>Created By</dt><dd><asp:Literal ID="CreatedBy" runat="server" /></dd></div>
+            <div><dt>Created Date</dt><dd><asp:Literal ID="CreatedDate" runat="server" /></dd></div>
+        </dl>
     </section>
     <section class="card">
         <h2>Tender requirements and conditions</h2>
@@ -90,6 +143,14 @@
             <details>
                 <summary>View selected boundary coordinates</summary>
                 <pre class="gis-boundary-coordinates"><asp:Literal ID="GisBoundaryCoordinatesText" runat="server" /></pre>
+            </details>
+        </asp:Panel>
+        <asp:Panel ID="GisBoundaryLinePanel" runat="server" Visible="false">
+            <h3>Two-point boundary (A to B)</h3>
+            <p><strong>Starting point A</strong>: <asp:Literal ID="GisBoundaryStartText" runat="server" /></p>
+            <p><strong>Ending point B</strong>: <asp:Literal ID="GisBoundaryEndText" runat="server" /></p>
+            <details><summary>View saved line geometry</summary>
+                <pre class="gis-boundary-coordinates"><asp:Literal ID="GisBoundaryLineGeometryText" runat="server" /></pre>
             </details>
         </asp:Panel>
     </asp:Panel>

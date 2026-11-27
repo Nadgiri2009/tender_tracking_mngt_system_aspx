@@ -34,10 +34,6 @@
             <span class="home-stat-icon" aria-hidden="true">05</span>
             <span><span class="muted">Registered contractors</span><strong><asp:Literal ID="TotalContractors" runat="server" /></strong></span>
         </div>
-        <div class="stat home-stat-card">
-            <span class="home-stat-icon" aria-hidden="true">06</span>
-            <span><span class="muted">Completed / awarded tenders</span><strong><asp:Literal ID="CompletedAwardedTenders" runat="server" /></strong></span>
-        </div>
     </section>
     <asp:Panel ID="InternalTendersPanel" runat="server" Visible="false" CssClass="card">
         <div class="page-heading">

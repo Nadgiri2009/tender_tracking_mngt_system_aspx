@@ -175,6 +175,151 @@ namespace DepartmentModule.Helpers
             }
         }
 
+        public static void EnsureTenderRequirementDocumentsVerified(SqlConnection connection,
+            SqlTransaction transaction, int tenderId, string reviewStage)
+        {
+            if (reviewStage != "JE" && reviewStage != "TENDER_CELL")
+                throw new InvalidOperationException("The tender document review stage is invalid.");
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT COUNT(1)
+                  FROM dbo.TenderDocuments d
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) h.VerificationStatus
+                      FROM dbo.TenderRequirementVerificationHistory h
+                      WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
+                        AND h.ReviewStage=@ReviewStage
+                      ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
+                  ) latest
+                  WHERE d.TenderId=@TenderId
+                    AND ISNULL(COALESCE(latest.VerificationStatus,
+                        CASE WHEN @ReviewStage=N'JE' THEN d.VerificationStatus END),N'')<>N'Verified';",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                ModuleDb.AddParameter(command, "@ReviewStage", SqlDbType.NVarChar, reviewStage, 20);
+                int incomplete = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+                if (incomplete > 0)
+                    throw new InvalidOperationException(
+                        "Record a Verified decision for every tender document at the " +
+                        (reviewStage == "JE" ? "JE" : "Tender Cell") + " review stage before approval.");
+            }
+
+            using (SqlCommand command = new SqlCommand(
+                "SELECT COUNT(1) FROM dbo.TenderDocuments WHERE TenderId=@TenderId;",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
+                    throw new InvalidOperationException("Upload the required tender documents before verification.");
+            }
+        }
+
+        public static WorkflowTransitionMetadata CreateTenderDocumentShortfall(SqlConnection connection,
+            SqlTransaction transaction, int tenderId, int userId, int departmentId,
+            string remarks, string requiredDocuments)
+        {
+            string note = (remarks ?? String.Empty).Trim();
+            string documents = (requiredDocuments ?? String.Empty).Trim();
+            if (note.Length == 0 || note.Length > 2000 ||
+                documents.Length == 0 || documents.Length > 2000)
+                throw new InvalidOperationException(
+                    "Explain the document shortfall and list the required documents (up to 2,000 characters each).");
+
+            long shortfallId;
+            using (SqlCommand command = new SqlCommand(
+                @"INSERT INTO dbo.TenderDocumentShortfalls
+                    (TenderId,RaisedBy,DeadlineAtUtc,Remarks,RequiredDocuments)
+                  VALUES(@TenderId,@RaisedBy,DATEADD(DAY,3,SYSUTCDATETIME()),@Remarks,@RequiredDocuments);
+                  SELECT CAST(SCOPE_IDENTITY() AS bigint);", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                ModuleDb.AddParameter(command, "@RaisedBy", SqlDbType.Int, userId);
+                ModuleDb.AddParameter(command, "@Remarks", SqlDbType.NVarChar, note, 2000);
+                ModuleDb.AddParameter(command, "@RequiredDocuments", SqlDbType.NVarChar, documents, 2000);
+                shortfallId = Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+            }
+
+            return new WorkflowTransitionMetadata
+            {
+                ActionName = "RaiseTenderDocumentShortfall",
+                SetNextShortfallId = true,
+                NextShortfallId = shortfallId
+            };
+        }
+
+        public static WorkflowTransitionMetadata ResubmitTenderDocuments(SqlConnection connection,
+            SqlTransaction transaction, int tenderId, long shortfallId, int userId)
+        {
+            DateTime raisedAtUtc;
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT RaisedAtUtc
+                  FROM dbo.TenderDocumentShortfalls WITH (UPDLOCK,HOLDLOCK)
+                  WHERE TenderDocumentShortfallId=@ShortfallId AND TenderId=@TenderId
+                    AND ResolutionStatus=N'Open' AND DeadlineAtUtc>=SYSUTCDATETIME();",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, shortfallId);
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                object value = command.ExecuteScalar();
+                if (value == null || value == DBNull.Value)
+                    throw new InvalidOperationException("The document shortfall is no longer open or its 3-day deadline has passed.");
+                raisedAtUtc = Convert.ToDateTime(value, CultureInfo.InvariantCulture);
+            }
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT COUNT(1) FROM dbo.TenderDocuments
+                  WHERE TenderId=@TenderId AND UploadedBy=@UserId AND UploadedDate>=@RaisedAtUtc;",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                ModuleDb.AddParameter(command, "@RaisedAtUtc", SqlDbType.DateTime2, raisedAtUtc);
+                if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
+                    throw new InvalidOperationException("Upload at least one corrected tender document before resubmitting.");
+            }
+
+            using (SqlCommand command = new SqlCommand(
+                @"UPDATE dbo.TenderDocumentShortfalls
+                  SET ResolutionStatus=N'Resubmitted',ResubmittedBy=@UserId,
+                      ResubmittedAtUtc=SYSUTCDATETIME()
+                  WHERE TenderDocumentShortfallId=@ShortfallId AND TenderId=@TenderId
+                    AND ResolutionStatus=N'Open' AND DeadlineAtUtc>=SYSUTCDATETIME();",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, shortfallId);
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                if (command.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("The shortfall changed while the documents were being resubmitted.");
+            }
+
+            return new WorkflowTransitionMetadata
+            {
+                ActionName = "ResubmitTenderDocuments",
+                SetNextShortfallId = true,
+                NextShortfallId = shortfallId
+            };
+        }
+
+        public static void ResolveTenderDocumentShortfall(SqlConnection connection,
+            SqlTransaction transaction, int tenderId, long shortfallId, int userId)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"UPDATE dbo.TenderDocumentShortfalls
+                  SET ResolutionStatus=N'Resolved',ResolvedBy=@UserId,ResolvedAtUtc=SYSUTCDATETIME()
+                  WHERE TenderDocumentShortfallId=@ShortfallId AND TenderId=@TenderId
+                    AND ResolutionStatus=N'Resubmitted';", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, shortfallId);
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                if (command.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("The resubmitted document shortfall could not be resolved.");
+            }
+        }
+
         public static WorkflowTransitionMetadata CreateStructuredShortfall(SqlConnection connection,
             SqlTransaction transaction, int tenderId, int applicationId, int userId, int roleId,
             int departmentId, string remarks, IEnumerable<ShortfallItemInput> requestedItems,
@@ -486,6 +631,26 @@ namespace DepartmentModule.Helpers
                 ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
                 ModuleDb.AddParameter(command, "@RoleCode", SqlDbType.NVarChar, roleCode, 50);
                 ModuleDb.AddParameter(command, "@Message", SqlDbType.NVarChar, message, 1000);
+                command.ExecuteNonQuery();
+            }
+        }
+
+        private static void NotifyWorkflowRole(SqlConnection connection, SqlTransaction transaction,
+            int tenderId, int assignedRoleId, int departmentId, string stageName)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"INSERT INTO dbo.TenderNotifications(UserId,TenderId,NotificationType,Message)
+                  SELECT u.UserId,@TenderId,N'WorkflowAssignment',
+                         N'A tender is awaiting your action: ' + @StageName + N'.'
+                  FROM dbo.Users u
+                  WHERE u.IsActive=1 AND u.AccountType=N'Internal' AND u.RoleId=@RoleId
+                    AND (u.DepartmentId IS NULL OR u.DepartmentId=@DepartmentId);",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, assignedRoleId);
+                ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
+                ModuleDb.AddParameter(command, "@StageName", SqlDbType.NVarChar, stageName, 80);
                 command.ExecuteNonQuery();
             }
         }
@@ -2232,7 +2397,17 @@ namespace DepartmentModule.Helpers
             if (current.StageName == "Final_JE_CompleteTender") return;
 
             string nextStageName = null;
-            if (String.Equals(newStatus, "Tender Cell Verification Pending", StringComparison.Ordinal) &&
+            if (current.StageName == "Final_Cell_InitialTenderDocumentVerification" &&
+                String.Equals(newStatus, "Pending JE Document Correction", StringComparison.Ordinal))
+            {
+                nextStageName = "Final_JE_CorrectTenderDocuments";
+            }
+            else if (current.StageName == "Final_JE_CorrectTenderDocuments" &&
+                String.Equals(newStatus, "Pending Tender Cell Verification", StringComparison.Ordinal))
+            {
+                nextStageName = "Final_Cell_InitialTenderDocumentVerification";
+            }
+            else if (String.Equals(newStatus, "Tender Cell Verification Pending", StringComparison.Ordinal) &&
                 current.StageName == "Final_Cell_ResumeVerification")
             {
                 nextStageName = "Final_Cell_CompleteSecondaryVerification";
@@ -2350,6 +2525,9 @@ namespace DepartmentModule.Helpers
                 ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, current.DepartmentId);
                 command.ExecuteNonQuery();
             }
+
+            NotifyWorkflowRole(connection, transaction, tenderId, assignedRoleId,
+                current.DepartmentId, nextStageName);
         }
 
         private static long? GetCurrentShortfallId(SqlConnection connection,

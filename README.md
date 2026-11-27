@@ -16,6 +16,10 @@ Classic ASP.NET Web Forms (`.aspx` + C# code-behind) on .NET Framework 4.8, ADO.
 | `Migrations/20261125_TenderDocumentManagement.sql` | Adds tender document metadata and a document-type ID relationship |
 | `Migrations/20261126_TenderRequirementDocuments.sql` | Seeds the three tender requirement document types and converts saved wizard progress to six steps |
 | `Migrations/20261127_TenderWizardFiveSteps.sql` | Removes the separate fee step and remaps saved wizard progress to five steps |
+| `Migrations/20261128_TenderGisLinearBoundary.sql` | Adds saved GIS boundary-line geometry |
+| `Migrations/20261129_TenderImportantDateHistory.sql` | Records tender schedule-date changes |
+| `Migrations/20261130_TenderDocumentVerification.sql` | Adds tender-document verification fields |
+| `Migrations/20261201_TenderInitialDocumentVerification.sql` | Adds JE/Tender Cell verification history, document shortfalls, and workflow stages |
 | `Web.config`, `Global.asax`, `DepartmentModule.csproj` | Configuration and project |
 | `Uploads/` | Private document storage; the app-pool identity needs write access |
 
@@ -31,6 +35,7 @@ Classic ASP.NET Web Forms (`.aspx` + C# code-behind) on .NET Framework 4.8, ADO.
    Apply `Migrations/20261125_TenderDocumentManagement.sql` in the same way before deploying document-management code. It preserves legacy document type strings and leaves unresolvable legacy IDs nullable while requiring valid document type IDs for new records.
    Apply `Migrations/20261126_TenderRequirementDocuments.sql` after the document-management migration and before deploying the six-step tender wizard. It activates the Scope of Work, Technical Requirements, and Financial Requirements document types and remaps saved wizard progress; it does not remove legacy tender financial columns.
    Apply `Migrations/20261127_TenderWizardFiveSteps.sql` after the requirement-document migration and before deploying the five-step wizard. It keeps existing saved progress, folds the former fee step into Basic Information, and is safe to rerun.
+   Apply `Migrations/20261128_TenderGisLinearBoundary.sql`, `Migrations/20261129_TenderImportantDateHistory.sql`, and `Migrations/20261130_TenderDocumentVerification.sql` in order before deploying their corresponding GIS, date-history, and verification code. The current installer creates the migration's two history tables. Because it deliberately seeds no roles, run `Migrations/20261201_TenderInitialDocumentVerification.sql` after provisioning the canonical JE and Tender Cell roles (including on a fresh install) so the workflow stages are assigned to those roles. For an existing installation, also apply it after the earlier document migrations. It is additive and idempotent; back up and rehearse every database change before production.
    The tender schedule uses date-only inputs in IST, saved as UTC values in the existing date columns. When entered, dates must follow publication, submission start, submission closing, technical bid opening, then financial bid opening; submission start and closing must be supplied together. A submission closing date remains open through the end of that IST calendar day. Times are not collected from users.
    The tender-creation form no longer collects tender document or processing fees. Existing fee values are preserved when editing a draft, and the database columns remain for existing tender details and revision history.
    New public tender numbers use `TND-YYYY-NNN` with a yearly sequence starting at `001`; the number is displayed across the portal and tender documents. The integer `TenderId` remains the internal database key for existing foreign-key relationships.

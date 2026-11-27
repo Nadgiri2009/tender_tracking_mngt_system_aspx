@@ -6,8 +6,22 @@
             <div class="muted"><asp:Literal ID="DashboardDescription" runat="server" /></div></div>
         <asp:HyperLink ID="NewTenderLink" runat="server" NavigateUrl="~/Pages/TenderForm.aspx" CssClass="button">New Tender</asp:HyperLink>
         <asp:HyperLink ID="WorkflowQueueLink" runat="server" NavigateUrl="~/Pages/TenderWorkflow.aspx" CssClass="button secondary" Visible="false">My workflow queue</asp:HyperLink>
+        <asp:HyperLink ID="TenderCellDatesLink" runat="server" NavigateUrl="~/Pages/TenderCellDates.aspx" CssClass="button secondary" Visible="false">Manage important dates</asp:HyperLink>
     </div>
     <asp:Literal ID="Message" runat="server" />
+    <section class="card">
+        <div class="page-heading"><div><h2>Tenders by department</h2><p class="muted">Counts reflect tender records visible to your account.</p></div></div>
+        <div class="table-wrap">
+            <asp:GridView ID="DepartmentTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                EmptyDataText="No department tender records are available to your account.">
+                <Columns>
+                    <asp:HyperLinkField DataTextField="DepartmentName" DataNavigateUrlFields="DepartmentId"
+                        DataNavigateUrlFormatString="Tenders.aspx?departmentId={0}" HeaderText="Department" />
+                    <asp:BoundField DataField="TenderCount" HeaderText="Tenders" />
+                </Columns>
+            </asp:GridView>
+        </div>
+    </section>
     <asp:Panel ID="FinalWorkflowDashboardPanel" runat="server" Visible="false">
         <section class="cards dashboard-statistics" aria-label="Assigned workflow summary">
             <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=assigned") %>"><span class="muted"><asp:Literal ID="FinalQueueLabel" runat="server" /></span><strong><asp:Literal ID="FinalQueueCount" runat="server" /></strong></a>

@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
+using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 using DepartmentModule.Helpers;
@@ -14,7 +15,8 @@ namespace DepartmentModule.Pages
     {
         protected Literal Message, TenderNumber, TenderTitle, DepartmentName, StageName, CurrentStatus, EstimatedAmount;
         protected Panel QueuePanel, DetailPanel, SubmitDraftPanel, PublishPanel, PrimaryOpeningPanel,
-            PrimaryVerificationPanel, PrimaryForwardPanel, SecondaryVerificationPanel,
+            PrimaryVerificationPanel, PrimaryForwardPanel, InitialTenderCellVerificationPanel,
+            JeDocumentCorrectionPanel, SecondaryVerificationPanel,
             RejectedOpeningReverificationPanel,
             ShortfallCreationPanel, ShortfallApprovalPanel, FinancialOpeningApprovalPanel,
             FinancialBidEntryPanel, AuditorFinancialReviewPanel, FinancialResubmitPanel,
@@ -24,16 +26,17 @@ namespace DepartmentModule.Pages
             SecondaryApplicationsGrid, ShortfallItemsGrid, FinancialEntryGrid, FinancialReviewGrid,
             GeneratedDocumentsGrid, ShortfallClearanceGrid, ShortfallApplicationsGrid;
         protected HyperLink ApplicationRequirementsLink;
-        protected TextBox SubmitRemarksText, PublicationStartText, PublicationCloseText, PublishRemarksText,
+        protected TextBox SubmitRemarksText, PublishRemarksText,
             PrimaryOpenRemarksText, PrimaryCompletionRemarksText, PrimaryForwardRemarksText,
             RequiredBidDocumentsText, SecondaryRemarksText, ShortfallRemarksText, ShortfallDecisionRemarksText,
+            CellDocumentVerificationRemarksText, RequiredTenderDocumentsText,
             FinancialOpeningRemarksText, FinancialEntryRemarksText, FinancialDecisionRemarksText,
             FinancialResubmissionRemarksText, WorkOrderNumberText, WorkOrderIssueDateText,
             WorkDescriptionText, WorkOrderTermsText, WorkOrderSignatoryText, AgreementNumberText,
             AgreementDateText, AgreementTermsText, AgreementSignatoryText;
         protected DropDownList SelectedFinancialBidSelect;
         protected Literal WorkOrderBidderName, WorkOrderBidAmount,
-            AgreementBidderName, AgreementBidAmount;
+            AgreementBidderName, AgreementBidAmount, PublicationScheduleSummary;
         protected Button SubmitDraftButton, PublishButton, OpenTechnicalBidsButton,
             CompletePrimaryVerificationButton, ForwardToTenderCellButton,
             CompleteSecondaryVerificationButton, SendToShortfallCreationButton,
@@ -42,6 +45,10 @@ namespace DepartmentModule.Pages
             ReturnFinancialReviewButton, ResubmitFinancialReviewButton, CreateWorkOrderButton,
             GenerateWorkOrderButton, CreateAgreementButton, GenerateAgreementButton,
             CompleteTenderButton;
+        protected Button ApproveInitialTenderDocumentsButton, RaiseTenderDocumentShortfallButton,
+            ResubmitTenderDocumentsButton;
+        protected HyperLink TenderDocumentVerificationLink, CorrectTenderDocumentsLink;
+        protected Literal TenderDocumentShortfallSummary, TenderDocumentCorrectionShortfallSummary;
         protected Button ReverifiedOpeningToChairmanButton, ReverifiedOpeningToShortfallButton;
 
         private int TenderId { get { return QueryId("id"); } }
@@ -66,6 +73,56 @@ namespace DepartmentModule.Pages
             }
         }
 
+        private void LoadTenderDocumentShortfallSummary(SqlConnection connection)
+        {
+            if (!CurrentShortfallId.HasValue)
+            {
+                TenderDocumentShortfallSummary.Text = String.Empty;
+                TenderDocumentCorrectionShortfallSummary.Text = String.Empty;
+                return;
+            }
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT sf.RaisedAtUtc,sf.DeadlineAtUtc,sf.Remarks,sf.RequiredDocuments,
+                             sf.ResolutionStatus,sf.ResubmittedAtUtc,raiser.FullName AS RaisedBy
+                      FROM dbo.TenderDocumentShortfalls sf
+                      INNER JOIN dbo.Users raiser ON raiser.UserId=sf.RaisedBy
+                      WHERE sf.TenderDocumentShortfallId=@ShortfallId AND sf.TenderId=@TenderId;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt, CurrentShortfallId.Value);
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                    {
+                        TenderDocumentShortfallSummary.Text =
+                            "<div class=\"message\">The linked document shortfall could not be found.</div>";
+                        TenderDocumentCorrectionShortfallSummary.Text = TenderDocumentShortfallSummary.Text;
+                        return;
+                    }
+                    TenderDocumentShortfallSummary.Text =
+                        "<div class=\"workflow-shortfall\"><strong>DOCUMENT SHORTFALL RAISED</strong>" +
+                        "<dl><dt>Raised by</dt><dd>" + HttpUtility.HtmlEncode(Convert.ToString(reader["RaisedBy"])) +
+                        "</dd><dt>Raised date</dt><dd>" +
+                        HttpUtility.HtmlEncode(TenderLifecycleFiles.FormatIndiaDateTime(reader["RaisedAtUtc"])) +
+                        " IST</dd><dt>Deadline (3 days)</dt><dd>" +
+                        HttpUtility.HtmlEncode(TenderLifecycleFiles.FormatIndiaDateTime(reader["DeadlineAtUtc"])) +
+                        " IST</dd><dt>Current status</dt><dd>" +
+                        HttpUtility.HtmlEncode(Convert.ToString(reader["ResolutionStatus"])) +
+                        "</dd><dt>JE resubmission</dt><dd>" +
+                        (reader["ResubmittedAtUtc"] == DBNull.Value ? "Pending" :
+                            HttpUtility.HtmlEncode(TenderLifecycleFiles.FormatIndiaDateTime(reader["ResubmittedAtUtc"])) + " IST") +
+                        "</dd><dt>Required documents</dt><dd>" +
+                        HttpUtility.HtmlEncode(Convert.ToString(reader["RequiredDocuments"])) +
+                        "</dd><dt>Remarks</dt><dd>" +
+                        HttpUtility.HtmlEncode(Convert.ToString(reader["Remarks"])) +
+                        "</dd></dl></div>";
+                    TenderDocumentCorrectionShortfallSummary.Text = TenderDocumentShortfallSummary.Text;
+                }
+            }
+        }
+
         private void LoadQueue()
         {
             string stageFilter = QueueStageFilter();
@@ -80,15 +137,29 @@ namespace DepartmentModule.Pages
                       INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
                       LEFT JOIN dbo.TenderShortfalls sf ON sf.ShortfallId=a.ShortfallId
                       WHERE a.IsCurrent=1
-                        AND (@IsAdmin=1 OR
-                             ((a.AssignedRoleId=@RoleId AND
-                               ((@IsContractor=1 AND a.AssignedUserId=@UserId)
-                                OR (@IsContractor=0 AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                                    AND (@IsDepartmentScopedRole=0 OR
-                                         (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId)))))
-                              OR (@IsTenderCell=1 AND s.StageName=N'Final_Contractor_SubmitShortfall'
-                                  AND @DepartmentId=t.DepartmentId
-                               AND sf.SubmissionDeadlineUtc<=SYSUTCDATETIME())))" + stageFilter + @"
+                        AND
+                        (
+                            @IsAdmin=1
+                            OR
+                            (
+                                (
+                                    a.AssignedRoleId=@RoleId
+                                    AND
+                                    (
+                                        (@IsContractor=1 AND a.AssignedUserId=@UserId)
+                                        OR
+                                        (@IsContractor=0
+                                         AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
+                                         AND (@IsDepartmentScopedRole=0 OR
+                                              (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId)))
+                                    )
+                                )
+                                OR
+                                (@IsTenderCell=1 AND s.StageName=N'Final_Contractor_SubmitShortfall'
+                                 AND @DepartmentId=t.DepartmentId
+                                 AND sf.SubmissionDeadlineUtc<=SYSUTCDATETIME())
+                            )
+                        )" + stageFilter + @"
                       ORDER BY a.AssignedAtUtc,t.TenderId;", connection))
                 {
                     ModuleDb.AddParameter(command, "@IsAdmin", SqlDbType.Bit, IsSystemAdministrator);
@@ -124,6 +195,7 @@ namespace DepartmentModule.Pages
                 case "verification":
                     filter = @" AND s.StageName IN
                         (N'Final_JE_OpenTechnicalBids',N'Final_JE_CompletePrimaryVerification',
+                         N'Final_Cell_InitialTenderDocumentVerification',N'Final_JE_CorrectTenderDocuments',
                          N'Final_Cell_CompleteSecondaryVerification',N'Final_Cell_ClearShortfall')";
                     break;
                 case "shortfall":
@@ -223,9 +295,14 @@ namespace DepartmentModule.Pages
                             bool assignedToCurrentDepartment = CurrentDepartmentId.HasValue &&
                                 Convert.ToInt32(reader["DepartmentId"]) == CurrentDepartmentId.Value;
                             bool canAct = assignedToCurrentRole && assignedToCurrentUser &&
-                                (IsSystemAdministrator || HasAnyRole("Contractor") ||
-                                 !HasAnyRole("Junior Engineer (JE)") || assignedToCurrentDepartment);
+                                (!HasAnyRole("Junior Engineer (JE)") || assignedToCurrentDepartment);
                             SubmitDraftPanel.Visible = canAct && stageName == "Final_JE_SubmitTender" &&
+                                HasPermission("tender.create.department");
+                            InitialTenderCellVerificationPanel.Visible = canAct &&
+                                stageName == "Final_Cell_InitialTenderDocumentVerification" &&
+                                HasPermission("tender.cell.verify");
+                            JeDocumentCorrectionPanel.Visible = canAct &&
+                                stageName == "Final_JE_CorrectTenderDocuments" &&
                                 HasPermission("tender.create.department");
                             PublishPanel.Visible = canAct && stageName == "Final_JE_PublishTender" &&
                                 HasPermission("tender.publication.manage");
@@ -279,6 +356,20 @@ namespace DepartmentModule.Pages
                             TenderId.ToString(CultureInfo.InvariantCulture);
                         LoadRequiredBidDocumentTypes(connection);
                     }
+                    if (InitialTenderCellVerificationPanel.Visible)
+                    {
+                        TenderDocumentVerificationLink.NavigateUrl =
+                            "~/Pages/TenderForm.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+                        LoadTenderDocumentShortfallSummary(connection);
+                    }
+                    if (JeDocumentCorrectionPanel.Visible)
+                    {
+                        CorrectTenderDocumentsLink.NavigateUrl =
+                            "~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+                        LoadTenderDocumentShortfallSummary(connection);
+                    }
+                    if (PublishPanel.Visible)
+                        LoadPublicationScheduleSummary(connection);
                     if (PrimaryVerificationPanel.Visible)
                         BindPrimaryVerification(connection);
                     if (SecondaryVerificationPanel.Visible || ShortfallCreationPanel.Visible)
@@ -554,22 +645,58 @@ namespace DepartmentModule.Pages
 
         protected void SubmitDraftButton_Click(object sender, EventArgs e)
         {
-            ProcessStage("Final_JE_SubmitTender", "tender.create.department", "Submitted",
+            ProcessStage("Final_JE_SubmitTender", "tender.create.department",
+                "Pending Tender Cell Verification",
                 SubmitRemarksText.Text, null, null);
+        }
+
+        protected void ApproveInitialTenderDocumentsButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_Cell_InitialTenderDocumentVerification", "tender.cell.verify",
+                "Submitted", CellDocumentVerificationRemarksText.Text, CurrentShortfallId,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                {
+                    TenderFinalizedWorkflowService.EnsureTenderRequirementDocumentsVerified(
+                        connection, transaction, TenderId, "TENDER_CELL");
+                    if (CurrentShortfallId.HasValue)
+                        TenderFinalizedWorkflowService.ResolveTenderDocumentShortfall(
+                            connection, transaction, TenderId, CurrentShortfallId.Value, CurrentUserId);
+                    return new WorkflowTransitionMetadata
+                    {
+                        ActionName = "ApproveInitialTenderDocumentVerification"
+                    };
+                });
+        }
+
+        protected void RaiseTenderDocumentShortfallButton_Click(object sender, EventArgs e)
+        {
+            ProcessFinalizedStage("Final_Cell_InitialTenderDocumentVerification", "tender.cell.verify",
+                "Pending JE Document Correction", CellDocumentVerificationRemarksText.Text, CurrentShortfallId,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.CreateTenderDocumentShortfall(connection, transaction,
+                        TenderId, CurrentUserId, departmentId, CellDocumentVerificationRemarksText.Text,
+                        RequiredTenderDocumentsText.Text));
+        }
+
+        protected void ResubmitTenderDocumentsButton_Click(object sender, EventArgs e)
+        {
+            if (!CurrentShortfallId.HasValue)
+            {
+                ShowMessage("There is no active document shortfall to resubmit.");
+                return;
+            }
+            ProcessFinalizedStage("Final_JE_CorrectTenderDocuments", "tender.create.department",
+                "Pending Tender Cell Verification", "JE resubmitted corrected tender documents.",
+                CurrentShortfallId,
+                (connection, transaction, departmentId, previousStatus, newStatus) =>
+                    TenderFinalizedWorkflowService.ResubmitTenderDocuments(connection, transaction,
+                        TenderId, CurrentShortfallId.Value, CurrentUserId));
         }
 
         protected void PublishButton_Click(object sender, EventArgs e)
         {
-            DateTime publicationStartUtc, publicationCloseUtc;
-            if (!TryParseIndiaDateTime(PublicationStartText.Text, out publicationStartUtc) ||
-                !TryParseIndiaDateTime(PublicationCloseText.Text, out publicationCloseUtc) ||
-                publicationStartUtc <= DateTime.UtcNow || publicationCloseUtc <= publicationStartUtc)
-            {
-                ShowMessage("Enter a future publication start and a closing date and time after the start.");
-                return;
-            }
             ProcessStage("Final_JE_PublishTender", "tender.publication.manage", "Tender Published",
-                PublishRemarksText.Text, publicationStartUtc, publicationCloseUtc);
+                PublishRemarksText.Text, null, null);
         }
 
         protected void OpenTechnicalBidsButton_Click(object sender, EventArgs e)
@@ -1320,17 +1447,25 @@ namespace DepartmentModule.Pages
                     }
                     if (assignedRoleId != CurrentRoleId ||
                         (assignedUserId.HasValue && assignedUserId.Value != CurrentUserId) ||
-                        (!IsSystemAdministrator && HasAnyRole("Junior Engineer (JE)") &&
+                        (HasAnyRole("Junior Engineer (JE)") &&
                          (!CurrentDepartmentId.HasValue || CurrentDepartmentId.Value != departmentId)))
                         throw new InvalidOperationException("The tender is not assigned to your role, user, or department.");
 
                     if (expectedStageName == "Final_JE_SubmitTender")
                     {
                         EnsureTenderPreparationComplete(connection, transaction);
+                        TenderFinalizedWorkflowService.EnsureTenderRequirementDocumentsVerified(
+                            connection, transaction, TenderId, "JE");
                         SaveRequiredBidDocumentTypes(connection, transaction);
                     }
                     if (expectedStageName == "Final_JE_PublishTender")
-                        SavePublicationSchedule(connection, transaction, publicationStartUtc.Value, publicationCloseUtc.Value, remarks);
+                    {
+                        DateTime configuredStartUtc, configuredCloseUtc;
+                        LoadPublicationSchedule(connection, transaction,
+                            out configuredStartUtc, out configuredCloseUtc);
+                        publicationStartUtc = configuredStartUtc;
+                        publicationCloseUtc = configuredCloseUtc;
+                    }
                     if (expectedStageName == "Final_JE_OpenTechnicalBids")
                         SaveTechnicalBidOpening(connection, transaction, remarks);
                     if (expectedStageName == "Final_JE_CompletePrimaryVerification")
@@ -1369,8 +1504,9 @@ namespace DepartmentModule.Pages
 
                     int? nextStageId = null;
                     int? nextRoleId = null;
+                    string nextStageName = null;
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT TOP (1) StageId,ApproverRoleId FROM dbo.WorkflowStages
+                        @"SELECT TOP (1) StageId,ApproverRoleId,StageName FROM dbo.WorkflowStages
                           WHERE WorkflowVersion=2 AND IsActive=1 AND StatusOnPending=@NewStatus
                             AND StageOrder>@CurrentOrder ORDER BY StageOrder;",
                         connection, transaction))
@@ -1383,6 +1519,7 @@ namespace DepartmentModule.Pages
                             {
                                 nextStageId = Convert.ToInt32(reader["StageId"]);
                                 nextRoleId = Convert.ToInt32(reader["ApproverRoleId"]);
+                                nextStageName = Convert.ToString(reader["StageName"]);
                             }
                         }
                     }
@@ -1403,6 +1540,22 @@ namespace DepartmentModule.Pages
                         ModuleDb.AddParameter(command, "@AssignedUserId", SqlDbType.Int,
                             nextAssignedUserId.HasValue ? (object)nextAssignedUserId.Value : null);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
+                        command.ExecuteNonQuery();
+                    }
+
+                    using (SqlCommand command = new SqlCommand(
+                        @"INSERT INTO dbo.TenderNotifications(UserId,TenderId,NotificationType,Message)
+                          SELECT u.UserId,@TenderId,N'WorkflowAssignment',
+                                 N'A tender is awaiting your action: ' + @StageName + N'.'
+                          FROM dbo.Users u
+                          WHERE u.IsActive=1 AND u.AccountType=N'Internal' AND u.RoleId=@RoleId
+                            AND (u.DepartmentId IS NULL OR u.DepartmentId=@DepartmentId);",
+                        connection, transaction))
+                    {
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, nextRoleId.Value);
+                        ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
+                        AddText(command, "@StageName", SqlDbType.NVarChar, nextStageName, 80);
                         command.ExecuteNonQuery();
                     }
 
@@ -1756,29 +1909,60 @@ namespace DepartmentModule.Pages
             }
         }
 
-        private void SavePublicationSchedule(SqlConnection connection, SqlTransaction transaction,
-            DateTime startUtc, DateTime closeUtc, string remarks)
+        private void LoadPublicationSchedule(SqlConnection connection, SqlTransaction transaction,
+            out DateTime startUtc, out DateTime closeUtc)
         {
-            if (startUtc <= DateTime.UtcNow || closeUtc <= startUtc)
-                throw new InvalidOperationException("The publication period is invalid or has already started.");
-            decimal publicationDays = Decimal.Round((decimal)(closeUtc - startUtc).TotalDays, 2);
             using (SqlCommand command = new SqlCommand(
-                @"IF EXISTS(SELECT 1 FROM dbo.TenderPublicationSchedule WITH (UPDLOCK,HOLDLOCK) WHERE TenderId=@TenderId)
-                      THROW 51020,'A publication schedule already exists.',1;
-                  INSERT INTO dbo.TenderPublicationSchedule
-                    (TenderId,PublicationStartUtc,OriginalClosingUtc,CurrentClosingUtc,PublicationPeriodDays,
-                     Remarks,ApprovedBy,ApprovedAtUtc,ModifiedAtUtc)
-                  VALUES(@TenderId,@StartUtc,@CloseUtc,@CloseUtc,@Duration,@Remarks,@UserId,
-                         SYSUTCDATETIME(),SYSUTCDATETIME());",
+                @"SELECT PublicationStartUtc,CurrentClosingUtc
+                  FROM dbo.TenderPublicationSchedule WITH (UPDLOCK,HOLDLOCK)
+                  WHERE TenderId=@TenderId;",
                 connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                ModuleDb.AddParameter(command, "@StartUtc", SqlDbType.DateTime2, startUtc);
-                ModuleDb.AddParameter(command, "@CloseUtc", SqlDbType.DateTime2, closeUtc);
-                ModuleDb.AddParameter(command, "@Duration", SqlDbType.Decimal, publicationDays);
-                AddText(command, "@Remarks", SqlDbType.NVarChar, remarks, 2000);
-                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                command.ExecuteNonQuery();
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        throw new InvalidOperationException("Tender Cell must save a publication schedule before JE can publish this tender.");
+                    startUtc = DateTime.SpecifyKind(
+                        Convert.ToDateTime(reader["PublicationStartUtc"], CultureInfo.InvariantCulture),
+                        DateTimeKind.Utc);
+                    closeUtc = DateTime.SpecifyKind(
+                        Convert.ToDateTime(reader["CurrentClosingUtc"], CultureInfo.InvariantCulture),
+                        DateTimeKind.Utc);
+                }
+            }
+            if (startUtc <= DateTime.UtcNow || closeUtc <= startUtc)
+                throw new InvalidOperationException("The saved publication schedule is invalid or has already started. Tender Cell must update it before publication.");
+        }
+
+        private void LoadPublicationScheduleSummary(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT PublicationStartUtc,CurrentClosingUtc
+                  FROM dbo.TenderPublicationSchedule WHERE TenderId=@TenderId;", connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                    {
+                        PublicationScheduleSummary.Text = "No schedule has been saved. Contact Tender Cell before publishing.";
+                        return;
+                    }
+                    DateTime startUtc = DateTime.SpecifyKind(
+                        Convert.ToDateTime(reader["PublicationStartUtc"], CultureInfo.InvariantCulture),
+                        DateTimeKind.Utc);
+                    DateTime closeUtc = DateTime.SpecifyKind(
+                        Convert.ToDateTime(reader["CurrentClosingUtc"], CultureInfo.InvariantCulture),
+                        DateTimeKind.Utc);
+                    TimeZoneInfo indiaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+                    PublicationScheduleSummary.Text = "Starts: " +
+                        HttpUtility.HtmlEncode(TimeZoneInfo.ConvertTimeFromUtc(startUtc, indiaTimeZone)
+                            .ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture)) +
+                        " IST · Closes: " +
+                        HttpUtility.HtmlEncode(TimeZoneInfo.ConvertTimeFromUtc(closeUtc, indiaTimeZone)
+                            .ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture)) + " IST";
+                }
             }
         }
 

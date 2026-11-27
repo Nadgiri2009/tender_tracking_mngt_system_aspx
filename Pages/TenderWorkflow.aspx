@@ -25,21 +25,58 @@
             <p><strong>Estimated cost:</strong> ₹<asp:Literal ID="EstimatedAmount" runat="server" /></p>
         </section>
         <asp:Panel ID="SubmitDraftPanel" runat="server" CssClass="card" Visible="false">
-            <h2>Submit tender for publication processing</h2>
-            <p class="help">Submission is blocked until a BOQ item and all four required tender document categories are present.</p>
+            <h2>JE initial document verification</h2>
+            <p class="help">Review and mark every uploaded tender document as verified before forwarding the tender to Tender Cell.</p>
             <asp:HyperLink ID="ApplicationRequirementsLink" runat="server" CssClass="button secondary">Manage application requirements</asp:HyperLink>
             <div class="field"><label for="RequiredBidDocumentsText">Required bidder technical documents</label>
                 <span class="help">Enter one document name per line. Use the requirements manager to set descriptions, optional items, accepted formats, and file-size limits.</span>
                 <asp:TextBox ID="RequiredBidDocumentsText" runat="server" TextMode="MultiLine" MaxLength="8000" Rows="6" /></div>
             <div class="field"><label for="SubmitRemarksText">Remarks</label><asp:TextBox ID="SubmitRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
-            <asp:Button ID="SubmitDraftButton" runat="server" Text="Submit tender" OnClick="SubmitDraftButton_Click" />
+            <asp:Button ID="SubmitDraftButton" runat="server" Text="Approve initial verification and forward to Tender Cell"
+                OnClick="SubmitDraftButton_Click" />
+        </asp:Panel>
+        <asp:Panel ID="InitialTenderCellVerificationPanel" runat="server" CssClass="card" Visible="false">
+            <h2>Tender Cell independent document verification</h2>
+            <p class="help">Open the tender documents, inspect or download each file, and record a separate Tender Cell decision for every document.</p>
+            <asp:HyperLink ID="TenderDocumentVerificationLink" runat="server" CssClass="button secondary">
+                Review tender documents
+            </asp:HyperLink>
+            <asp:Literal ID="TenderDocumentShortfallSummary" runat="server" />
+            <div class="field">
+                <label for="CellDocumentVerificationRemarksText">Verification remarks</label>
+                <asp:TextBox ID="CellDocumentVerificationRemarksText" runat="server" TextMode="MultiLine"
+                    MaxLength="2000" Rows="3" />
+            </div>
+            <div class="field">
+                <label for="RequiredTenderDocumentsText">Required documents for a shortfall</label>
+                <span class="help">If a document is missing or incorrect, list each required document and explain the deficiency in the remarks above.</span>
+                <asp:TextBox ID="RequiredTenderDocumentsText" runat="server" TextMode="MultiLine"
+                    MaxLength="2000" Rows="3" />
+            </div>
+            <div class="row">
+                <asp:Button ID="ApproveInitialTenderDocumentsButton" runat="server"
+                    Text="Approve document verification"
+                    OnClick="ApproveInitialTenderDocumentsButton_Click" />
+                <asp:Button ID="RaiseTenderDocumentShortfallButton" runat="server"
+                    Text="Raise Document Shortfall" CssClass="button secondary"
+                    OnClick="RaiseTenderDocumentShortfallButton_Click" />
+            </div>
+        </asp:Panel>
+        <asp:Panel ID="JeDocumentCorrectionPanel" runat="server" CssClass="card" Visible="false">
+            <h2>JE document correction</h2>
+            <p class="help">Upload the requested corrections as new files. Previous documents are retained for audit history. Tender Cell must re-verify the resubmission.</p>
+            <asp:Literal ID="TenderDocumentCorrectionShortfallSummary" runat="server" />
+            <asp:HyperLink ID="CorrectTenderDocumentsLink" runat="server" CssClass="button secondary">
+                Open tender documents
+            </asp:HyperLink>
+            <asp:Button ID="ResubmitTenderDocumentsButton" runat="server"
+                Text="Submit corrected documents for Tender Cell re-verification"
+                OnClick="ResubmitTenderDocumentsButton_Click" />
         </asp:Panel>
         <asp:Panel ID="PublishPanel" runat="server" CssClass="card" Visible="false">
             <h2>Publication schedule</h2>
-            <div class="row">
-                <div class="field"><label for="PublicationStartText">Publication start (IST)</label><asp:TextBox ID="PublicationStartText" runat="server" TextMode="DateTimeLocal" /></div>
-                <div class="field"><label for="PublicationCloseText">Publication closing date and time (IST)</label><asp:TextBox ID="PublicationCloseText" runat="server" TextMode="DateTimeLocal" /></div>
-            </div>
+            <p class="help">Tender Cell manages the publication window. Review the saved schedule below before publishing.</p>
+            <p><asp:Literal ID="PublicationScheduleSummary" runat="server" /></p>
             <div class="field"><label for="PublishRemarksText">Remarks</label><asp:TextBox ID="PublishRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
             <asp:Button ID="PublishButton" runat="server" Text="Publish tender" OnClick="PublishButton_Click" />
         </asp:Panel>

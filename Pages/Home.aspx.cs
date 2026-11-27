@@ -31,7 +31,7 @@ namespace DepartmentModule.Pages
                     (@TenderStatus=N'completed' AND " + TenderStatusBuckets.Awarded + @"))";
 
         protected Literal Message, TotalTenders, PublishedTenders, ActiveTenders, ClosedTenders,
-            TotalContractors, CompletedAwardedTenders, PageSummary;
+            TotalContractors, PageSummary;
         protected TextBox TenderSearchText;
         protected DropDownList DepartmentFilter, CategoryFilter, TenderTypeFilter, TenderStatusFilter, SortBySelect;
         protected GridView TendersGrid, AnnouncementsGrid;
@@ -87,9 +87,7 @@ namespace DepartmentModule.Pages
                             (SELECT COUNT(*) FROM dbo.Tender t
                              LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
                              WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Closed + @") AS ClosedTenders,
-                            (SELECT COUNT(*) FROM dbo.Contractors) AS TotalContractors,
-                            (SELECT COUNT(*) FROM dbo.Tender t
-                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Awarded + @") AS CompletedAwardedTenders;",
+                            (SELECT COUNT(*) FROM dbo.Contractors) AS TotalContractors;",
                         connection))
                     using (SqlDataReader reader = command.ExecuteReader())
                     {
@@ -100,7 +98,6 @@ namespace DepartmentModule.Pages
                             ActiveTenders.Text = Convert.ToString(reader["ActiveTenders"]);
                             ClosedTenders.Text = Convert.ToString(reader["ClosedTenders"]);
                             TotalContractors.Text = Convert.ToString(reader["TotalContractors"]);
-                            CompletedAwardedTenders.Text = Convert.ToString(reader["CompletedAwardedTenders"]);
                         }
                     }
 

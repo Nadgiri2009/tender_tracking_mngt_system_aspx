@@ -32,6 +32,13 @@ namespace DepartmentModule.Pages
                 return;
             }
 
+            int gisTenderId = QueryId("gisId");
+            if (gisTenderId > 0)
+            {
+                DownloadGisImage(gisTenderId);
+                return;
+            }
+
             long shortfallSubmissionId = QueryLongId("shortfallSubmissionId");
             if (shortfallSubmissionId > 0)
             {
@@ -106,6 +113,96 @@ namespace DepartmentModule.Pages
             catch (SqlException ex)
             {
                 Trace.Warn("DepartmentModule", "Document metadata could not be read.", ex);
+                Response.StatusCode = 500;
+                Context.ApplicationInstance.CompleteRequest();
+                return;
+            }
+
+            SendStoredFile(storedPath, fileName);
+        }
+
+        private void DownloadGisImage(int tenderId)
+        {
+            string storedPath, fileName;
+            bool isContractor = HasAnyRole("Contractor");
+            bool isSystemAdministrator = HasPermission("system.admin");
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT gis.ImagePath,gis.ImageOriginalFileName
+                      FROM dbo.TenderGisLocations gis
+                      INNER JOIN dbo.Tender t ON t.TenderId=gis.TenderId
+                      LEFT JOIN dbo.TenderPublicationSchedule schedule ON schedule.TenderId=t.TenderId
+                      WHERE t.TenderId=@TenderId AND t.IsDeleted=0
+                        AND gis.ImagePath IS NOT NULL
+                        AND
+                        (
+                            (@CurrentUserId=0 AND
+                             schedule.PublicationStartUtc<=SYSUTCDATETIME()
+                             AND t.CurrentStatus NOT LIKE N'%cancel%'
+                             AND
+                             (
+                                 EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
+                                        WHERE publicHistory.TenderId=t.TenderId
+                                          AND publicHistory.NewStatus=N'Tender Published')
+                                 OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowHistory publicWorkflowHistory
+                                           WHERE publicWorkflowHistory.TenderId=t.TenderId
+                                             AND publicWorkflowHistory.WorkflowVersion=2
+                                             AND publicWorkflowHistory.NewStatus=N'Tender Published')
+                             ))
+                            OR (@CurrentUserId>0 AND @IsContractor=1 AND
+                                (
+                                    EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
+                                           WHERE publicHistory.TenderId=t.TenderId
+                                             AND publicHistory.NewStatus=N'Tender Published')
+                                    OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowHistory publicWorkflowHistory
+                                              WHERE publicWorkflowHistory.TenderId=t.TenderId
+                                                AND publicWorkflowHistory.WorkflowVersion=2
+                                                AND publicWorkflowHistory.NewStatus=N'Tender Published')
+                                    OR (t.WorkflowVersion=2 AND t.CurrentStatus IN (N'Tender Published',N'Completed'))
+                                    OR EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments ownAssignment
+                                              WHERE ownAssignment.TenderId=t.TenderId
+                                                AND ownAssignment.IsCurrent=1
+                                                AND ownAssignment.AssignedRoleId=@RoleId
+                                                AND ownAssignment.AssignedUserId=@CurrentUserId)
+                                ))
+                            OR (@CurrentUserId>0 AND @IsContractor=0 AND
+                                (
+                                    @IsSystemAdministrator=1
+                                    OR (t.WorkflowVersion=2 AND @DepartmentId IS NOT NULL
+                                        AND t.DepartmentId=@DepartmentId)
+                                    OR (t.WorkflowVersion=1 AND
+                                        (@CurrentRole<>N'DepartmentOfficer'
+                                         OR t.CreatedBy=@CurrentUserId))
+                                ))
+                        );", connection))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@CurrentUserId", SqlDbType.Int, CurrentUserId);
+                    ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, isContractor);
+                    ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
+                    ModuleDb.AddParameter(command, "@IsSystemAdministrator", SqlDbType.Bit, isSystemAdministrator);
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
+                        CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                    ModuleDb.AddParameter(command, "@CurrentRole", SqlDbType.NVarChar,
+                        CurrentRole ?? String.Empty, 50);
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (!reader.Read())
+                        {
+                            NotFound();
+                            return;
+                        }
+                        storedPath = Convert.ToString(reader["ImagePath"]);
+                        fileName = TenderLifecycleFiles.SafeFileName(
+                            Convert.ToString(reader["ImageOriginalFileName"]));
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "GIS image metadata could not be read.", ex);
                 Response.StatusCode = 500;
                 Context.ApplicationInstance.CompleteRequest();
                 return;
