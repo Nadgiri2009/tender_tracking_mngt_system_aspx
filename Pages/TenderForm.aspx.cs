@@ -62,9 +62,10 @@ namespace DepartmentModule.Pages
             FinancialRequirementsDocumentRemoveFlag;
         protected Image CurrentGisImagePreview;
         protected HiddenField WizardCurrentStep, WizardCompletedStepsMask, RemoveGisImageFlag,
-            JeAdministratorFlag, GisBoundaryCoordinates, GisBoundaryLineCoordinates,
+            JeAdministratorFlag, GisBoundaryCoordinates, GisBoundaryLineCoordinates, GisBoundaryGeometryType,
             DocumentVerificationOnlyFlag;
         protected Panel ScheduleValidationPanel;
+        protected Panel RequirementDocumentsEmptyState;
         protected Literal ScheduleValidationMessage;
 
         private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png" };
@@ -379,10 +380,9 @@ namespace DepartmentModule.Pages
         private void LoadRequirementDocuments(SqlConnection connection)
         {
             using (SqlCommand command = new SqlCommand(
-                @"SELECT d.DocumentId,d.DocumentName,
+                @"SELECT d.DocumentId,d.DocumentName,d.FileSizeBytes,d.UploadedDate,
                          COALESCE(dt.TypeName,d.DocumentType) AS RequirementCategory,
-                         COALESCE(NULLIF(d.FileExtension,N''),RIGHT(d.FileName,CHARINDEX(N'.',REVERSE(d.FileName)))) AS FileExtension,
-                         CONVERT(nvarchar(20),d.UploadedDate,106) AS UploadStatus
+                         COALESCE(NULLIF(d.FileExtension,N''),RIGHT(d.FileName,CHARINDEX(N'.',REVERSE(d.FileName)))) AS FileExtension
                   FROM dbo.TenderDocuments d
                   LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
                   WHERE d.TenderId=@TenderId
@@ -395,9 +395,48 @@ namespace DepartmentModule.Pages
                 using (SqlDataAdapter adapter = new SqlDataAdapter(command))
                     adapter.Fill(documents);
                 UploadedRequirementDocumentsPanel.Visible = documents.Rows.Count > 0;
+                RequirementDocumentsEmptyState.Visible = documents.Rows.Count == 0;
+                documents.Columns.Add("FileTypeDisplay", typeof(string));
+                documents.Columns.Add("FileSizeDisplay", typeof(string));
+                documents.Columns.Add("UploadStatus", typeof(string));
+                documents.Columns.Add("UploadDateDisplay", typeof(string));
+                foreach (DataRow document in documents.Rows)
+                {
+                    string extension = Convert.ToString(document["FileExtension"]);
+                    long sizeBytes = document["FileSizeBytes"] == DBNull.Value
+                        ? 0 : Convert.ToInt64(document["FileSizeBytes"], CultureInfo.InvariantCulture);
+                    DateTime uploadedAt = Convert.ToDateTime(document["UploadedDate"], CultureInfo.InvariantCulture);
+                    document["FileTypeDisplay"] = FormatRequirementFileType(extension);
+                    document["FileSizeDisplay"] = FormatRequirementFileSize(sizeBytes);
+                    document["UploadStatus"] = "Uploaded";
+                    document["UploadDateDisplay"] = uploadedAt.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+                }
                 RequirementDocumentsGrid.DataSource = documents;
                 RequirementDocumentsGrid.DataBind();
             }
+        }
+
+        private static string FormatRequirementFileType(string extension)
+        {
+            switch ((extension ?? String.Empty).ToLowerInvariant())
+            {
+                case ".pdf": return "PDF";
+                case ".doc":
+                case ".docx": return "Word";
+                case ".xls":
+                case ".xlsx": return "Excel";
+                case ".jpg":
+                case ".jpeg": return "JPEG";
+                case ".png": return "PNG";
+                default: return (extension ?? String.Empty).TrimStart('.').ToUpperInvariant();
+            }
+        }
+
+        private static string FormatRequirementFileSize(long sizeBytes)
+        {
+            if (sizeBytes < 1024L * 1024L)
+                return Math.Max(1L, (long)Math.Ceiling(sizeBytes / 1024d)).ToString(CultureInfo.InvariantCulture) + " KB";
+            return (sizeBytes / (1024d * 1024d)).ToString("0.0", CultureInfo.InvariantCulture) + " MB";
         }
 
         private void BindTechnicalDocumentVerificationGrid(SqlConnection connection)
@@ -473,7 +512,7 @@ namespace DepartmentModule.Pages
         {
             using (SqlCommand command = new SqlCommand(
                 @"SELECT Latitude,Longitude,LocationName,ImagePath,ImageOriginalFileName,
-                         BoundaryCoordinatesJson,BoundaryLineGeometryJson
+                         BoundaryCoordinatesJson,BoundaryLineGeometryJson,BoundaryGeometryType
                   FROM dbo.TenderGisLocations WHERE TenderId=@TenderId;", connection))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
@@ -487,6 +526,8 @@ namespace DepartmentModule.Pages
                             ? String.Empty : Convert.ToString(reader["BoundaryCoordinatesJson"]);
                         GisBoundaryLineCoordinates.Value = reader["BoundaryLineGeometryJson"] == DBNull.Value
                             ? String.Empty : Convert.ToString(reader["BoundaryLineGeometryJson"]);
+                        GisBoundaryGeometryType.Value = reader["BoundaryGeometryType"] == DBNull.Value
+                            ? String.Empty : Convert.ToString(reader["BoundaryGeometryType"]);
                         LocationNameText.Text = reader["LocationName"] == DBNull.Value
                             ? String.Empty : Convert.ToString(reader["LocationName"]);
                         if (reader["ImagePath"] != DBNull.Value)
@@ -581,11 +622,8 @@ namespace DepartmentModule.Pages
                 return false;
             foreach (UploadedRequirementDocument document in requirementDocuments)
             {
-                if (!IsValidTenderAssetUpload(document.File, AllowedExtensions, 20 * 1024 * 1024))
-                {
-                    error = document.Category + " must be a permitted document no larger than 20 MB.";
+                if (!TryValidateRequirementDocumentUpload(document.File, out error))
                     return false;
-                }
             }
             if (!IsJeAdministrator) return true;
 
@@ -593,13 +631,90 @@ namespace DepartmentModule.Pages
             {
                 if (input.Document.HasFile &&
                     !IsValidTenderAssetUpload(input.Document, new[] { ".pdf", ".jpg", ".jpeg", ".png" },
-                        20 * 1024 * 1024))
+                        10 * 1024 * 1024))
                 {
-                    error = "An approval document must be a valid PDF, JPEG, or PNG no larger than 20 MB.";
+                    error = "Approval document " + SafeTenderDocumentFileName(input.Document.FileName) +
+                        " must be a valid PDF, JPEG, or PNG no larger than 10 MB.";
                     return false;
                 }
             }
             return true;
+        }
+
+        private static bool TryValidateRequirementDocumentUpload(HttpPostedFile file, out string error)
+        {
+            error = null;
+            string originalName = SafeTenderDocumentFileName(file == null ? null : file.FileName);
+            if (file == null || String.IsNullOrWhiteSpace(originalName))
+            {
+                error = "Select a document with a valid file name.";
+                return false;
+            }
+            if (file.ContentLength <= 0)
+            {
+                error = originalName + " is empty.";
+                return false;
+            }
+            if (file.ContentLength > 10 * 1024 * 1024)
+            {
+                error = originalName + " exceeds the 10 MB per-document limit.";
+                return false;
+            }
+            string extension = Path.GetExtension(originalName).ToLowerInvariant();
+            if (originalName.Length > 260 || Array.IndexOf(AllowedExtensions, extension) < 0)
+            {
+                error = originalName + " has an unsupported file name or extension.";
+                return false;
+            }
+            if (!IsAllowedRequirementMimeType(file.ContentType, extension) ||
+                !TenderLifecycleFiles.HasAllowedContentSignature(file.InputStream, extension))
+            {
+                error = originalName + " has an unsupported MIME type or invalid file contents.";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsAllowedRequirementMimeType(string contentType, string extension)
+        {
+            if (String.IsNullOrWhiteSpace(contentType) ||
+                String.Equals(contentType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            string normalizedType = contentType.Split(';')[0].Trim();
+            string expectedType = GetRequirementMimeType(extension);
+            if (String.Equals(normalizedType, expectedType, StringComparison.OrdinalIgnoreCase))
+                return true;
+            return (extension == ".docx" || extension == ".xlsx") &&
+                String.Equals(normalizedType, "application/zip", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetRequirementMimeType(string extension)
+        {
+            switch ((extension ?? String.Empty).ToLowerInvariant())
+            {
+                case ".pdf": return "application/pdf";
+                case ".doc": return "application/msword";
+                case ".docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                case ".xls": return "application/vnd.ms-excel";
+                case ".xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".png": return "image/png";
+                default: return "application/octet-stream";
+            }
+        }
+
+        private static string SafeTenderDocumentFileName(string fileName)
+        {
+            string normalized = (fileName ?? String.Empty).Replace('\\', '/');
+            string safeName = Path.GetFileName(normalized);
+            char[] invalidCharacters = Path.GetInvalidFileNameChars();
+            System.Text.StringBuilder result = new System.Text.StringBuilder(safeName.Length);
+            foreach (char character in safeName)
+                if (!Char.IsControl(character) && Array.IndexOf(invalidCharacters, character) < 0)
+                    result.Append(character);
+            return result.ToString().Trim();
         }
 
         private bool TryGetRequirementUploads(out List<UploadedRequirementDocument> uploads, out string error)
@@ -726,9 +841,9 @@ namespace DepartmentModule.Pages
                 using (SqlCommand command = new SqlCommand(
                     @"INSERT INTO dbo.TenderDocuments
                         (TenderId,DocumentTypeId,DocumentType,DocumentName,Remarks,FileName,FilePath,
-                         FileExtension,FileSizeBytes,UploadedBy)
+                         FileExtension,FileSizeBytes,MimeType,UploadedBy)
                       VALUES(@TenderId,@DocumentTypeId,@DocumentType,@DocumentName,NULL,@FileName,@FilePath,
-                             @FileExtension,@FileSizeBytes,@UploadedBy);", connection, transaction))
+                             @FileExtension,@FileSizeBytes,@MimeType,@UploadedBy);", connection, transaction))
                 {
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
                     ModuleDb.AddParameter(command, "@DocumentTypeId", SqlDbType.Int, documentTypeId);
@@ -738,6 +853,7 @@ namespace DepartmentModule.Pages
                     AddText(command, "@FilePath", SqlDbType.NVarChar, document.RelativePath, 400);
                     AddText(command, "@FileExtension", SqlDbType.NVarChar, document.Extension, 10);
                     ModuleDb.AddParameter(command, "@FileSizeBytes", SqlDbType.BigInt, document.SizeBytes);
+                    AddText(command, "@MimeType", SqlDbType.NVarChar, document.MimeType, 100);
                     ModuleDb.AddParameter(command, "@UploadedBy", SqlDbType.Int, CurrentUserId);
                     if (command.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException("The " + upload.Category + " document could not be saved.");
@@ -749,6 +865,11 @@ namespace DepartmentModule.Pages
         protected void RequirementDocumentsGrid_RowCommand(object sender, GridViewCommandEventArgs e)
         {
             if (EditingTenderId <= 0) return;
+            if (String.Equals(e.CommandName, "ReplaceRequirementDocument", StringComparison.Ordinal))
+            {
+                ReplaceRequirementDocument(e);
+                return;
+            }
             if (String.Equals(e.CommandName, "UpdateRequirementDocumentCategory", StringComparison.Ordinal))
             {
                 UpdateRequirementDocumentCategory(e);
@@ -818,6 +939,7 @@ namespace DepartmentModule.Pages
                         filePath = Convert.ToString(path);
                     }
 
+                    RecordRequirementDocumentFileHistory(connection, transaction, documentId, "Deleted");
                     using (SqlCommand command = new SqlCommand(
                         "DELETE FROM dbo.TenderDocuments WHERE DocumentId=@DocumentId AND TenderId=@TenderId;",
                         connection, transaction))
@@ -828,10 +950,17 @@ namespace DepartmentModule.Pages
                             throw new InvalidOperationException("The selected document has changed; refresh the page and retry.");
                     }
                     QueueObsoleteAsset(filePath, obsoletePaths);
+                    ModuleDb.AddAudit(connection, transaction, CurrentUserId,
+                        "DeleteTenderDocument", "TenderDocument", documentId,
+                        EditingTenderId.ToString(CultureInfo.InvariantCulture), Request.UserHostAddress);
                     transaction.Commit();
                 }
-                DeleteSavedFiles(obsoletePaths);
+                bool oldFileRemoved = DeleteSavedFiles(obsoletePaths);
                 LoadRequirementDocuments();
+                if (oldFileRemoved)
+                    ShowSuccess("The selected document was deleted.");
+                else
+                    ShowError("The document record was deleted, but its stored file could not be removed. Contact support to clean up the unused file.");
             }
             catch (InvalidOperationException ex)
             {
@@ -842,6 +971,179 @@ namespace DepartmentModule.Pages
             {
                 Trace.Warn("DepartmentModule", "Tender requirement document could not be removed.", ex);
                 ShowError("The tender document could not be removed. Please retry or contact support.");
+            }
+        }
+
+        private void ReplaceRequirementDocument(GridViewCommandEventArgs e)
+        {
+            if (VerificationOnly || !CanManageRequirementDocuments)
+            {
+                ShowError("Your role cannot replace tender documents.");
+                return;
+            }
+
+            int documentId;
+            if (!Int32.TryParse(Convert.ToString(e.CommandArgument, CultureInfo.InvariantCulture),
+                NumberStyles.None, CultureInfo.InvariantCulture, out documentId) || documentId <= 0)
+            {
+                ShowError("The selected document could not be identified.");
+                return;
+            }
+
+            Control sourceControl = e.CommandSource as Control;
+            GridViewRow row = sourceControl == null ? null : sourceControl.NamingContainer as GridViewRow;
+            FileUpload replacementUpload = row == null
+                ? null : row.FindControl("RequirementDocumentReplacementUpload") as FileUpload;
+            HttpPostedFile replacement = replacementUpload == null ? null : replacementUpload.PostedFile;
+            string validationError;
+            if (!TryValidateRequirementDocumentUpload(replacement, out validationError))
+            {
+                ShowError(validationError);
+                return;
+            }
+
+            bool isDepartmentOfficer = !HasPermission("system.admin") &&
+                (String.Equals(CurrentRole, "DepartmentOfficer", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase));
+            List<string> savedPaths = new List<string>();
+            List<string> obsoletePaths = new List<string>();
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlTransaction transaction = connection.BeginTransaction(IsolationLevel.Serializable))
+                {
+                    string oldPath;
+                    string documentType;
+                    using (SqlCommand command = new SqlCommand(
+                        @"SELECT d.FilePath,d.DocumentType
+                          FROM dbo.TenderDocuments d WITH (UPDLOCK,HOLDLOCK)
+                          INNER JOIN dbo.Tender t WITH (UPDLOCK,HOLDLOCK) ON t.TenderId=d.TenderId
+                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND t.IsDeleted=0
+                            AND
+                            (
+                                (t.WorkflowVersion=1 AND
+                                 (@IsAdministrator=1 OR
+                                  (@IsDepartmentOfficer=1 AND t.CreatedBy=@UserId
+                                   AND t.CurrentStatus=N'Budget Revision Required'
+                                   AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)
+                                   AND (NOT EXISTS(SELECT 1 FROM dbo.Users scopeUser
+                                                   WHERE scopeUser.UserId=@UserId AND scopeUser.DepartmentId IS NOT NULL)
+                                        OR EXISTS(SELECT 1 FROM dbo.Users scopeUser
+                                                  WHERE scopeUser.UserId=@UserId
+                                                    AND scopeUser.DepartmentId=t.DepartmentId)))))
+                                OR
+                                (t.WorkflowVersion=2 AND @IsAdministrator=1 AND t.CurrentStatus=N'Draft'
+                                 AND @DepartmentId IS NOT NULL AND t.DepartmentId=@DepartmentId
+                                 AND EXISTS(SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                            INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                                            WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                              AND s.StageName=N'Final_JE_SubmitTender'))
+                            );", connection, transaction))
+                    {
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
+                        ModuleDb.AddParameter(command, "@IsAdministrator", SqlDbType.Bit, IsJeAdministrator);
+                        ModuleDb.AddParameter(command, "@IsDepartmentOfficer", SqlDbType.Bit, isDepartmentOfficer);
+                        ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                        ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
+                            CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                        using (SqlDataReader reader = command.ExecuteReader())
+                        {
+                            if (!reader.Read())
+                                throw new InvalidOperationException("This tender document cannot be replaced in your current role or workflow stage.");
+                            oldPath = reader["FilePath"] == DBNull.Value
+                                ? null : Convert.ToString(reader["FilePath"]);
+                            documentType = Convert.ToString(reader["DocumentType"]);
+                        }
+                    }
+
+                    string folderName = String.IsNullOrWhiteSpace(documentType)
+                        ? "requirements" : "requirements/" + documentType.Replace(" ", String.Empty);
+                    StoredTenderAsset newAsset = SaveTenderAsset(replacement, EditingTenderId,
+                        folderName, savedPaths);
+                    RecordRequirementDocumentFileHistory(connection, transaction, documentId, "Replaced");
+                    string documentName = Path.GetFileNameWithoutExtension(newAsset.OriginalName);
+                    if (String.IsNullOrWhiteSpace(documentName)) documentName = documentType;
+                    if (documentName.Length > 250) documentName = documentName.Substring(0, 250);
+                    using (SqlCommand command = new SqlCommand(
+                        @"UPDATE dbo.TenderDocuments
+                          SET DocumentName=@DocumentName,FileName=@FileName,FilePath=@FilePath,
+                              FileExtension=@FileExtension,FileSizeBytes=@FileSizeBytes,MimeType=@MimeType,
+                              UploadedBy=@UploadedBy,UploadedDate=SYSUTCDATETIME(),
+                              VerificationStatus=NULL,VerificationRemarks=NULL,VerifiedBy=NULL,VerifiedAtUtc=NULL
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                    {
+                        AddText(command, "@DocumentName", SqlDbType.NVarChar, documentName, 250);
+                        AddText(command, "@FileName", SqlDbType.NVarChar, newAsset.OriginalName, 260);
+                        AddText(command, "@FilePath", SqlDbType.NVarChar, newAsset.RelativePath, 400);
+                        AddText(command, "@FileExtension", SqlDbType.NVarChar, newAsset.Extension, 10);
+                        ModuleDb.AddParameter(command, "@FileSizeBytes", SqlDbType.BigInt, newAsset.SizeBytes);
+                        AddText(command, "@MimeType", SqlDbType.NVarChar, newAsset.MimeType, 100);
+                        ModuleDb.AddParameter(command, "@UploadedBy", SqlDbType.Int, CurrentUserId);
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
+                        if (command.ExecuteNonQuery() != 1)
+                            throw new InvalidOperationException("The selected document changed; refresh the page and retry.");
+                    }
+                    ModuleDb.AddAudit(connection, transaction, CurrentUserId,
+                        "ReplaceTenderDocument", "TenderDocument", documentId,
+                        EditingTenderId.ToString(CultureInfo.InvariantCulture), Request.UserHostAddress);
+                    QueueObsoleteAsset(oldPath, obsoletePaths);
+                    transaction.Commit();
+                }
+
+                bool oldFileRemoved = DeleteSavedFiles(obsoletePaths);
+                LoadRequirementDocuments();
+                if (oldFileRemoved)
+                    ShowSuccess("The selected document was replaced.");
+                else
+                    ShowError("The document was replaced, but its previous file could not be removed. Contact support to clean up the unused file.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                DeleteSavedFiles(savedPaths);
+                Trace.Warn("DepartmentModule", "Tender requirement document replacement was rejected.", ex);
+                ShowError(ex.Message);
+            }
+            catch (SqlException ex)
+            {
+                DeleteSavedFiles(savedPaths);
+                Trace.Warn("DepartmentModule", "Tender requirement document could not be replaced.", ex);
+                ShowError("The tender document could not be replaced. Please retry or contact support.");
+            }
+            catch (IOException ex)
+            {
+                DeleteSavedFiles(savedPaths);
+                Trace.Warn("DepartmentModule", "Replacement tender document could not be stored.", ex);
+                ShowError("The replacement document could not be stored. No changes were committed.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                DeleteSavedFiles(savedPaths);
+                Trace.Warn("DepartmentModule", "Replacement tender document storage access was denied.", ex);
+                ShowError("The replacement document could not be stored because file storage is unavailable.");
+            }
+        }
+
+        private void RecordRequirementDocumentFileHistory(SqlConnection connection,
+            SqlTransaction transaction, int documentId, string actionName)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"INSERT INTO dbo.TenderDocumentFileHistory
+                    (TenderId,DocumentId,DocumentType,DocumentName,FileName,FilePath,
+                     FileExtension,FileSizeBytes,MimeType,UploadedBy,UploadedDate,ActionName,ActionBy)
+                  SELECT d.TenderId,d.DocumentId,d.DocumentType,d.DocumentName,d.FileName,d.FilePath,
+                         d.FileExtension,d.FileSizeBytes,d.MimeType,d.UploadedBy,d.UploadedDate,
+                         @ActionName,@ActionBy
+                  FROM dbo.TenderDocuments d
+                  WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId;", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
+                AddText(command, "@ActionName", SqlDbType.NVarChar, actionName, 20);
+                ModuleDb.AddParameter(command, "@ActionBy", SqlDbType.Int, CurrentUserId);
+                if (command.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("The document history could not be recorded.");
             }
         }
 
@@ -1197,9 +1499,9 @@ namespace DepartmentModule.Pages
                 using (SqlCommand command = new SqlCommand(
                     @"INSERT INTO dbo.TenderDocuments
                         (TenderId,DocumentTypeId,DocumentType,DocumentName,Remarks,FileName,FilePath,
-                         FileExtension,FileSizeBytes,UploadedBy)
+                         FileExtension,FileSizeBytes,MimeType,UploadedBy)
                       VALUES(@TenderId,@DocumentTypeId,@DocumentType,@DocumentName,NULL,@FileName,@FilePath,
-                             @FileExtension,@FileSizeBytes,@UploadedBy);", connection, transaction))
+                             @FileExtension,@FileSizeBytes,@MimeType,@UploadedBy);", connection, transaction))
                 {
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
                     ModuleDb.AddParameter(command, "@DocumentTypeId", SqlDbType.Int, documentTypeId);
@@ -1209,6 +1511,7 @@ namespace DepartmentModule.Pages
                     AddText(command, "@FilePath", SqlDbType.NVarChar, document.RelativePath, 400);
                     AddText(command, "@FileExtension", SqlDbType.NVarChar, document.Extension, 10);
                     ModuleDb.AddParameter(command, "@FileSizeBytes", SqlDbType.BigInt, document.SizeBytes);
+                    AddText(command, "@MimeType", SqlDbType.NVarChar, document.MimeType, 100);
                     ModuleDb.AddParameter(command, "@UploadedBy", SqlDbType.Int, CurrentUserId);
                     if (command.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException("The " + input.TypeName + " document could not be saved.");
@@ -1281,6 +1584,7 @@ namespace DepartmentModule.Pages
         private void SaveGisLocation(SqlConnection connection, SqlTransaction transaction, int tenderId,
             decimal? latitude, decimal? longitude, string boundaryCoordinatesJson,
             decimal? selectedAreaSquareMeters, string boundaryLineJson,
+            string boundaryGeometryType, string boundaryGeometryJson,
             decimal? boundaryStartLatitude, decimal? boundaryStartLongitude,
             decimal? boundaryEndLatitude, decimal? boundaryEndLongitude,
             List<string> savedPaths, List<string> obsoletePaths)
@@ -1310,7 +1614,8 @@ namespace DepartmentModule.Pages
             string locationName = String.IsNullOrWhiteSpace(LocationNameText.Text)
                 ? null : LocationNameText.Text.Trim();
             if (!exists && !latitude.HasValue && !longitude.HasValue && locationName == null &&
-                boundaryCoordinatesJson == null && boundaryLineJson == null && image == null && !removeImage)
+                boundaryCoordinatesJson == null && boundaryLineJson == null &&
+                boundaryGeometryType == null && boundaryGeometryJson == null && image == null && !removeImage)
                 return;
 
             string query = exists
@@ -1318,6 +1623,8 @@ namespace DepartmentModule.Pages
                     SET Latitude=@Latitude,Longitude=@Longitude,LocationName=@LocationName,
                         BoundaryCoordinatesJson=@BoundaryCoordinatesJson,
                         SelectedAreaSquareMeters=@SelectedAreaSquareMeters,
+                        BoundaryGeometryType=@BoundaryGeometryType,
+                        BoundaryGeometryJson=@BoundaryGeometryJson,
                         BoundaryStartLatitude=@BoundaryStartLatitude,
                         BoundaryStartLongitude=@BoundaryStartLongitude,
                         BoundaryEndLatitude=@BoundaryEndLatitude,
@@ -1334,11 +1641,13 @@ namespace DepartmentModule.Pages
                     WHERE TenderId=@TenderId;"
                 : @"INSERT INTO dbo.TenderGisLocations
                     (TenderId,Latitude,Longitude,LocationName,BoundaryCoordinatesJson,SelectedAreaSquareMeters,
+                     BoundaryGeometryType,BoundaryGeometryJson,
                      BoundaryStartLatitude,BoundaryStartLongitude,BoundaryEndLatitude,BoundaryEndLongitude,
                      BoundaryLineGeometryJson,
                      ImageOriginalFileName,ImageStoredFileName,
                      ImagePath,ImageExtension,ImageSizeBytes,ImageUploadedBy,ImageUploadedAtUtc,ModifiedBy)
                     VALUES(@TenderId,@Latitude,@Longitude,@LocationName,@BoundaryCoordinatesJson,@SelectedAreaSquareMeters,
+                           @BoundaryGeometryType,@BoundaryGeometryJson,
                            @BoundaryStartLatitude,@BoundaryStartLongitude,@BoundaryEndLatitude,@BoundaryEndLongitude,
                            @BoundaryLineGeometryJson,
                            @OriginalFileName,@StoredFileName,
@@ -1352,6 +1661,8 @@ namespace DepartmentModule.Pages
                 AddText(command, "@BoundaryCoordinatesJson", SqlDbType.NVarChar, boundaryCoordinatesJson, -1);
                 ModuleDb.AddParameter(command, "@SelectedAreaSquareMeters", SqlDbType.Decimal,
                     selectedAreaSquareMeters);
+                AddText(command, "@BoundaryGeometryType", SqlDbType.NVarChar, boundaryGeometryType, 20);
+                AddText(command, "@BoundaryGeometryJson", SqlDbType.NVarChar, boundaryGeometryJson, -1);
                 ModuleDb.AddParameter(command, "@BoundaryStartLatitude", SqlDbType.Decimal, boundaryStartLatitude);
                 ModuleDb.AddParameter(command, "@BoundaryStartLongitude", SqlDbType.Decimal, boundaryStartLongitude);
                 ModuleDb.AddParameter(command, "@BoundaryEndLatitude", SqlDbType.Decimal, boundaryEndLatitude);
@@ -1517,7 +1828,7 @@ namespace DepartmentModule.Pages
         private StoredTenderAsset SaveTenderAsset(FileUpload upload, int tenderId, string folderName,
             List<string> savedPaths)
         {
-            string originalName = Path.GetFileName(upload.FileName);
+            string originalName = SafeTenderDocumentFileName(upload.FileName);
             string extension = Path.GetExtension(originalName).ToLowerInvariant();
             string storedName = Guid.NewGuid().ToString("N") + extension;
             string relativeFolder = "tenders/" + tenderId.ToString(CultureInfo.InvariantCulture) + "/" + folderName;
@@ -1532,6 +1843,7 @@ namespace DepartmentModule.Pages
                 OriginalName = originalName,
                 StoredName = storedName,
                 Extension = extension,
+                MimeType = GetRequirementMimeType(extension),
                 RelativePath = "Uploads/" + relativeFolder + "/" + storedName,
                 FullPath = fullPath,
                 SizeBytes = upload.PostedFile.ContentLength
@@ -1541,7 +1853,7 @@ namespace DepartmentModule.Pages
         private StoredTenderAsset SaveTenderAsset(HttpPostedFile upload, int tenderId, string folderName,
             List<string> savedPaths)
         {
-            string originalName = Path.GetFileName(upload.FileName);
+            string originalName = SafeTenderDocumentFileName(upload.FileName);
             string extension = Path.GetExtension(originalName).ToLowerInvariant();
             string storedName = Guid.NewGuid().ToString("N") + extension;
             string relativeFolder = "tenders/" + tenderId.ToString(CultureInfo.InvariantCulture) + "/" + folderName;
@@ -1556,6 +1868,7 @@ namespace DepartmentModule.Pages
                 OriginalName = originalName,
                 StoredName = storedName,
                 Extension = extension,
+                MimeType = GetRequirementMimeType(extension),
                 RelativePath = "Uploads/" + relativeFolder + "/" + storedName,
                 FullPath = fullPath,
                 SizeBytes = upload.ContentLength
@@ -1637,7 +1950,7 @@ namespace DepartmentModule.Pages
             }
             string boundaryCoordinatesJson;
             decimal? selectedAreaSquareMeters, boundaryLatitude, boundaryLongitude;
-            string boundaryLineJson;
+            string boundaryLineJson, boundaryGeometryType, boundaryGeometryJson;
             decimal? boundaryStartLatitude, boundaryStartLongitude, boundaryEndLatitude, boundaryEndLongitude;
             if (LocationNameText.Text.Length > 300 ||
                 !TryParseGisBoundary(GisBoundaryCoordinates.Value,
@@ -1647,13 +1960,37 @@ namespace DepartmentModule.Pages
                     out boundaryStartLatitude, out boundaryStartLongitude,
                     out boundaryEndLatitude, out boundaryEndLongitude))
             {
-                ShowError("Draw a valid site boundary with at least three non-overlapping points.");
+                ShowError("GIS geometry is incomplete or invalid. Select exactly two distinct endpoints for a line or at least three points for a valid polygon.");
+                return;
+            }
+            boundaryGeometryType = (GisBoundaryGeometryType.Value ?? String.Empty).Trim();
+            if (boundaryGeometryType.Length == 0)
+                boundaryGeometryType = boundaryCoordinatesJson != null
+                    ? "Polygon" : boundaryLineJson != null ? "LineString" : String.Empty;
+            if (boundaryGeometryType == "Polygon" && boundaryCoordinatesJson != null)
+                boundaryGeometryJson = "{\"type\":\"Polygon\",\"coordinates\":[" +
+                    boundaryCoordinatesJson + "]}";
+            else if (boundaryGeometryType == "LineString" && boundaryLineJson != null)
+                boundaryGeometryJson = boundaryLineJson;
+            else if (boundaryGeometryType.Length == 0 &&
+                boundaryCoordinatesJson == null && boundaryLineJson == null)
+                boundaryGeometryJson = null;
+            else
+            {
+                ShowError("GIS selection is incomplete or invalid. Finish a two-point line or a closed polygon with at least three distinct points.");
                 return;
             }
             if (boundaryCoordinatesJson != null)
             {
                 latitude = boundaryLatitude;
                 longitude = boundaryLongitude;
+            }
+            else if (boundaryGeometryType == "LineString" &&
+                boundaryStartLatitude.HasValue && boundaryEndLatitude.HasValue &&
+                boundaryStartLongitude.HasValue && boundaryEndLongitude.HasValue)
+            {
+                latitude = Decimal.Round((boundaryStartLatitude.Value + boundaryEndLatitude.Value) / 2m, 6);
+                longitude = Decimal.Round((boundaryStartLongitude.Value + boundaryEndLongitude.Value) / 2m, 6);
             }
             else if (!TryParseCoordinate(LatitudeText.Text, -90m, 90m, out latitude) ||
                 !TryParseCoordinate(LongitudeText.Text, -180m, 180m, out longitude) ||
@@ -1710,7 +2047,8 @@ namespace DepartmentModule.Pages
                 UpdateDraftTender(amount,
                     hasSanctionDate ? (DateTime?)sanctionDate.Date : null,
                     latitude, longitude, boundaryCoordinatesJson, selectedAreaSquareMeters,
-                    boundaryLineJson, boundaryStartLatitude, boundaryStartLongitude,
+                    boundaryLineJson, boundaryGeometryType, boundaryGeometryJson,
+                    boundaryStartLatitude, boundaryStartLongitude,
                     boundaryEndLatitude, boundaryEndLongitude, submitToWorkflow);
                 return;
             }
@@ -1795,6 +2133,7 @@ namespace DepartmentModule.Pages
                         tenderId, savedPaths);
                     SaveGisLocation(connection, transaction, tenderId, latitude, longitude,
                         boundaryCoordinatesJson, selectedAreaSquareMeters, boundaryLineJson,
+                        boundaryGeometryType, boundaryGeometryJson,
                         boundaryStartLatitude, boundaryStartLongitude, boundaryEndLatitude, boundaryEndLongitude,
                         savedPaths, obsoletePaths);
                     SaveAdministrativeApprovals(connection, transaction, tenderId, savedPaths, obsoletePaths);
@@ -2272,6 +2611,7 @@ namespace DepartmentModule.Pages
             DateTime? sanctionDate,
             decimal? latitude, decimal? longitude, string boundaryCoordinatesJson,
             decimal? selectedAreaSquareMeters, string boundaryLineJson,
+            string boundaryGeometryType, string boundaryGeometryJson,
             decimal? boundaryStartLatitude, decimal? boundaryStartLongitude,
             decimal? boundaryEndLatitude, decimal? boundaryEndLongitude, bool submitToWorkflow)
         {
@@ -2390,6 +2730,7 @@ namespace DepartmentModule.Pages
                         EditingTenderId, savedPaths);
                     SaveGisLocation(connection, transaction, EditingTenderId, latitude, longitude,
                         boundaryCoordinatesJson, selectedAreaSquareMeters, boundaryLineJson,
+                        boundaryGeometryType, boundaryGeometryJson,
                         boundaryStartLatitude, boundaryStartLongitude, boundaryEndLatitude, boundaryEndLongitude,
                         savedPaths, obsoletePaths);
                     SaveAdministrativeApprovals(connection, transaction, EditingTenderId, savedPaths, obsoletePaths);
@@ -2458,9 +2799,10 @@ namespace DepartmentModule.Pages
             }
         }
 
-        private void DeleteSavedFiles(List<string> paths)
+        private bool DeleteSavedFiles(List<string> paths)
         {
-            if (paths == null) return;
+            if (paths == null) return true;
+            bool allDeleted = true;
             foreach (string path in paths)
             {
                 if (!File.Exists(path)) continue;
@@ -2470,18 +2812,27 @@ namespace DepartmentModule.Pages
                 }
                 catch (IOException ex)
                 {
+                    allDeleted = false;
                     Trace.Warn("DepartmentModule", "A tender form file could not be removed from storage.", ex);
                 }
                 catch (UnauthorizedAccessException ex)
                 {
+                    allDeleted = false;
                     Trace.Warn("DepartmentModule", "Tender form file cleanup was denied.", ex);
                 }
             }
+            return allDeleted;
         }
 
         private void ShowError(string text)
         {
             Message.Text = "<div class=\"message\">" + HttpUtility.HtmlEncode(text) + "</div>";
+        }
+
+        private void ShowSuccess(string text)
+        {
+            Message.Text = "<div class=\"message success\" role=\"status\">" +
+                HttpUtility.HtmlEncode(text) + "</div>";
         }
 
         private sealed class ApprovalInput
@@ -2523,6 +2874,7 @@ namespace DepartmentModule.Pages
             public string OriginalName { get; set; }
             public string StoredName { get; set; }
             public string Extension { get; set; }
+            public string MimeType { get; set; }
             public string RelativePath { get; set; }
             public string FullPath { get; set; }
             public long SizeBytes { get; set; }

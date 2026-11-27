@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Web;
 using System.Web.UI.WebControls;
 using DepartmentModule.Helpers;
@@ -1134,15 +1135,16 @@ namespace DepartmentModule.Pages
             long fileSize = 0;
             if (hasFile)
             {
-                originalName = Path.GetFileName(DocumentFile.FileName);
+                originalName = SafeTenderDocumentFileName(DocumentFile.FileName);
                 extension = Path.GetExtension(originalName).ToLowerInvariant();
                 string[] allowed = { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png" };
                 fileSize = DocumentFile.PostedFile.ContentLength;
                 if (originalName.Length == 0 || originalName.Length > 260 || fileSize <= 0 ||
-                    fileSize > 20 * 1024 * 1024 || Array.IndexOf(allowed, extension) < 0 ||
+                    fileSize > 10 * 1024 * 1024 || Array.IndexOf(allowed, extension) < 0 ||
+                    !IsAllowedTenderDocumentMimeType(DocumentFile.PostedFile.ContentType, extension) ||
                     !TenderLifecycleFiles.HasAllowedContentSignature(DocumentFile.PostedFile.InputStream, extension))
                 {
-                    ShowError("Choose a valid PDF, Office document, JPEG, or PNG no larger than 20 MB.");
+                    ShowError("Choose a valid PDF, Office document, JPEG, or PNG no larger than 10 MB.");
                     return;
                 }
             }
@@ -1212,6 +1214,7 @@ namespace DepartmentModule.Pages
                                   FileName=CASE WHEN @HasFile=1 THEN @FileName ELSE FileName END,
                                   FilePath=CASE WHEN @HasFile=1 THEN @FilePath ELSE FilePath END,
                                   FileExtension=CASE WHEN @HasFile=1 THEN @FileExtension ELSE FileExtension END,
+                                  MimeType=CASE WHEN @HasFile=1 THEN @MimeType ELSE MimeType END,
                                   FileSizeBytes=CASE WHEN @HasFile=1 THEN @FileSizeBytes ELSE FileSizeBytes END
                               WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
                         {
@@ -1234,10 +1237,10 @@ namespace DepartmentModule.Pages
                         using (SqlCommand command = new SqlCommand(
                             @"INSERT INTO dbo.TenderDocuments
                                 (TenderId,DocumentTypeId,DocumentType,DocumentName,Remarks,FileName,FilePath,
-                                 FileExtension,FileSizeBytes,UploadedBy)
+                                 FileExtension,FileSizeBytes,MimeType,UploadedBy)
                               VALUES
                                 (@TenderId,@DocumentTypeId,@DocumentType,@DocumentName,@Remarks,@FileName,@FilePath,
-                                 @FileExtension,@FileSizeBytes,@UploadedBy);
+                                 @FileExtension,@FileSizeBytes,@MimeType,@UploadedBy);
                               SELECT CAST(SCOPE_IDENTITY() AS int);", connection, transaction))
                         {
                             AddTenderDocumentParameters(command, documentTypeId, originalName, savedRelativePath,
@@ -1418,7 +1421,52 @@ namespace DepartmentModule.Pages
             AddText(command, "@FilePath", SqlDbType.NVarChar, relativePath, 400);
             AddText(command, "@FileExtension", SqlDbType.NVarChar, extension, 10);
             ModuleDb.AddParameter(command, "@FileSizeBytes", SqlDbType.BigInt, hasFile ? (object)fileSize : null);
+            AddText(command, "@MimeType", SqlDbType.NVarChar,
+                GetTenderDocumentMimeType(extension), 100);
             ModuleDb.AddParameter(command, "@HasFile", SqlDbType.Bit, hasFile);
+        }
+
+        private static string GetTenderDocumentMimeType(string extension)
+        {
+            switch ((extension ?? String.Empty).ToLowerInvariant())
+            {
+                case ".pdf": return "application/pdf";
+                case ".doc": return "application/msword";
+                case ".docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                case ".xls": return "application/vnd.ms-excel";
+                case ".xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".png": return "image/png";
+                default: return "application/octet-stream";
+            }
+        }
+
+        private static bool IsAllowedTenderDocumentMimeType(string contentType, string extension)
+        {
+            if (String.IsNullOrWhiteSpace(contentType) ||
+                String.Equals(contentType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            string normalizedType = contentType.Split(';')[0].Trim();
+            string expectedType = GetTenderDocumentMimeType(extension);
+            return String.Equals(normalizedType, expectedType, StringComparison.OrdinalIgnoreCase) ||
+                ((extension == ".docx" || extension == ".xlsx") &&
+                 String.Equals(normalizedType, "application/zip", StringComparison.OrdinalIgnoreCase)) ||
+                ((extension == ".jpg" || extension == ".jpeg") &&
+                 String.Equals(normalizedType, "image/pjpeg", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string SafeTenderDocumentFileName(string fileName)
+        {
+            string normalized = (fileName ?? String.Empty).Replace('\\', '/');
+            string safeName = Path.GetFileName(normalized);
+            char[] invalidCharacters = Path.GetInvalidFileNameChars();
+            StringBuilder result = new StringBuilder(safeName.Length);
+            foreach (char character in safeName)
+                if (!Char.IsControl(character) && Array.IndexOf(invalidCharacters, character) < 0)
+                    result.Append(character);
+            return result.ToString().Trim();
         }
 
         private bool DeleteStoredTenderDocument(string storedPath)

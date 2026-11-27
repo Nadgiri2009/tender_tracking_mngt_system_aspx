@@ -150,6 +150,7 @@
     <Content Include="Migrations\20261125_TenderGisArea.sql" />
     <Content Include="Migrations\20261125_TenderDocumentManagement.sql" />
     <Content Include="Migrations\20261126_TenderRequirementDocuments.sql" />
+    <Content Include="Migrations\20261127_TenderDocumentAndGeometryEnhancements.sql" />
     <Content Include="Migrations\20261127_TenderWizardFiveSteps.sql" />
     <Content Include="Migrations\20261128_TenderGisLinearBoundary.sql" />
     <Content Include="Migrations\20261129_TenderImportantDateHistory.sql" />

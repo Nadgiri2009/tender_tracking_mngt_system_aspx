@@ -303,7 +303,7 @@
                 <asp:Panel ID="DocumentFilePanel" runat="server" CssClass="field document-file-field">
                     <asp:Label runat="server" AssociatedControlID="DocumentFile">Document file</asp:Label>
                     <asp:FileUpload ID="DocumentFile" runat="server" />
-                    <span class="help">PDF, Office documents, JPEG, or PNG; maximum 20 MB.</span>
+                    <span class="help">PDF, Office documents, JPEG, or PNG; maximum 10 MB per document.</span>
                 </asp:Panel>
             </div>
             <div class="field">

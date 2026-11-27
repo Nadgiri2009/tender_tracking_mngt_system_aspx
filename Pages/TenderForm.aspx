@@ -23,6 +23,7 @@
         <asp:HiddenField ID="DocumentVerificationOnlyFlag" runat="server" />
         <asp:HiddenField ID="GisBoundaryCoordinates" runat="server" />
         <asp:HiddenField ID="GisBoundaryLineCoordinates" runat="server" />
+        <asp:HiddenField ID="GisBoundaryGeometryType" runat="server" />
         <p id="TenderWizardNavigationMessage" class="message" role="alert" aria-live="assertive" hidden="hidden"></p>
         <div class="tender-wizard-panel" data-wizard-step="1">
         <h2>Basic tender information</h2>
@@ -57,12 +58,15 @@
             <label for="RequirementDocumentsUpload">Tender documents</label>
             <asp:FileUpload ID="RequirementDocumentsUpload" runat="server" ClientIDMode="Static" AllowMultiple="true"
                 CssClass="requirement-document-input visually-hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" />
-            <label for="RequirementDocumentsUpload" class="button secondary document-upload-trigger requirement-document-upload-trigger">
+            <div id="RequirementDocumentDropZone" class="requirement-document-drop-zone">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v4h16v-4" /></svg>
-                <span>Select tender documents</span>
-            </label>
+                <strong>Drop documents here</strong>
+                <span>or</span>
+                <label for="RequirementDocumentsUpload" class="button secondary document-upload-trigger requirement-document-upload-trigger">Browse files</label>
+            </div>
             <asp:HiddenField ID="RequirementDocumentCategories" runat="server" />
-            <p class="help">Select multiple files, then assign each to Scope of Work, Technical Requirements, or Financial Requirements. PDF, Office documents, JPEG or PNG; maximum 20 MB per file.</p>
+            <p class="help">Add documents one at a time or select several. Assign each to Scope of Work, Technical Requirements, or Financial Requirements. PDF, Office documents, JPEG or PNG; maximum 10 MB per file.</p>
+            <p id="RequirementDocumentSelectionStatus" class="upload-status" role="status" aria-live="polite" hidden="hidden"></p>
             <div id="RequirementDocumentSelectionList" class="requirement-document-list" aria-live="polite" aria-relevant="additions removals"></div>
             <asp:Panel ID="UploadedRequirementDocumentsPanel" runat="server" Visible="false">
             <h3 class="requirement-document-list-heading">Uploaded tender documents</h3>
@@ -78,6 +82,14 @@
                         <ItemTemplate><%# Container.DataItemIndex + 1 %></ItemTemplate>
                     </asp:TemplateField>
                     <asp:BoundField DataField="DocumentName" HeaderText="Document name" />
+                    <asp:BoundField DataField="FileTypeDisplay" HeaderText="File type" />
+                    <asp:BoundField DataField="FileSizeDisplay" HeaderText="File size" />
+                    <asp:TemplateField HeaderText="Upload status">
+                        <ItemTemplate>
+                            <span class="upload-status is-ready"><%# Eval("UploadStatus") %></span>
+                            <small class="requirement-document-upload-date"><%# Eval("UploadDateDisplay") %></small>
+                        </ItemTemplate>
+                    </asp:TemplateField>
                     <asp:TemplateField HeaderText="Category">
                         <ItemTemplate>
                             <asp:Literal runat="server" Text='<%# Eval("RequirementCategory") %>'
@@ -92,8 +104,6 @@
                             </asp:DropDownList>
                         </ItemTemplate>
                     </asp:TemplateField>
-                    <asp:BoundField DataField="FileExtension" HeaderText="File type" />
-                    <asp:BoundField DataField="UploadStatus" HeaderText="Uploaded" />
                     <asp:TemplateField HeaderText="Actions">
                         <ItemStyle CssClass="document-actions-cell" />
                         <ItemTemplate>
@@ -118,6 +128,24 @@
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m0 0 5-5m-5 5-5-5M4 16v4h16v-4" /></svg>
                             <span class="sr-only">Download</span>
                         </asp:HyperLink>
+                        <asp:FileUpload ID="RequirementDocumentReplacementUpload" runat="server"
+                            CssClass="requirement-document-replacement visually-hidden"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" />
+                        <asp:Panel runat="server" CssClass="requirement-document-reupload-panel"
+                        Visible='<%# CanManageRequirementDocuments %>'>
+                        <button type="button" class="icon-action requirement-document-reupload"
+                            onclick="this.closest('tr').querySelector('.requirement-document-replacement').click();"
+                            title="Re-upload this document" aria-label='<%# "Re-upload " + Eval("DocumentName") %>'>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4m-4 5a8 8 0 0 0 14.9 3M20 20v-4h-4" /></svg>
+                            <span class="sr-only">Re-upload</span>
+                        </button>
+                        <asp:LinkButton ID="ReplaceRequirementDocumentButton" runat="server"
+                            CssClass="requirement-document-replace-submit sr-only"
+                            CommandName="ReplaceRequirementDocument"
+                            CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false">
+                            Replace selected document
+                        </asp:LinkButton>
+                        </asp:Panel>
                         <asp:LinkButton runat="server" CssClass="icon-action danger" CommandName="RemoveRequirementDocument"
                             CommandArgument='<%# Eval("DocumentId") %>' CausesValidation="false"
                             OnClientClick="return confirm('Remove this tender document?');"
@@ -132,6 +160,9 @@
                 </Columns>
             </asp:GridView>
             </div>
+            </asp:Panel>
+            <asp:Panel ID="RequirementDocumentsEmptyState" runat="server" CssClass="requirement-document-empty">
+                No tender documents uploaded yet. Add one or more files above; previously uploaded documents are kept when you add more.
             </asp:Panel>
         </div>
         <asp:Panel ID="LegacyRequirementDocumentUploadsPanel" runat="server" Visible="false">
@@ -338,7 +369,7 @@
 
         <div class="tender-wizard-panel" data-wizard-step="3" hidden="hidden">
             <h2>GIS location details</h2>
-            <p class="muted">Draw the site boundary with your cursor. The portal calculates its area and centroid, then captures a map image of the selected location. You can upload a site image to replace the map image.</p>
+            <p class="muted">Choose two-point selection for a line or polygon selection for an area. The map stores points in order and calculates line distance or polygon area.</p>
             <div class="row">
                 <div class="field"><label for="LatitudeText">Latitude</label><asp:TextBox ID="LatitudeText" runat="server" TextMode="Number" step="0.000001" min="-90" max="90" />
                     <span class="help">From -90 to 90</span></div>
@@ -346,25 +377,35 @@
                     <span class="help">From -180 to 180</span></div>
                 <div class="field"><label for="LocationNameText">Location name / site address</label><asp:TextBox ID="LocationNameText" runat="server" MaxLength="300" /></div>
             </div>
-            <div class="gis-map-tools" role="group" aria-label="GIS boundary drawing controls">
-                <button type="button" class="button" onclick="startGisAreaDrawing();" aria-label="Start drawing the GIS boundary">Draw boundary</button>
+            <div class="gis-geometry-mode field">
+                <label for="GisGeometryMode">Selection mode</label>
+                <select id="GisGeometryMode">
+                    <option value="Polygon">Polygon selection (3 or more points)</option>
+                    <option value="LineString">Two-point selection (A to B)</option>
+                </select>
+            </div>
+            <div class="gis-map-tools" role="group" aria-label="GIS geometry selection controls">
+                <button type="button" class="button" onclick="startGisAreaDrawing();" aria-label="Start selecting GIS points">Start selection</button>
                 <button type="button" class="button secondary" onclick="undoGisAreaPoint();" aria-label="Undo the last boundary point">Undo point</button>
                 <button type="button" class="button secondary" onclick="finishGisAreaDrawing();" aria-label="Finish the GIS boundary">Finish selection</button>
-                <button type="button" class="button secondary" onclick="clearGisArea();" aria-label="Clear the GIS boundary">Clear boundary</button>
+                <button type="button" class="button secondary" onclick="clearGisSelection();" aria-label="Clear all GIS points">Clear all points</button>
             </div>
-            <section class="gis-linear-boundary" aria-label="Two-point boundary selection">
-                <h3>Select Boundary Using Two Points (A to B)</h3>
-                <p class="help">This line tool is independent of the polygon boundary. Choose A or B, then click the map to set or reselect that point.</p>
+            <section id="GisLinePointTools" class="gis-linear-boundary" aria-label="Two-point boundary selection" hidden="hidden">
+                <h3>Two-point line selection</h3>
+                <p class="help">Choose A or B, then click the map to set or reselect that endpoint.</p>
                 <div class="gis-map-tools">
                     <button type="button" class="button secondary" onclick="selectGisLinePoint('A');">Select Starting Point (A)</button>
                     <button type="button" class="button secondary" onclick="selectGisLinePoint('B');">Select Ending Point (B)</button>
-                    <button type="button" class="button secondary" onclick="clearGisLineBoundary();">Clear A–B selection</button>
+                    <button type="button" class="button secondary" onclick="removeGisLinePoint('A');">Remove A</button>
+                    <button type="button" class="button secondary" onclick="removeGisLinePoint('B');">Remove B</button>
                 </div>
                 <p>Starting point A: <span id="GisLineStartSummary">Not selected</span></p>
                 <p>Ending point B: <span id="GisLineEndSummary">Not selected</span></p>
+                <p id="GisLineDistanceSummary" class="gis-area-summary" role="status" aria-live="polite" hidden="hidden"></p>
             </section>
             <div id="TenderLocationMap" class="tender-location-map" role="application" aria-label="Map location picker"></div>
-            <p id="TenderMapStatus" class="help" role="status" aria-live="polite">Select Draw boundary, click at least three points around the site, then choose Finish selection.</p>
+            <p id="TenderMapStatus" class="help" role="status" aria-live="polite">Choose a mode, start selection, then click the map to add ordered points.</p>
+            <ol id="GisBoundaryPointList" class="gis-boundary-point-list" aria-label="Selected GIS points"></ol>
             <p id="TenderGisAreaSummary" class="gis-area-summary" role="status" aria-live="polite" hidden="hidden"></p>
             <div class="field gis-image-field">
                 <label for="GisImageUpload">GIS / site image</label>
@@ -477,7 +518,16 @@
             var requirementUpload = wizard.querySelector("[id$='RequirementDocumentsUpload']");
             var requirementCategoriesField = wizard.querySelector("[id$='RequirementDocumentCategories']");
             var requirementSelectionList = document.getElementById("RequirementDocumentSelectionList");
+            var requirementDropZone = document.getElementById("RequirementDocumentDropZone");
+            var requirementSelectionStatus = document.getElementById("RequirementDocumentSelectionStatus");
             var selectedRequirementFiles = [];
+
+            function showRequirementSelectionStatus(message, isError) {
+                if (!requirementSelectionStatus) return;
+                requirementSelectionStatus.textContent = message || "";
+                requirementSelectionStatus.hidden = !message;
+                requirementSelectionStatus.classList.toggle("is-error", !!isError);
+            }
 
             function requirementDocumentCategories() {
                 var categories = [];
@@ -485,7 +535,12 @@
                 if (grid) {
                     Array.prototype.forEach.call(grid.querySelectorAll("tr"), function (row) {
                         var cells = row.querySelectorAll("td");
-                        if (cells.length > 1) categories.push(cells[1].textContent.trim());
+                        if (cells.length > 5) {
+                            var categoryCell = cells[5];
+                            var categorySelect = categoryCell.querySelector("select");
+                            categories.push(categorySelect
+                                ? categorySelect.value : categoryCell.textContent.trim());
+                        }
                     });
                 }
                 selectedRequirementFiles.forEach(function (item) {
@@ -502,6 +557,59 @@
                 }) && selectedRequirementFiles.every(function (item) { return !!item.category; });
             }
 
+            function requirementFileExtension(file) {
+                var name = file && file.name ? file.name : "";
+                var separator = name.lastIndexOf(".");
+                return separator < 0 ? "" : name.substring(separator).toLowerCase();
+            }
+
+            function requirementFileType(file) {
+                var extension = requirementFileExtension(file);
+                if (extension === ".pdf") return "PDF";
+                if (extension === ".doc" || extension === ".docx") return "Word";
+                if (extension === ".xls" || extension === ".xlsx") return "Excel";
+                if (extension === ".jpg" || extension === ".jpeg") return "JPEG";
+                if (extension === ".png") return "PNG";
+                return extension.replace(".", "").toUpperCase();
+            }
+
+            function requirementFileSize(bytes) {
+                if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + " KB";
+                return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+            }
+
+            function requirementFileValidationError(file) {
+                var allowed = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png"];
+                var extension = requirementFileExtension(file);
+                if (!file || file.size <= 0) return " is empty.";
+                if (file.size > 10 * 1024 * 1024) return " exceeds the 10 MB per-file limit.";
+                if (allowed.indexOf(extension) < 0) return " has an unsupported file extension.";
+                if (file.type && file.type !== "application/octet-stream") {
+                    var mimeTypes = {
+                        ".pdf": ["application/pdf"],
+                        ".doc": ["application/msword"],
+                        ".docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip"],
+                        ".xls": ["application/vnd.ms-excel"],
+                        ".xlsx": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip"],
+                        ".jpg": ["image/jpeg", "image/pjpeg"],
+                        ".jpeg": ["image/jpeg", "image/pjpeg"],
+                        ".png": ["image/png"]
+                    };
+                    if (mimeTypes[extension].indexOf(file.type.toLowerCase()) < 0)
+                        return " has a MIME type that does not match its extension.";
+                }
+                return "";
+            }
+
+            function syncRequirementUploadInput() {
+                if (!requirementUpload) return;
+                var transfer = new DataTransfer();
+                selectedRequirementFiles.forEach(function (entry) {
+                    transfer.items.add(entry.file);
+                });
+                requirementUpload.files = transfer.files;
+            }
+
             function renderRequirementUploads() {
                 if (requirementCategoriesField)
                     requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
@@ -513,21 +621,28 @@
 
                 var table = document.createElement("table");
                 table.className = "requirement-document-selection-grid";
-                table.innerHTML = "<thead><tr><th scope='col'>Sr. No.</th><th scope='col'>Selected file</th>" +
-                    "<th scope='col'>Category</th><th scope='col'>Status</th><th scope='col'>Actions</th></tr></thead>";
+                table.innerHTML = "<thead><tr><th scope='col'>Sr. No.</th><th scope='col'>Document name</th>" +
+                    "<th scope='col'>File type</th><th scope='col'>File size</th><th scope='col'>Category</th>" +
+                    "<th scope='col'>Upload status</th><th scope='col'>Actions</th></tr></thead>";
                 var body = document.createElement("tbody");
                 selectedRequirementFiles.forEach(function (item, index) {
                     var row = document.createElement("tr");
-                    var name = document.createElement("span");
                     var serial = document.createElement("td");
                     serial.className = "grid-serial-cell";
                     serial.textContent = String(index + 1);
                     row.appendChild(serial);
                     var fileCell = document.createElement("td");
+                    var name = document.createElement("span");
                     name.textContent = item.file.name;
                     name.className = "requirement-document-selection-name";
                     fileCell.appendChild(name);
                     row.appendChild(fileCell);
+                    var typeCell = document.createElement("td");
+                    typeCell.textContent = requirementFileType(item.file);
+                    row.appendChild(typeCell);
+                    var sizeCell = document.createElement("td");
+                    sizeCell.textContent = requirementFileSize(item.file.size);
+                    row.appendChild(sizeCell);
                     var category = document.createElement("select");
                     category.setAttribute("aria-label", "Category for " + item.file.name);
                     category.className = "requirement-document-category";
@@ -553,7 +668,7 @@
                     row.appendChild(categoryCell);
                     var status = document.createElement("span");
                     status.className = "upload-status is-ready";
-                    status.textContent = "Ready to upload";
+                    status.textContent = item.status || "Ready to upload";
                     var statusCell = document.createElement("td");
                     statusCell.appendChild(status);
                     row.appendChild(statusCell);
@@ -570,14 +685,10 @@
                     remove.innerHTML = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5' /></svg>" +
                             "<span class='sr-only'>Remove</span>";
                     remove.addEventListener("click", function () {
-                            var updatedFiles = new DataTransfer();
-                            selectedRequirementFiles.forEach(function (entry, fileIndex) {
-                                if (fileIndex !== index) updatedFiles.items.add(entry.file);
-                            });
-                            requirementUpload.files = updatedFiles.files;
-                            selectedRequirementFiles.splice(index, 1);
-                            renderRequirementUploads();
-                            render();
+                        selectedRequirementFiles.splice(index, 1);
+                        syncRequirementUploadInput();
+                        renderRequirementUploads();
+                        render();
                     });
                     actions.appendChild(remove);
                     actionsCell.appendChild(actions);
@@ -592,12 +703,60 @@
                 requirementSelectionList.appendChild(table);
             }
 
-            if (requirementUpload) requirementUpload.addEventListener("change", function () {
-                selectedRequirementFiles = Array.prototype.map.call(requirementUpload.files || [], function (file) {
-                    return { file: file, category: "" };
+            function addRequirementFiles(files) {
+                var errors = [];
+                Array.prototype.forEach.call(files || [], function (file) {
+                    var error = requirementFileValidationError(file);
+                    if (error) {
+                        errors.push(file.name + error);
+                        return;
+                    }
+                    selectedRequirementFiles.push({ file: file, category: "", status: "Ready to upload" });
                 });
+                syncRequirementUploadInput();
                 renderRequirementUploads();
                 render();
+                showRequirementSelectionStatus(errors.join(" "), errors.length > 0);
+            }
+
+            if (requirementUpload) requirementUpload.addEventListener("change", function () {
+                var newlySelectedFiles = Array.prototype.slice.call(requirementUpload.files || []);
+                requirementUpload.value = "";
+                addRequirementFiles(newlySelectedFiles);
+            });
+            if (requirementDropZone && requirementUpload) {
+                ["dragenter", "dragover"].forEach(function (eventName) {
+                    requirementDropZone.addEventListener(eventName, function (event) {
+                        event.preventDefault();
+                        requirementDropZone.classList.add("is-dragging");
+                    });
+                });
+                ["dragleave", "drop"].forEach(function (eventName) {
+                    requirementDropZone.addEventListener(eventName, function (event) {
+                        event.preventDefault();
+                        requirementDropZone.classList.remove("is-dragging");
+                    });
+                });
+                requirementDropZone.addEventListener("drop", function (event) {
+                    addRequirementFiles(event.dataTransfer && event.dataTransfer.files);
+                });
+            }
+
+            var replacementUploads = wizard.querySelectorAll(".requirement-document-replacement");
+            Array.prototype.forEach.call(replacementUploads, function (input) {
+                input.addEventListener("change", function () {
+                    var file = input.files && input.files[0];
+                    if (!file) return;
+                    var error = requirementFileValidationError(file);
+                    if (error) {
+                        window.alert(file.name + error);
+                        input.value = "";
+                        return;
+                    }
+                    var row = input.closest("tr");
+                    var submit = row && row.querySelector(".requirement-document-replace-submit");
+                    if (submit) submit.click();
+                });
             });
 
             function stepIsComplete(step) {
@@ -618,9 +777,37 @@
                 }
                 if (step === "2") return true;
                 if (step === "3") {
+                    if (geometryTypeField && geometryTypeField.value === "Incomplete") return false;
                     if (lineBoundaryField && lineBoundaryField.value) {
                         try {
-                            if (JSON.parse(lineBoundaryField.value).type !== "LineString") return false;
+                            var lineGeometry = JSON.parse(lineBoundaryField.value);
+                            if (lineGeometry.type !== "LineString" ||
+                                !Array.isArray(lineGeometry.coordinates) ||
+                                lineGeometry.coordinates.length !== 2 ||
+                                !Array.isArray(lineGeometry.coordinates[0]) ||
+                                !Array.isArray(lineGeometry.coordinates[1]) ||
+                                lineGeometry.coordinates[0].length !== 2 ||
+                                lineGeometry.coordinates[1].length !== 2 ||
+                                lineGeometry.coordinates[0][0] === lineGeometry.coordinates[1][0] &&
+                                lineGeometry.coordinates[0][1] === lineGeometry.coordinates[1][1]) return false;
+                        } catch (error) {
+                            return false;
+                        }
+                    }
+                    if (boundaryField && boundaryField.value) {
+                        try {
+                            var polygonCoordinates = JSON.parse(boundaryField.value);
+                            if (!Array.isArray(polygonCoordinates) || polygonCoordinates.length < 4 ||
+                                JSON.stringify(polygonCoordinates[0]) !==
+                                JSON.stringify(polygonCoordinates[polygonCoordinates.length - 1]))
+                                return false;
+                            var distinctPolygonPoints = {};
+                            polygonCoordinates.slice(0, -1).forEach(function (coordinate) {
+                                if (Array.isArray(coordinate) && coordinate.length === 2 &&
+                                    isFinite(Number(coordinate[0])) && isFinite(Number(coordinate[1])))
+                                    distinctPolygonPoints[coordinate[0] + "," + coordinate[1]] = true;
+                            });
+                            if (Object.keys(distinctPolygonPoints).length < 3) return false;
                         } catch (error) {
                             return false;
                         }
@@ -656,7 +843,7 @@
                             var message = steps[i] === "1"
                                 ? "Complete the required basic tender information before continuing."
                                 : (steps[i] === "3"
-                                    ? "Enter both valid coordinates, or leave both blank, before continuing."
+                                    ? "Complete the GIS geometry or enter both valid coordinates, or leave both blank, before continuing."
                                     : "Complete the current step before continuing.");
                             setNavigationMessage(message);
                             current = steps[i];
@@ -775,6 +962,8 @@
                     uploadStatus.hidden = false;
                     uploadStatus.textContent = "Saving the tender and selected documents. Please wait.";
                 }
+                selectedRequirementFiles.forEach(function (item) { item.status = "Uploading…"; });
+                renderRequirementUploads();
                 return true;
             };
             wizard.addEventListener("input", function () {
@@ -818,6 +1007,10 @@
             var longitude = wizard.querySelector("[id$='LongitudeText']");
             var boundaryField = wizard.querySelector("input[id$='GisBoundaryCoordinates']");
             var lineBoundaryField = wizard.querySelector("input[id$='GisBoundaryLineCoordinates']");
+            var geometryTypeField = wizard.querySelector("input[id$='GisBoundaryGeometryType']");
+            var geometryModeSelect = document.getElementById("GisGeometryMode");
+            var linePointTools = document.getElementById("GisLinePointTools");
+            var boundaryPointList = document.getElementById("GisBoundaryPointList");
             var imageInput = wizard.querySelector("[id$='GisImageUpload']");
             var preview = document.getElementById("GisImagePreview");
             var mapStatus = document.getElementById("TenderMapStatus");
@@ -838,6 +1031,18 @@
             var attachingGeneratedGisMapImage = false;
             var gisImageCaptureSequence = 0;
             var gisImagePreviewUrl = null;
+            if (geometryTypeField && geometryModeSelect) {
+                if (geometryTypeField.value === "LineString")
+                    geometryModeSelect.value = "LineString";
+                geometryModeSelect.addEventListener("change", function () {
+                    if (linePointTools) linePointTools.hidden = geometryModeSelect.value !== "LineString";
+                    if (mapStatus) mapStatus.textContent = geometryModeSelect.value === "LineString"
+                        ? "Choose A and B, then click the map once for each endpoint."
+                        : "Start selection, click at least three points around the site, then finish the polygon.";
+                });
+                if (linePointTools)
+                    linePointTools.hidden = geometryModeSelect.value !== "LineString";
+            }
             if (imageInput && preview) imageInput.addEventListener("change", function () {
                 var file = imageInput.files && imageInput.files[0];
                 if (!file) return;
@@ -881,23 +1086,50 @@
 
                 function renderDraftBoundary() {
                     if (draftLayer) tenderMap.removeLayer(draftLayer);
+                    draftLayer = null;
                     if (draftBoundary.length >= 3)
                         draftLayer = L.polygon(draftBoundary, { color: "#7c3aed", dashArray: "6 6" }).addTo(tenderMap);
                     else if (draftBoundary.length >= 2)
                         draftLayer = L.polyline(draftBoundary, { color: "#7c3aed", dashArray: "6 6" }).addTo(tenderMap);
                     else if (draftBoundary.length === 1)
                         draftLayer = L.circleMarker(draftBoundary[0], { radius: 6, color: "#7c3aed" }).addTo(tenderMap);
+                    renderBoundaryPointList(draftBoundary, true);
                     if (mapStatus && drawingArea)
-                        mapStatus.textContent = draftBoundary.length + " boundary point(s) selected. Add at least three, then finish.";
+                        mapStatus.textContent = draftBoundary.length + " point(s) selected. Add at least three, then finish.";
                 }
 
                 function setBoundaryLayer(points, fitMap) {
                     if (boundaryLayer) tenderMap.removeLayer(boundaryLayer);
-                    boundaryLayer = points.length >= 3
-                        ? L.polygon(points, { color: "#166534", fillOpacity: 0.18 }).addTo(tenderMap)
-                        : null;
+                    boundaryLayer = null;
+                    if (points.length >= 3)
+                        boundaryLayer = L.polygon(points, { color: "#166534", fillOpacity: 0.18 }).addTo(tenderMap);
+                    else if (points.length === 2)
+                        boundaryLayer = L.polyline(points, { color: "#0f766e", weight: 5 }).addTo(tenderMap);
                     if (fitMap && boundaryLayer)
                         tenderMap.fitBounds(boundaryLayer.getBounds(), { padding: [24, 24], animate: false });
+                }
+
+                function renderBoundaryPointList(points, draft) {
+                    if (!boundaryPointList) return;
+                    boundaryPointList.textContent = "";
+                    points.forEach(function (point, index) {
+                        var item = document.createElement("li");
+                        var coordinate = document.createElement("span");
+                        coordinate.textContent = (index + 1) + ". " + point[0].toFixed(6) +
+                            ", " + point[1].toFixed(6);
+                        item.appendChild(coordinate);
+                        var remove = document.createElement("button");
+                        remove.type = "button";
+                        remove.className = "icon-action danger";
+                        remove.title = "Remove point " + (index + 1);
+                        remove.setAttribute("aria-label", "Remove point " + (index + 1));
+                        remove.innerHTML = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5' /></svg>";
+                        remove.addEventListener("click", function () {
+                            removeGisAreaPoint(index, draft);
+                        });
+                        item.appendChild(remove);
+                        boundaryPointList.appendChild(item);
+                    });
                 }
 
                 function renderGisLine() {
@@ -921,6 +1153,29 @@
                         ? lineStartPoint[0].toFixed(6) + ", " + lineStartPoint[1].toFixed(6) : "Not selected";
                     if (endSummary) endSummary.textContent = lineEndPoint
                         ? lineEndPoint[0].toFixed(6) + ", " + lineEndPoint[1].toFixed(6) : "Not selected";
+                    var distanceSummary = document.getElementById("GisLineDistanceSummary");
+                    if (distanceSummary) {
+                        if (lineStartPoint && lineEndPoint) {
+                            var earthRadius = 6371008.8;
+                            var radians = Math.PI / 180;
+                            var deltaLatitude = (lineEndPoint[0] - lineStartPoint[0]) * radians;
+                            var deltaLongitude = (lineEndPoint[1] - lineStartPoint[1]) * radians;
+                            var startLatitudeRadians = lineStartPoint[0] * radians;
+                            var endLatitudeRadians = lineEndPoint[0] * radians;
+                            var haversine = Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2) +
+                                Math.cos(startLatitudeRadians) * Math.cos(endLatitudeRadians) *
+                                Math.sin(deltaLongitude / 2) * Math.sin(deltaLongitude / 2);
+                            haversine = Math.max(0, Math.min(1, haversine));
+                            var distance = 2 * earthRadius * Math.atan2(
+                                Math.sqrt(haversine), Math.sqrt(1 - haversine));
+                            distanceSummary.textContent = "A–B distance: " + distance.toLocaleString(undefined,
+                                { maximumFractionDigits: 1 }) + " m";
+                            distanceSummary.hidden = false;
+                        } else {
+                            distanceSummary.textContent = "";
+                            distanceSummary.hidden = true;
+                        }
+                    }
                     if (lineBoundaryField) {
                         if (!lineStartPoint && !lineEndPoint) lineBoundaryField.value = "";
                         else {
@@ -933,6 +1188,38 @@
                             });
                         }
                     }
+                    if (geometryTypeField) {
+                        if (lineStartPoint && lineEndPoint) geometryTypeField.value = "LineString";
+                        else if (lineStartPoint || lineEndPoint) geometryTypeField.value = "Incomplete";
+                        else geometryTypeField.value = boundaryField && boundaryField.value ? "Polygon" : "";
+                    }
+                    if (lineStartPoint && lineEndPoint) {
+                        if (boundaryField) boundaryField.value = "";
+                        selectedBoundary = [];
+                        boundaryAreaSquareMeters = null;
+                        if (boundaryLayer) tenderMap.removeLayer(boundaryLayer);
+                        boundaryLayer = null;
+                        if (areaSummary) {
+                            areaSummary.textContent = "";
+                            areaSummary.hidden = true;
+                        }
+                        latitude.readOnly = false;
+                        longitude.readOnly = false;
+                        latitude.value = ((lineStartPoint[0] + lineEndPoint[0]) / 2).toFixed(6);
+                        longitude.value = ((lineStartPoint[1] + lineEndPoint[1]) / 2).toFixed(6);
+                        var lineCenter = [
+                            (lineStartPoint[0] + lineEndPoint[0]) / 2,
+                            (lineStartPoint[1] + lineEndPoint[1]) / 2
+                        ];
+                        if (centroidMarker) centroidMarker.setLatLng(lineCenter);
+                        else centroidMarker = L.marker(lineCenter).addTo(tenderMap);
+                        renderBoundaryPointList([], false);
+                    } else if (lineStartPoint || lineEndPoint) {
+                        if (centroidMarker) tenderMap.removeLayer(centroidMarker);
+                        centroidMarker = null;
+                        latitude.value = "";
+                        longitude.value = "";
+                    }
                 }
 
                 window.selectGisLinePoint = function (pointName) {
@@ -940,8 +1227,39 @@
                         if (mapStatus) mapStatus.textContent = "Finish or clear the in-progress polygon before selecting a line point.";
                         return;
                     }
+                    if (geometryModeSelect) geometryModeSelect.value = "LineString";
+                    if (linePointTools) linePointTools.hidden = false;
                     lineSelectionTarget = pointName === "B" ? "B" : "A";
+                    if (boundaryField && boundaryField.value) {
+                        selectedBoundary = [];
+                        boundaryField.value = "";
+                        boundaryAreaSquareMeters = null;
+                        if (boundaryLayer) tenderMap.removeLayer(boundaryLayer);
+                        boundaryLayer = null;
+                        if (areaSummary) {
+                            areaSummary.textContent = "";
+                            areaSummary.hidden = true;
+                        }
+                        latitude.readOnly = false;
+                        longitude.readOnly = false;
+                        latitude.value = "";
+                        longitude.value = "";
+                        if (centroidMarker) tenderMap.removeLayer(centroidMarker);
+                        centroidMarker = null;
+                        renderBoundaryPointList([], false);
+                    }
+                    if (geometryTypeField) geometryTypeField.value = "Incomplete";
                     if (mapStatus) mapStatus.textContent = "Click the map to set or reselect point " + lineSelectionTarget + ".";
+                    render();
+                };
+                window.removeGisLinePoint = function (pointName) {
+                    if (pointName === "B") lineEndPoint = null;
+                    else lineStartPoint = null;
+                    lineSelectionTarget = "";
+                    renderGisLine();
+                    if (mapStatus) mapStatus.textContent = lineStartPoint || lineEndPoint
+                        ? "One point remains. Select the missing endpoint to complete the line."
+                        : "Both line points were removed.";
                     render();
                 };
                 window.clearGisLineBoundary = function () {
@@ -949,7 +1267,7 @@
                     lineStartPoint = null;
                     lineEndPoint = null;
                     renderGisLine();
-                    if (mapStatus) mapStatus.textContent = "Two-point boundary selection cleared. The polygon boundary is unchanged.";
+                    if (mapStatus) mapStatus.textContent = "Two-point line selection cleared.";
                     render();
                 };
 
@@ -1172,6 +1490,11 @@
                     if (boundaryField) boundaryField.value = JSON.stringify(points.map(function (point) {
                         return [Number(point[1].toFixed(6)), Number(point[0].toFixed(6))];
                     }).concat([[Number(points[0][1].toFixed(6)), Number(points[0][0].toFixed(6))]]));
+                    if (lineBoundaryField) lineBoundaryField.value = "";
+                    lineStartPoint = null;
+                    lineEndPoint = null;
+                    lineSelectionTarget = "";
+                    if (geometryTypeField) geometryTypeField.value = "Polygon";
                     selectedBoundary = points.slice();
                     boundaryAreaSquareMeters = result.squareMeters;
                     latitude.value = result.latitude.toFixed(6);
@@ -1181,6 +1504,8 @@
                     if (centroidMarker) centroidMarker.setLatLng([result.latitude, result.longitude]);
                     else centroidMarker = L.marker([result.latitude, result.longitude]).addTo(tenderMap);
                     setBoundaryLayer(selectedBoundary, true);
+                    renderBoundaryPointList(selectedBoundary, false);
+                    renderGisLine();
                     if (areaSummary) {
                         areaSummary.textContent = "Selected area: " + formatArea(boundaryAreaSquareMeters) +
                             " · centroid " + latitude.value + ", " + longitude.value;
@@ -1197,22 +1522,67 @@
                         if (mapStatus) mapStatus.textContent = "Map selection is unavailable; verify the map connection and retry.";
                         return;
                     }
+                    if (geometryModeSelect && geometryModeSelect.value === "LineString") {
+                        window.selectGisLinePoint("A");
+                        return;
+                    }
                     lineSelectionTarget = "";
+                    lineStartPoint = null;
+                    lineEndPoint = null;
+                    if (lineBoundaryField) lineBoundaryField.value = "";
+                    renderGisLine();
                     drawingArea = true;
                     draftBoundary = [];
+                    selectedBoundary = [];
+                    boundaryAreaSquareMeters = null;
+                    if (boundaryField) boundaryField.value = "";
+                    if (geometryTypeField) geometryTypeField.value = "Incomplete";
+                    if (boundaryLayer) tenderMap.removeLayer(boundaryLayer);
+                    boundaryLayer = null;
+                    if (areaSummary) {
+                        areaSummary.textContent = "";
+                        areaSummary.hidden = true;
+                    }
+                    latitude.readOnly = false;
+                    longitude.readOnly = false;
+                    latitude.value = "";
+                    longitude.value = "";
+                    if (centroidMarker) tenderMap.removeLayer(centroidMarker);
+                    centroidMarker = null;
                     if (draftLayer) tenderMap.removeLayer(draftLayer);
                     draftLayer = null;
                     tenderMap.doubleClickZoom.disable();
+                    renderBoundaryPointList([], true);
+                    if (linePointTools) linePointTools.hidden = true;
                     if (mapStatus) mapStatus.textContent = "Click at least three points around the site boundary.";
                 };
                 window.undoGisAreaPoint = function () {
-                    if (!drawingArea || !draftBoundary.length) return;
-                    draftBoundary.pop();
-                    renderDraftBoundary();
+                    if (drawingArea && draftBoundary.length) {
+                        draftBoundary.pop();
+                        renderDraftBoundary();
+                        return;
+                    }
+                    if (selectedBoundary.length) {
+                        removeGisAreaPoint(selectedBoundary.length - 1, false);
+                        return;
+                    }
+                    if (lineEndPoint) window.removeGisLinePoint("B");
+                    else if (lineStartPoint) window.removeGisLinePoint("A");
                 };
                 window.finishGisAreaDrawing = function () {
+                    if (geometryModeSelect && geometryModeSelect.value === "LineString") {
+                        if (!lineStartPoint || !lineEndPoint) {
+                            if (mapStatus) mapStatus.textContent = "Select both A and B to finish the two-point line.";
+                            if (geometryTypeField) geometryTypeField.value = "Incomplete";
+                            return;
+                        }
+                        if (mapStatus) mapStatus.textContent = "Two-point LineString selected. Distance is shown below.";
+                        if (geometryTypeField) geometryTypeField.value = "LineString";
+                        render();
+                        return;
+                    }
                     if (!drawingArea) {
-                        if (mapStatus) mapStatus.textContent = "Choose Draw boundary before selecting points.";
+                        if (mapStatus) mapStatus.textContent = "Choose Start selection before selecting polygon points.";
                         return;
                     }
                     if (draftBoundary.length < 3) {
@@ -1227,8 +1597,9 @@
                     tenderMap.doubleClickZoom.enable();
                     applyBoundary(finished);
                 };
-                window.clearGisArea = function () {
-                    if (!window.confirm("Clear the selected GIS boundary and its calculated area?")) return;
+                function clearGisArea(skipConfirmation) {
+                    if (!skipConfirmation &&
+                        !window.confirm("Clear the selected GIS boundary and its calculated area?")) return;
                     gisImageCaptureSequence++;
                     var removedGeneratedMapImage = generatedGisMapImage;
                     drawingArea = false;
@@ -1240,6 +1611,8 @@
                     if (boundaryLayer) tenderMap.removeLayer(boundaryLayer);
                     boundaryLayer = null;
                     if (boundaryField) boundaryField.value = "";
+                    if (geometryTypeField) geometryTypeField.value = "";
+                    renderBoundaryPointList([], false);
                     if (generatedGisMapImage) {
                         imageInput.value = "";
                         generatedGisMapImage = false;
@@ -1259,11 +1632,79 @@
                         : "Boundary cleared. Coordinates may be entered manually or a new boundary drawn.";
                     tenderMap.doubleClickZoom.enable();
                     render();
+                }
+                window.clearGisArea = function () { clearGisArea(false); };
+                window.clearGisSelection = function () {
+                    if (!window.confirm("Clear all selected GIS points and geometry?")) return;
+                    clearGisArea(true);
+                    lineStartPoint = null;
+                    lineEndPoint = null;
+                    lineSelectionTarget = "";
+                    if (lineBoundaryField) lineBoundaryField.value = "";
+                    if (geometryTypeField) geometryTypeField.value = "";
+                    if (centroidMarker) tenderMap.removeLayer(centroidMarker);
+                    centroidMarker = null;
+                    renderGisLine();
+                    if (latitude) latitude.value = "";
+                    if (longitude) longitude.value = "";
+                    if (mapStatus) mapStatus.textContent = "All selected points and geometry were cleared.";
+                    render();
                 };
+                function removeGisAreaPoint(index, draft) {
+                    var points = draft ? draftBoundary : selectedBoundary;
+                    if (index < 0 || index >= points.length) return;
+                    points.splice(index, 1);
+                    if (draft) {
+                        renderDraftBoundary();
+                        if (geometryTypeField) geometryTypeField.value = "Incomplete";
+                        return;
+                    }
+                    if (points.length >= 3) {
+                        applyBoundary(points);
+                        return;
+                    }
+                    if (boundaryLayer) tenderMap.removeLayer(boundaryLayer);
+                    boundaryLayer = null;
+                    if (areaSummary) {
+                        areaSummary.textContent = "";
+                        areaSummary.hidden = true;
+                    }
+                    boundaryAreaSquareMeters = null;
+                    latitude.readOnly = false;
+                    longitude.readOnly = false;
+                    if (boundaryField) boundaryField.value = "";
+                    if (points.length === 2) {
+                        lineStartPoint = points[0].slice();
+                        lineEndPoint = points[1].slice();
+                        if (geometryModeSelect) geometryModeSelect.value = "LineString";
+                        if (linePointTools) linePointTools.hidden = false;
+                        renderGisLine();
+                        if (mapStatus) mapStatus.textContent = "Two points remain; the geometry is now a LineString.";
+                    } else if (points.length === 1) {
+                        lineStartPoint = points[0].slice();
+                        lineEndPoint = null;
+                        if (geometryModeSelect) geometryModeSelect.value = "LineString";
+                        if (linePointTools) linePointTools.hidden = false;
+                        renderGisLine();
+                        if (mapStatus) mapStatus.textContent = "One point remains. Add the second endpoint to complete the line.";
+                    } else {
+                        lineStartPoint = null;
+                        lineEndPoint = null;
+                        renderGisLine();
+                        if (boundaryPointList) boundaryPointList.textContent = "";
+                        if (mapStatus) mapStatus.textContent = "No geometry selected.";
+                    }
+                    render();
+                }
 
                 tenderMap.on("click", function (event) {
                     if (drawingArea) {
+                        if (draftBoundary.length >= 500) {
+                            if (mapStatus) mapStatus.textContent = "A polygon can contain up to 500 selected points.";
+                            return;
+                        }
                         draftBoundary.push([event.latlng.lat, event.latlng.lng]);
+                        if (geometryTypeField) geometryTypeField.value = "Incomplete";
                         renderDraftBoundary();
                         return;
                     }
@@ -1304,13 +1745,17 @@
                                         " · centroid " + latitude.value + ", " + longitude.value;
                                     areaSummary.hidden = false;
                                 }
+                                if (geometryTypeField && !geometryTypeField.value)
+                                    geometryTypeField.value = "Polygon";
+                                renderBoundaryPointList(selectedBoundary, false);
                             }
                         }
                     } catch (error) {
                         if (mapStatus) mapStatus.textContent = "The saved boundary could not be displayed; redraw it to replace.";
                     }
                 }
-                if (lineBoundaryField && lineBoundaryField.value) {
+                if (lineBoundaryField && lineBoundaryField.value &&
+                    (!geometryTypeField || !geometryTypeField.value || geometryTypeField.value === "LineString")) {
                     try {
                         var savedLine = JSON.parse(lineBoundaryField.value);
                         if (savedLine && savedLine.type === "LineString" &&
@@ -1319,6 +1764,8 @@
                             lineEndPoint = [Number(savedLine.coordinates[1][1]), Number(savedLine.coordinates[1][0])];
                             if (lineStartPoint.every(isFinite) && lineEndPoint.every(isFinite)) {
                                 renderGisLine();
+                                if (geometryModeSelect) geometryModeSelect.value = "LineString";
+                                if (linePointTools) linePointTools.hidden = false;
                                 if (!hasLocation)
                                     tenderMap.fitBounds(L.latLngBounds([lineStartPoint, lineEndPoint]),
                                         { padding: [24, 24], animate: false });
@@ -1459,7 +1906,7 @@
                     !!(latitude && latitude.value && longitude && longitude.value);
             }
             var groupMarkup = groups.map(function (group) {
-                var rows = group.fields.map(fieldRow);
+                var rows = (group.fields || []).map(fieldRow);
                 (group.files || []).forEach(function (entry) { rows.push(fileRow(entry)); });
                 if (group.documents) rows.push(documentRows());
                 if (group.number === 5) {
