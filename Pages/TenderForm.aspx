@@ -64,6 +64,7 @@
             <asp:HiddenField ID="RequirementDocumentCategories" runat="server" />
             <p class="help">Select multiple files, then assign each to Scope of Work, Technical Requirements, or Financial Requirements. PDF, Office documents, JPEG or PNG; maximum 20 MB per file.</p>
             <div id="RequirementDocumentSelectionList" class="requirement-document-list" aria-live="polite" aria-relevant="additions removals"></div>
+            <asp:Panel ID="UploadedRequirementDocumentsPanel" runat="server" Visible="false">
             <h3 class="requirement-document-list-heading">Uploaded tender documents</h3>
             <div class="table-wrap requirement-document-table-wrap">
             <asp:GridView ID="RequirementDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
@@ -131,6 +132,7 @@
                 </Columns>
             </asp:GridView>
             </div>
+            </asp:Panel>
         </div>
         <asp:Panel ID="LegacyRequirementDocumentUploadsPanel" runat="server" Visible="false">
         <div class="field requirement-document" hidden="hidden">
@@ -612,8 +614,7 @@
                         method && method.value &&
                         category && category.value && year && year.value && amount &&
                         amount.value !== "" && Number(amount.value) > 0 &&
-                        (!department || !department.offsetParent || department.value) &&
-                        requirementDocumentsAreComplete();
+                        (!department || !department.offsetParent || department.value);
                 }
                 if (step === "2") return true;
                 if (step === "3") {
@@ -731,7 +732,13 @@
                 previous.disabled = atFirst;
                 next.hidden = atLast;
                 var review = document.getElementById("TenderReviewSummary");
-                if (review) renderTenderReviewSummary(review);
+                if (review) renderTenderReviewSummary(review, {
+                    form: wizard,
+                    selectedRequirementFiles: selectedRequirementFiles,
+                    requirementDocumentsAreComplete: requirementDocumentsAreComplete,
+                    boundaryField: boundaryField,
+                    lineBoundaryField: lineBoundaryField
+                });
                 if (current === "3" && tenderMap)
                     window.setTimeout(function () { tenderMap.invalidateSize(); }, 0);
             }
@@ -1337,7 +1344,8 @@
             }
         }());
 
-        function renderTenderReviewSummary(container) {
+        function renderTenderReviewSummary(container, state) {
+            var form = state.form;
             var groups = [
                 { number: 1, title: "Tender Details", step: "1", fields: [
                     ["Project title", "TitleText"], ["Description", "DescriptionText"],
@@ -1408,7 +1416,7 @@
             }
             function documentRows() {
                 var rows = [];
-                var grid = wizard.querySelector("[id$='RequirementDocumentsGrid']");
+                var grid = form.querySelector("[id$='RequirementDocumentsGrid']");
                 if (grid) Array.prototype.forEach.call(grid.querySelectorAll("tr"), function (row) {
                     var cells = row.querySelectorAll("td");
                     if (cells.length >= 4)
@@ -1418,7 +1426,7 @@
                                 cells[2].textContent.trim() + " · " + cells[3].textContent.trim()) +
                             "</dd></div>");
                 });
-                selectedRequirementFiles.forEach(function (item) {
+                state.selectedRequirementFiles.forEach(function (item) {
                     rows.push("<div class='tender-review-row'><dt>" +
                         escapeTenderReviewText(item.category || "Uncategorized") + "</dt><dd>" +
                         escapeTenderReviewText(item.file.name + " · Ready to upload") + "</dd></div>");
@@ -1428,26 +1436,26 @@
             }
             function groupComplete(group) {
                 if (group.number === 1)
-                    return wizard.querySelector("[id$='TitleText']").value.trim().length > 0 &&
-                        !!wizard.querySelector("[id$='TenderTypeSelect']").value &&
-                        !!wizard.querySelector("[id$='TenderCategorySelect']").value;
+                    return form.querySelector("[id$='TitleText']").value.trim().length > 0 &&
+                        !!form.querySelector("[id$='TenderTypeSelect']").value &&
+                        !!form.querySelector("[id$='TenderCategorySelect']").value;
                 if (group.number === 2) {
                     var names = ["AdministrativeApprovalCheck", "TechnicalSanctionApprovalCheck",
                         "GeneralBodyApprovalCheck", "DpdcApprovalCheck"];
                     return names.every(function (name) {
-                        var input = wizard.querySelector("[id$='" + name + "']");
+                        var input = form.querySelector("[id$='" + name + "']");
                         return input && input.checked;
                     });
                 }
                 if (group.number === 3)
-                    return !!wizard.querySelector("[id$='FinancialYearSelect']").value &&
-                        Number(wizard.querySelector("[id$='AmountText']").value) > 0;
-                if (group.number === 4) return requirementDocumentsAreComplete();
-                var latitude = wizard.querySelector("[id$='LatitudeText']");
-                var longitude = wizard.querySelector("[id$='LongitudeText']");
-                return !!wizard.querySelector("[id$='LocationNameText']").value.trim() ||
-                    !!(boundaryField && boundaryField.value) ||
-                    !!(lineBoundaryField && lineBoundaryField.value) ||
+                    return !!form.querySelector("[id$='FinancialYearSelect']").value &&
+                        Number(form.querySelector("[id$='AmountText']").value) > 0;
+                if (group.number === 4) return state.requirementDocumentsAreComplete();
+                var latitude = form.querySelector("[id$='LatitudeText']");
+                var longitude = form.querySelector("[id$='LongitudeText']");
+                return !!form.querySelector("[id$='LocationNameText']").value.trim() ||
+                    !!(state.boundaryField && state.boundaryField.value) ||
+                    !!(state.lineBoundaryField && state.lineBoundaryField.value) ||
                     !!(latitude && latitude.value && longitude && longitude.value);
             }
             var groupMarkup = groups.map(function (group) {

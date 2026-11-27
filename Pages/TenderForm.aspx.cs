@@ -42,7 +42,7 @@ namespace DepartmentModule.Pages
         protected Button CreateButton, SubmitTenderButton;
         protected Panel DepartmentPanel, FinancialYearMissingPanel,
             ApprovalsWizardPanel, TechnicalDocumentVerificationPanel,
-            ExistingGisImageActions, DepartmentReadOnlyPanel;
+            ExistingGisImageActions, DepartmentReadOnlyPanel, UploadedRequirementDocumentsPanel;
         protected RequiredFieldValidator DepartmentRequired, FinancialYearRequired;
         protected CheckBox AdministrativeApprovalCheck, TechnicalSanctionApprovalCheck,
             GeneralBodyApprovalCheck, DpdcApprovalCheck;
@@ -394,6 +394,7 @@ namespace DepartmentModule.Pages
                 DataTable documents = new DataTable();
                 using (SqlDataAdapter adapter = new SqlDataAdapter(command))
                     adapter.Fill(documents);
+                UploadedRequirementDocumentsPanel.Visible = documents.Rows.Count > 0;
                 RequirementDocumentsGrid.DataSource = documents;
                 RequirementDocumentsGrid.DataBind();
             }
