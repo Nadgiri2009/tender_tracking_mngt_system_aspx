@@ -103,8 +103,11 @@ namespace DepartmentModule.Helpers
         public const string PublicTenderVisibility =
             @"t.IsDeleted=0
               AND t.CurrentStatus NOT LIKE N'%cancel%'
-              AND s.PublicationStartUtc<=SYSUTCDATETIME()
-              AND (" + PublicationRecorded + ")";
+              AND ((s.TenderId IS NOT NULL AND s.PublicationStartUtc<=SYSUTCDATETIME())
+                   OR (s.TenderId IS NULL AND
+                       (COALESCE(t.PublicationDate,t.SubmissionStartDate) IS NULL
+                        OR COALESCE(t.PublicationDate,t.SubmissionStartDate)<=SYSUTCDATETIME())))
+              AND (t.CurrentStatus=N'Tender Published' OR (" + PublicationRecorded + "))";
 
         public const string Approved =
                 "(t.CurrentStatus LIKE N'%Approved%' OR t.CurrentStatus IN " +

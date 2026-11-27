@@ -146,7 +146,23 @@
         </nav>
     </section>
     <section class="card" id="announcements">
-        <div class="page-heading"><div><h2>Notices and Announcements</h2><p class="muted">Official updates from the Project & tender system.</p></div></div>
+        <div class="page-heading"><div><h2>Notices and Announcements</h2><p class="muted">General portal reminders and official updates.</p></div></div>
+        <p class="muted home-notice-intro">General portal reminders. Tender-specific notices, schedules, and corrigenda take precedence.</p>
+        <div class="home-notice-list" aria-label="Tender portal reminders">
+            <article class="home-notice">
+                <span class="home-notice-index" aria-hidden="true">01</span>
+                <div><h3>Review the complete tender notice</h3><p>Check the tender notice, schedules, BOQ, eligibility requirements, and any corrigenda before preparing an application.</p></div>
+            </article>
+            <article class="home-notice">
+                <span class="home-notice-index" aria-hidden="true">02</span>
+                <div><h3>Allow time before the closing deadline</h3><p>Complete registration and document uploads ahead of the published closing date and time.</p></div>
+            </article>
+            <article class="home-notice">
+                <span class="home-notice-index" aria-hidden="true">03</span>
+                <div><h3>Keep contractor details current</h3><p>Review your contractor profile and supporting documents before applying for a tender.</p></div>
+            </article>
+        </div>
+        <h3 class="home-announcements-heading">Official announcements</h3>
         <div class="table-wrap">
         <asp:GridView ID="AnnouncementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="There are no current announcements.">
             <Columns>

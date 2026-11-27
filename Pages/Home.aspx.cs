@@ -16,7 +16,7 @@ namespace DepartmentModule.Pages
         private const string PublicTenderVisibility = TenderStatusBuckets.PublicTenderVisibility;
         private const string PublicTenderSource =
             " FROM dbo.Tender t INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId " +
-            "INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId WHERE " + PublicTenderVisibility;
+            "LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId WHERE " + PublicTenderVisibility;
         private const string PublicTenderFilter =
             PublicTenderSource +
             @" AND (@Search=N'' OR t.TenderNumber LIKE @SearchPattern OR t.Title LIKE @SearchPattern)
@@ -25,7 +25,7 @@ namespace DepartmentModule.Pages
                AND (@TenderType=N'' OR t.TenderType=@TenderType)
                AND (@TenderStatus=N'' OR
                     (@TenderStatus=N'open' AND t.CurrentStatus=N'Tender Published'
-                     AND s.CurrentClosingUtc>SYSUTCDATETIME()
+                     AND COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline)>SYSUTCDATETIME()
                      AND (t.SubmissionStartDate IS NULL OR t.SubmissionStartDate<=SYSUTCDATETIME())
                      AND (t.SubmissionDeadline IS NULL OR t.SubmissionDeadline>=SYSUTCDATETIME())) OR
                     (@TenderStatus=N'completed' AND " + TenderStatusBuckets.Awarded + @"))";
@@ -80,13 +80,20 @@ namespace DepartmentModule.Pages
                         @"SELECT
                             (SELECT COUNT(*) FROM dbo.Tender t WHERE t.IsDeleted=0) AS TotalTenders,
                             (SELECT COUNT(*) FROM dbo.Tender t
-                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Published + @") AS PublishedTenders,
-                            (SELECT COUNT(*) FROM dbo.Tender t
-                             INNER JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Active + @") AS ActiveTenders,
+                             LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
+                             WHERE " + PublicTenderVisibility + @") AS PublishedTenders,
                             (SELECT COUNT(*) FROM dbo.Tender t
                              LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
-                             WHERE t.IsDeleted=0 AND " + TenderStatusBuckets.Closed + @") AS ClosedTenders,
+                             WHERE " + PublicTenderVisibility + @"
+                               AND t.CurrentStatus=N'Tender Published'
+                               AND COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline)>SYSUTCDATETIME()
+                               AND (t.SubmissionStartDate IS NULL OR t.SubmissionStartDate<=SYSUTCDATETIME())
+                               AND (t.SubmissionDeadline IS NULL OR t.SubmissionDeadline>=SYSUTCDATETIME())) AS ActiveTenders,
+                            (SELECT COUNT(*) FROM dbo.Tender t
+                             LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
+                             WHERE " + PublicTenderVisibility + @"
+                               AND (t.CurrentStatus LIKE N'%closed%'
+                                    OR COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline)<=SYSUTCDATETIME())) AS ClosedTenders,
                             (SELECT COUNT(*) FROM dbo.Contractors) AS TotalContractors;",
                         connection))
                     using (SqlDataReader reader = command.ExecuteReader())
@@ -234,10 +241,10 @@ namespace DepartmentModule.Pages
                          COALESCE((SELECT MIN(ah.ApprovalDate)
                                    FROM dbo.ApprovalHistory ah
                                    WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published'),
-                                  t.PublicationDate,s.PublicationStartUtc) AS PublicationDate,
-                         s.CurrentClosingUtc,t.CurrentStatus,
+                                  t.PublicationDate,s.PublicationStartUtc,t.SubmissionStartDate) AS PublicationDate,
+                         COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline) AS CurrentClosingUtc,t.CurrentStatus,
                          CASE WHEN t.CurrentStatus=N'Tender Published'
-                                   AND s.CurrentClosingUtc>SYSUTCDATETIME()
+                                   AND COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline)>SYSUTCDATETIME()
                                    AND (t.SubmissionStartDate IS NULL OR t.SubmissionStartDate<=SYSUTCDATETIME())
                                    AND (t.SubmissionDeadline IS NULL OR t.SubmissionDeadline>=SYSUTCDATETIME())
                               THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsApplicationOpen" + PublicTenderFilter + @"
@@ -332,7 +339,7 @@ namespace DepartmentModule.Pages
             switch (SortBySelect.SelectedValue)
             {
                 case "closing":
-                    return "s.CurrentClosingUtc ASC,t.TenderId DESC";
+                    return "COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline) ASC,t.TenderId DESC";
                 case "amount":
                     return "t.EstimatedAmount DESC,t.TenderId DESC";
                 case "title":
@@ -340,7 +347,7 @@ namespace DepartmentModule.Pages
                 default:
                     return "COALESCE(t.PublicationDate,(SELECT MIN(ah.ApprovalDate) " +
                         "FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId " +
-                        "AND ah.NewStatus=N'Tender Published'),s.PublicationStartUtc) DESC,t.TenderId DESC";
+                        "AND ah.NewStatus=N'Tender Published'),s.PublicationStartUtc,t.SubmissionStartDate) DESC,t.TenderId DESC";
             }
         }
 
