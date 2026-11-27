@@ -179,8 +179,7 @@ namespace DepartmentModule.Pages
                     ModuleDb.AddParameter(command, "@IsTenderCell", SqlDbType.Bit, IsTenderCell);
                     ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                     ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                    ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
-                        HasAnyRole("Junior Engineer (JE)"));
+                    ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit, false);
                     ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                         CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
                     using (SqlDataAdapter adapter = new SqlDataAdapter(command))
@@ -279,8 +278,7 @@ namespace DepartmentModule.Pages
                         ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("ExternalBidder"));
                         ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                        ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit,
-                            HasAnyRole("Junior Engineer (JE)"));
+                        ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit, false);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                             CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
                         using (SqlDataReader reader = command.ExecuteReader())
@@ -307,7 +305,8 @@ namespace DepartmentModule.Pages
                             bool assignedToCurrentDepartment = CurrentDepartmentId.HasValue &&
                                 Convert.ToInt32(reader["DepartmentId"]) == CurrentDepartmentId.Value;
                             bool canAct = assignedToCurrentRole && assignedToCurrentUser &&
-                                (!HasAnyRole("Junior Engineer (JE)") || assignedToCurrentDepartment);
+                                (IsJeAdministrator || !HasAnyRole("Junior Engineer (JE)") ||
+                                 assignedToCurrentDepartment);
                             SubmitDraftPanel.Visible = canAct && stageName == "Final_JE_SubmitTender" &&
                                 HasPermission("tender.create.department");
                             InitialTenderCellVerificationPanel.Visible = canAct &&
@@ -500,15 +499,7 @@ namespace DepartmentModule.Pages
                          (SELECT COUNT(*) FROM dbo.TenderDocuments d
                           LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
                           WHERE d.TenderId=t.TenderId
-                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Financial Requirements') AS FinancialCount,
-                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
-                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Tender Proposal') AS ProposalCount,
-                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
-                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Tender Document') AS TenderDocumentCount,
-                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
-                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Technical Supporting Document') AS TechnicalSupportCount,
-                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
-                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Financial Supporting Document') AS FinancialSupportCount
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Financial Requirements') AS FinancialCount
                   FROM dbo.Tender t
                   WHERE t.TenderId=@TenderId AND t.IsDeleted=0;", connection, transaction))
             {
@@ -548,18 +539,6 @@ namespace DepartmentModule.Pages
                         documentStep, tenderDetailsUrl + "#tender-documents-section");
                     AddSubmissionReadinessItem(items, "financial-requirements", "Financial Requirements document",
                         Convert.ToInt32(reader["FinancialCount"], CultureInfo.InvariantCulture) > 0,
-                        documentStep, tenderDetailsUrl + "#tender-documents-section");
-                    AddSubmissionReadinessItem(items, "tender-proposal", "Tender Proposal document",
-                        Convert.ToInt32(reader["ProposalCount"], CultureInfo.InvariantCulture) > 0,
-                        documentStep, tenderDetailsUrl + "#tender-documents-section");
-                    AddSubmissionReadinessItem(items, "tender-document", "Tender Document",
-                        Convert.ToInt32(reader["TenderDocumentCount"], CultureInfo.InvariantCulture) > 0,
-                        documentStep, tenderDetailsUrl + "#tender-documents-section");
-                    AddSubmissionReadinessItem(items, "technical-support", "Technical Supporting Document",
-                        Convert.ToInt32(reader["TechnicalSupportCount"], CultureInfo.InvariantCulture) > 0,
-                        documentStep, tenderDetailsUrl + "#tender-documents-section");
-                    AddSubmissionReadinessItem(items, "financial-support", "Financial Supporting Document",
-                        Convert.ToInt32(reader["FinancialSupportCount"], CultureInfo.InvariantCulture) > 0,
                         documentStep, tenderDetailsUrl + "#tender-documents-section");
                 }
             }

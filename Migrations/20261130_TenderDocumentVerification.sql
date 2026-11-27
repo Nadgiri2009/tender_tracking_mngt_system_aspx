@@ -32,9 +32,10 @@ BEGIN TRY
         WHERE parent_object_id=OBJECT_ID(N'dbo.TenderDocuments')
           AND name=N'CK_TenderDocuments_VerificationStatus'
     )
-        ALTER TABLE dbo.TenderDocuments WITH CHECK
-            ADD CONSTRAINT CK_TenderDocuments_VerificationStatus
-            CHECK(VerificationStatus IS NULL OR VerificationStatus IN (N'Verified',N'Not Verified'));
+        EXEC sys.sp_executesql N'
+            ALTER TABLE dbo.TenderDocuments WITH CHECK
+                ADD CONSTRAINT CK_TenderDocuments_VerificationStatus
+                CHECK(VerificationStatus IS NULL OR VerificationStatus IN (N''Verified'',N''Not Verified''));';
 
     COMMIT TRANSACTION;
 END TRY

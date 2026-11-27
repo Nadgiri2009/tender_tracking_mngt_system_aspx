@@ -8,12 +8,14 @@
         <div class="table-wrap">
             <asp:GridView ID="WorkflowQueue" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No tenders are currently assigned to you.">
                 <Columns>
-                    <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderWorkflow.aspx?id={0}" HeaderText="Tender" />
+                    <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender" />
                     <asp:BoundField DataField="Title" HeaderText="Title" />
                     <asp:BoundField DataField="DepartmentName" HeaderText="Department" />
                     <asp:BoundField DataField="StageName" HeaderText="Assigned stage" />
                     <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
                     <asp:BoundField DataField="AssignedAtUtc" HeaderText="Assigned" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                    <asp:HyperLinkField Text="Open workflow" DataNavigateUrlFields="TenderId"
+                        DataNavigateUrlFormatString="TenderWorkflow.aspx?id={0}" HeaderText="Action" />
                 </Columns>
             </asp:GridView>
         </div>

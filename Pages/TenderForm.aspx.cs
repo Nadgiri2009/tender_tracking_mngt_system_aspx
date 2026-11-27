@@ -606,7 +606,16 @@ namespace DepartmentModule.Pages
             uploads = new List<UploadedRequirementDocument>();
             error = null;
             IList<HttpPostedFile> postedFiles = RequirementDocumentsUpload.PostedFiles;
-            if (postedFiles == null || postedFiles.Count == 0) return true;
+            List<HttpPostedFile> selectedFiles = new List<HttpPostedFile>();
+            if (postedFiles != null)
+            {
+                foreach (HttpPostedFile postedFile in postedFiles)
+                {
+                    if (postedFile != null && !String.IsNullOrWhiteSpace(postedFile.FileName))
+                        selectedFiles.Add(postedFile);
+                }
+            }
+            if (selectedFiles.Count == 0) return true;
 
             string[] categories;
             try
@@ -618,18 +627,21 @@ namespace DepartmentModule.Pages
                 error = "Assign a category to each uploaded tender document.";
                 return false;
             }
-            if (categories == null || categories.Length != postedFiles.Count)
+            catch (InvalidOperationException)
+            {
+                error = "Assign a category to each uploaded tender document.";
+                return false;
+            }
+            if (categories == null || categories.Length != selectedFiles.Count)
             {
                 error = "Assign a category to each uploaded tender document.";
                 return false;
             }
 
-            for (int index = 0; index < postedFiles.Count; index++)
+            for (int index = 0; index < selectedFiles.Count; index++)
             {
-                HttpPostedFile file = postedFiles[index];
+                HttpPostedFile file = selectedFiles[index];
                 string category = categories[index] == null ? String.Empty : categories[index].Trim();
-                if (file == null || String.IsNullOrWhiteSpace(file.FileName) || file.ContentLength <= 0)
-                    continue;
                 if (category != "Scope of Work" && category != "Technical Requirements" &&
                     category != "Financial Requirements")
                 {
@@ -1578,7 +1590,7 @@ namespace DepartmentModule.Pages
 
         protected void TitleLength_ServerValidate(object source, ServerValidateEventArgs args)
         {
-            args.IsValid = args.Value != null && args.Value.Trim().Length >= 5 && args.Value.Trim().Length <= 100;
+            args.IsValid = args.Value != null && args.Value.Trim().Length >= 5;
         }
 
         protected void CreateButton_Click(object sender, EventArgs e)
@@ -1609,16 +1621,15 @@ namespace DepartmentModule.Pages
                 ShowError("Enter a positive estimated value and a valid department.");
                 return;
             }
-            if ((DescriptionText.Text != null && DescriptionText.Text.Length > 4000) ||
-                (AdditionalConditionsText.Text != null && AdditionalConditionsText.Text.Length > 4000) ||
+            if ((AdditionalConditionsText.Text != null && AdditionalConditionsText.Text.Length > 4000) ||
                 (TermsAndConditionsText.Text != null && TermsAndConditionsText.Text.Length > 4000))
             {
-                ShowError("Description, requirements, and conditions cannot exceed 4,000 characters each.");
+                ShowError("Additional conditions and terms cannot exceed 4,000 characters each.");
                 return;
             }
-            if (TitleText.Text == null || TitleText.Text.Trim().Length < 5 || TitleText.Text.Trim().Length > 100)
+            if (TitleText.Text == null || TitleText.Text.Trim().Length < 5)
             {
-                ShowError("Project title must be between 5 and 100 characters.");
+                ShowError("Project title must be at least 5 characters.");
                 return;
             }
             if ((BudgetInformationText.Text != null && BudgetInformationText.Text.Length > 2000) ||
@@ -1764,7 +1775,7 @@ namespace DepartmentModule.Pages
                     {
                         AddText(command, "@TenderNumber", SqlDbType.NVarChar, tenderNumber, 50);
                         AddText(command, "@TrackingId", SqlDbType.NVarChar, Guid.NewGuid().ToString(), 100);
-                        AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), 250);
+                        AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), -1);
                         AddText(command, "@Description", SqlDbType.NVarChar, DescriptionText.Text, -1);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
                         ModuleDb.AddParameter(command, "@Amount", SqlDbType.Decimal, amount);
@@ -2353,7 +2364,7 @@ namespace DepartmentModule.Pages
                                               AND s.StageName=N'Final_JE_SubmitTender'))
                             );", connection, transaction))
                     {
-                        AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), 250);
+                        AddText(command, "@Title", SqlDbType.NVarChar, TitleText.Text.Trim(), -1);
                         AddText(command, "@Description", SqlDbType.NVarChar, DescriptionText.Text, -1);
                         ModuleDb.AddParameter(command, "@Amount", SqlDbType.Decimal, amount);
                         AddText(command, "@TenderMethod", SqlDbType.NVarChar, TenderTypeSelect.SelectedValue, 50);

@@ -131,7 +131,7 @@ BEGIN
         ActionName NVARCHAR(50) NOT NULL,
         RevisionReason NVARCHAR(1000) NULL,
         TenderNumber NVARCHAR(100) NOT NULL,
-        Title NVARCHAR(500) NOT NULL,
+        Title NVARCHAR(MAX) NOT NULL,
         Description NVARCHAR(MAX) NULL,
         EligibilityCriteria NVARCHAR(MAX) NULL,
         DepartmentId INT NOT NULL,

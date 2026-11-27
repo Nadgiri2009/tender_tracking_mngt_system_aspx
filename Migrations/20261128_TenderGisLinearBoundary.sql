@@ -23,18 +23,19 @@ BEGIN TRY
         WHERE parent_object_id=OBJECT_ID(N'dbo.TenderGisLocations')
           AND name=N'CK_TenderGisLocations_LinearBoundaryCoordinates'
     )
-        ALTER TABLE dbo.TenderGisLocations WITH CHECK
-            ADD CONSTRAINT CK_TenderGisLocations_LinearBoundaryCoordinates
-            CHECK
-            (
-                (BoundaryStartLatitude IS NULL AND BoundaryStartLongitude IS NULL
-                 AND BoundaryEndLatitude IS NULL AND BoundaryEndLongitude IS NULL)
-                OR
-                (BoundaryStartLatitude BETWEEN -90 AND 90
-                 AND BoundaryStartLongitude BETWEEN -180 AND 180
-                 AND BoundaryEndLatitude BETWEEN -90 AND 90
-                 AND BoundaryEndLongitude BETWEEN -180 AND 180)
-            );
+        EXEC sys.sp_executesql N'
+            ALTER TABLE dbo.TenderGisLocations WITH CHECK
+                ADD CONSTRAINT CK_TenderGisLocations_LinearBoundaryCoordinates
+                CHECK
+                (
+                    (BoundaryStartLatitude IS NULL AND BoundaryStartLongitude IS NULL
+                     AND BoundaryEndLatitude IS NULL AND BoundaryEndLongitude IS NULL)
+                    OR
+                    (BoundaryStartLatitude BETWEEN -90 AND 90
+                     AND BoundaryStartLongitude BETWEEN -180 AND 180
+                     AND BoundaryEndLatitude BETWEEN -90 AND 90
+                     AND BoundaryEndLongitude BETWEEN -180 AND 180)
+                );';
 
     IF NOT EXISTS
     (
@@ -42,9 +43,10 @@ BEGIN TRY
         WHERE parent_object_id=OBJECT_ID(N'dbo.TenderGisLocations')
           AND name=N'CK_TenderGisLocations_BoundaryLineJson'
     )
-        ALTER TABLE dbo.TenderGisLocations WITH CHECK
-            ADD CONSTRAINT CK_TenderGisLocations_BoundaryLineJson
-            CHECK(BoundaryLineGeometryJson IS NULL OR ISJSON(BoundaryLineGeometryJson)=1);
+        EXEC sys.sp_executesql N'
+            ALTER TABLE dbo.TenderGisLocations WITH CHECK
+                ADD CONSTRAINT CK_TenderGisLocations_BoundaryLineJson
+                CHECK(BoundaryLineGeometryJson IS NULL OR ISJSON(BoundaryLineGeometryJson)=1);';
 
     COMMIT TRANSACTION;
 END TRY

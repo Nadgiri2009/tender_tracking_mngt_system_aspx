@@ -12,13 +12,15 @@ namespace DepartmentModule.Pages
             LifecyclePendingApprovals, LifecycleAwaitingPublication, LifecyclePublished, LifecycleExtensions,
             LifecycleBidOpenings, LifecycleAwaitingEvaluation, LifecycleUnderEvaluation,
             FinalQueueCount, FinalVerificationCount, FinalShortfallCount, FinalApprovalCount,
+            FinalCompletedCount, FinalReturnedCount,
             DashboardTitle, DashboardDescription, FinalQueueLabel, FinalVerificationLabel,
             FinalShortfallLabel, FinalApprovalLabel, FinalQueueHeading;
         protected HyperLink NewTenderLink, WorkflowQueueLink, TenderCellDatesLink;
         protected Panel PendingApprovalsPanel, LifecycleSummaryPanel, LegacyDashboardPanel, FinalWorkflowDashboardPanel;
         protected Panel FinalVerificationPanel, FinalShortfallPanel, FinalApprovalPanel;
         protected System.Web.UI.WebControls.PlaceHolder LifecycleReviewSummaryPanel;
-        protected GridView PendingGrid, RecentGrid, CategoryStatsGrid, UpcomingGrid, FinalWorkflowGrid;
+        protected GridView PendingGrid, RecentGrid, CategoryStatsGrid, UpcomingGrid,
+            FinalWorkflowGrid, FinalWorkflowHistoryGrid;
         protected GridView DepartmentTendersGrid;
 
         protected void Page_Load(object sender, EventArgs e)
@@ -183,6 +185,7 @@ namespace DepartmentModule.Pages
                         FinalWorkflowGrid.DataSource = ReadTable(command);
                         FinalWorkflowGrid.DataBind();
                     }
+                    LoadFinalWorkflowHistory(connection);
                 }
             }
             catch (SqlException ex)
@@ -190,6 +193,61 @@ namespace DepartmentModule.Pages
                 Trace.Warn("DepartmentModule", "Finalized workflow dashboard could not be loaded.", ex);
                 Message.Text = "<div class=\"message\">Your workflow dashboard could not be loaded. Please retry or contact support.</div>";
             }
+        }
+
+        private void LoadFinalWorkflowHistory(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT COUNT(*) AS ActionCount,
+                         SUM(CASE WHEN h.NewStatus LIKE N'%Rejected%'
+                                       OR h.NewStatus LIKE N'%Returned%'
+                                       OR h.NewStatus LIKE N'%Correction%'
+                                       OR h.NewStatus IN
+                                          (N'Shortfall Pending',N'Shortfall Generation Pending',
+                                           N'Pending JE Document Correction')
+                                  THEN 1 ELSE 0 END) AS ReturnedCount
+                  FROM dbo.TenderWorkflowHistory h
+                  INNER JOIN dbo.Tender t ON t.TenderId=h.TenderId AND t.IsDeleted=0
+                  WHERE h.WorkflowVersion=2 AND h.RoleId=@RoleId AND h.UserId=@UserId;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        int actions = reader["ActionCount"] == DBNull.Value
+                            ? 0 : Convert.ToInt32(reader["ActionCount"]);
+                        int returned = reader["ReturnedCount"] == DBNull.Value
+                            ? 0 : Convert.ToInt32(reader["ReturnedCount"]);
+                        FinalCompletedCount.Text = Math.Max(0, actions - returned).ToString();
+                        FinalReturnedCount.Text = returned.ToString();
+                    }
+                }
+            }
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT TOP (10) t.TenderId,t.TenderNumber,s.StageName,h.ActionName,
+                         h.NewStatus,h.ActionAtUtc,h.Remarks
+                  FROM dbo.TenderWorkflowHistory h
+                  INNER JOIN dbo.Tender t ON t.TenderId=h.TenderId AND t.IsDeleted=0
+                  LEFT JOIN dbo.WorkflowStages s ON s.StageId=h.StageId
+                  WHERE h.WorkflowVersion=2 AND h.RoleId=@RoleId AND h.UserId=@UserId
+                  ORDER BY h.ActionAtUtc DESC,h.WorkflowHistoryId DESC;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
+                ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                FinalWorkflowHistoryGrid.DataSource = ReadTable(command);
+                FinalWorkflowHistoryGrid.DataBind();
+            }
+        }
+
+        protected void FinalWorkflowGrid_PageIndexChanging(object sender, GridViewPageEventArgs e)
+        {
+            FinalWorkflowGrid.PageIndex = e.NewPageIndex;
+            LoadFinalWorkflowDashboard();
         }
 
         private void BindDepartmentTenderSummary()

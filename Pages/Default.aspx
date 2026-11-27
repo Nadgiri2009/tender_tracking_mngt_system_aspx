@@ -34,17 +34,40 @@
             <asp:Panel ID="FinalApprovalPanel" runat="server">
                 <a class="stat" href="<%= ResolveUrl("~/Pages/TenderWorkflow.aspx?queue=approval") %>"><span class="muted"><asp:Literal ID="FinalApprovalLabel" runat="server" /></span><strong><asp:Literal ID="FinalApprovalCount" runat="server" /></strong></a>
             </asp:Panel>
+            <a class="stat" href="#FinalWorkflowHistory"><span class="muted">Completed actions</span><strong><asp:Literal ID="FinalCompletedCount" runat="server" /></strong></a>
+            <a class="stat" href="#FinalWorkflowHistory"><span class="muted">Returned actions</span><strong><asp:Literal ID="FinalReturnedCount" runat="server" /></strong></a>
         </section>
         <section class="card">
             <div class="page-heading"><div><h2><asp:Literal ID="FinalQueueHeading" runat="server" /></h2><div class="muted">Tenders are limited to your role and current workflow assignment.</div></div><a href="TenderWorkflow.aspx">Open queue</a></div>
             <div class="table-wrap">
-                <asp:GridView ID="FinalWorkflowGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No tenders are currently assigned to you.">
+                <asp:GridView ID="FinalWorkflowGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true"
+                    PageSize="10" OnPageIndexChanging="FinalWorkflowGrid_PageIndexChanging"
+                    GridLines="None" EmptyDataText="No tenders are currently assigned to you.">
                     <Columns>
-                        <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderWorkflow.aspx?id={0}" HeaderText="Tender" />
+                        <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender" />
                         <asp:BoundField DataField="Title" HeaderText="Title" />
                         <asp:BoundField DataField="DepartmentName" HeaderText="Department" />
                         <asp:BoundField DataField="StageName" HeaderText="Stage" />
                         <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
+                        <asp:HyperLinkField Text="Open workflow" DataNavigateUrlFields="TenderId"
+                            DataNavigateUrlFormatString="TenderWorkflow.aspx?id={0}" HeaderText="Action" />
+                    </Columns>
+                </asp:GridView>
+            </div>
+        </section>
+        <section id="FinalWorkflowHistory" class="card">
+            <div class="page-heading"><div><h2>My recent workflow actions</h2><div class="muted">Actions are loaded from your recorded workflow history.</div></div></div>
+            <div class="table-wrap">
+                <asp:GridView ID="FinalWorkflowHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                    EmptyDataText="No workflow actions have been recorded for your account.">
+                    <Columns>
+                        <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId"
+                            DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender" />
+                        <asp:BoundField DataField="StageName" HeaderText="Stage" />
+                        <asp:BoundField DataField="ActionName" HeaderText="Action" />
+                        <asp:BoundField DataField="NewStatus" HeaderText="Resulting status" />
+                        <asp:BoundField DataField="ActionAtUtc" HeaderText="Date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                        <asp:BoundField DataField="Remarks" HeaderText="Remarks" />
                     </Columns>
                 </asp:GridView>
             </div>

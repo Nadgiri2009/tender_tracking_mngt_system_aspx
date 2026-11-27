@@ -88,7 +88,7 @@ namespace DepartmentModule.Helpers
             using (SqlTransaction transaction = connection.BeginTransaction(IsolationLevel.Serializable))
             {
                 StageAssignment assignment = LockAssignedStage(connection, transaction, tenderId,
-                    userId, roleId, roleCode, departmentId, stageName, shortfallId, requiredPermission);
+                    userId, roleId, stageName, shortfallId, requiredPermission);
                 if (!String.Equals(assignment.CurrentStatus, assignment.StatusOnPending, StringComparison.Ordinal))
                     throw new InvalidOperationException("Tender status and workflow stage are inconsistent. Refresh and retry.");
 
@@ -687,8 +687,8 @@ namespace DepartmentModule.Helpers
                     }
                 }
 
-                LockAssignedStage(connection, transaction, tenderId, userId, roleId, roleCode,
-                    departmentId, "Final_Cell_CompleteSecondaryVerification", null, "tender.cell.verify");
+                LockAssignedStage(connection, transaction, tenderId, userId, roleId,
+                    "Final_Cell_CompleteSecondaryVerification", null, "tender.cell.verify");
 
                 string fileName = "(not submitted)";
                 string filePath = String.Empty;
@@ -789,8 +789,8 @@ namespace DepartmentModule.Helpers
                     }
                 }
 
-                LockAssignedStage(connection, transaction, tenderId, userId, roleId, roleCode,
-                    departmentId, "Final_Cell_CompleteSecondaryVerification", null, "tender.cell.verify");
+                LockAssignedStage(connection, transaction, tenderId, userId, roleId,
+                    "Final_Cell_CompleteSecondaryVerification", null, "tender.cell.verify");
 
                 if (HasUnreviewedSecondaryDocuments(connection, transaction, tenderId, applicationId))
                     throw new InvalidOperationException("Record a secondary decision for every submitted document and missing mandatory requirement first.");
@@ -2325,8 +2325,8 @@ namespace DepartmentModule.Helpers
         }
 
         private static StageAssignment LockAssignedStage(SqlConnection connection,
-            SqlTransaction transaction, int tenderId, int userId, int roleId, string roleCode,
-            int? departmentId, string stageName, long? shortfallId, string requiredPermission)
+            SqlTransaction transaction, int tenderId, int userId, int roleId,
+            string stageName, long? shortfallId, string requiredPermission)
         {
             using (SqlCommand command = new SqlCommand(
                 @"SELECT a.AssignmentId,a.StageId,s.StageOrder,a.DepartmentId,a.AssignedRoleId,a.AssignedUserId,
@@ -2349,7 +2349,6 @@ namespace DepartmentModule.Helpers
                             AND s.StageName=N'Final_Cell_ReverifyRejectedOpening')
                     )
                     AND ((@ShortfallId IS NULL AND a.ShortfallId IS NULL) OR a.ShortfallId=@ShortfallId)
-                    AND (@IsJE=0 OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))
                     AND EXISTS
                     (
                         SELECT 1 FROM dbo.RolePermissions rp
@@ -2363,9 +2362,6 @@ namespace DepartmentModule.Helpers
                 ModuleDb.AddParameter(command, "@StageName", SqlDbType.NVarChar, stageName, 80);
                 ModuleDb.AddParameter(command, "@ShortfallId", SqlDbType.BigInt,
                     shortfallId.HasValue ? (object)shortfallId.Value : null);
-                ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit, IsJuniorEngineer(roleCode));
-                ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
-                    departmentId.HasValue ? (object)departmentId.Value : null);
                 ModuleDb.AddParameter(command, "@Permission", SqlDbType.NVarChar, requiredPermission, 100);
                 using (SqlDataReader reader = command.ExecuteReader())
                 {

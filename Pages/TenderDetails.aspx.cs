@@ -195,6 +195,13 @@ namespace DepartmentModule.Pages
                                             AND (@DepartmentId IS NULL OR assigned.DepartmentId=@DepartmentId)))
                                      OR (t.WorkflowVersion=2 AND @CanMonitor=1
                                          AND @DepartmentId IS NOT NULL AND t.DepartmentId=@DepartmentId)
+                                     OR (t.WorkflowVersion=2 AND EXISTS
+                                         (SELECT 1
+                                          FROM dbo.TenderWorkflowHistory priorAction
+                                          WHERE priorAction.TenderId=t.TenderId
+                                            AND priorAction.WorkflowVersion=2
+                                            AND priorAction.RoleId=@RoleId
+                                            AND priorAction.UserId=@CurrentUserId))
                                      OR (t.WorkflowVersion=1 AND
                                          (@CurrentRole<>N'DepartmentOfficer' OR t.CreatedBy=@CurrentUserId)
                                          AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)))

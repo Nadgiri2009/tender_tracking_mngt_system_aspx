@@ -6,10 +6,10 @@
         <div class="public-hero-copy">
             <span class="public-hero-eyebrow">Government e-Procurement</span>
             <h1 id="portalHeroTitle">Solapur Municipal Corporation Tender Portal</h1>
-            <p>Discover published tenders, review official notices, and submit applications through the contractor portal.</p>
+            <p>Browse current tender records, review official notices, and submit applications through the contractor portal.</p>
         </div>
         <div class="public-hero-actions">
-            <asp:HyperLink ID="HeroPublishedLink" runat="server" CssClass="button" NavigateUrl="#published-tenders">View published tenders</asp:HyperLink>
+            <asp:HyperLink ID="HeroPublishedLink" runat="server" CssClass="button" NavigateUrl="#published-tenders">View all tenders</asp:HyperLink>
             <asp:HyperLink ID="HeroRegisterLink" runat="server" CssClass="button secondary" NavigateUrl="~/Pages/Register.aspx">Contractor registration</asp:HyperLink>
         </div>
     </section>
@@ -35,32 +35,9 @@
             <span><span class="muted">Registered contractors</span><strong><asp:Literal ID="TotalContractors" runat="server" /></strong></span>
         </div>
     </section>
-    <asp:Panel ID="InternalTendersPanel" runat="server" Visible="false" CssClass="card">
-        <div class="page-heading">
-            <div>
-                <h2>Internal tenders</h2>
-                <p class="muted">Unpublished tender records are visible to authorized internal staff only.</p>
-            </div>
-        </div>
-        <div class="table-wrap">
-            <asp:GridView ID="InternalTendersGrid" runat="server" AutoGenerateColumns="false"
-                GridLines="None" EmptyDataText="No unpublished tenders are available to your account.">
-                <Columns>
-                    <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId"
-                        DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
-                    <asp:BoundField DataField="Title" HeaderText="Title" />
-                    <asp:BoundField DataField="DepartmentName" HeaderText="Department" />
-                    <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
-                    <asp:BoundField DataField="CreatedDate" HeaderText="Created"
-                        DataFormatString="{0:dd MMM yyyy}" />
-                </Columns>
-            </asp:GridView>
-        </div>
-        <asp:Literal ID="InternalTendersSummary" runat="server" />
-    </asp:Panel>
     <section class="card" id="published-tenders">
-        <div class="page-heading"><div><h2>Published tenders</h2><p class="muted">View tender details and check whether applications are open.</p></div></div>
-        <div class="public-tender-filters" role="search" aria-label="Search and filter published tenders">
+        <div class="page-heading"><div><h2>All tenders</h2><p class="muted">Presentation view: all non-deleted tender records and their current statuses are listed here.</p></div></div>
+        <div class="public-tender-filters" role="search" aria-label="Search and filter all tenders">
             <div class="field">
                 <asp:Label runat="server" AssociatedControlID="TenderSearchText">Search by reference or title</asp:Label>
                 <asp:TextBox ID="TenderSearchText" runat="server" MaxLength="100" />
@@ -80,7 +57,7 @@
             <div class="field">
                 <asp:Label runat="server" AssociatedControlID="TenderStatusFilter">Status</asp:Label>
                 <asp:DropDownList ID="TenderStatusFilter" runat="server">
-                    <asp:ListItem Text="All published tenders" Value="" />
+                    <asp:ListItem Text="All tenders" Value="" />
                     <asp:ListItem Text="Open for applications" Value="open" />
                     <asp:ListItem Text="Completed tenders" Value="completed" />
                 </asp:DropDownList>
@@ -88,7 +65,7 @@
             <div class="field">
                 <asp:Label runat="server" AssociatedControlID="SortBySelect">Sort by</asp:Label>
                 <asp:DropDownList ID="SortBySelect" runat="server">
-                    <asp:ListItem Text="Recently published" Value="recent" />
+                    <asp:ListItem Text="Recently added" Value="recent" />
                     <asp:ListItem Text="Closing soonest" Value="closing" />
                     <asp:ListItem Text="Estimated cost: high to low" Value="amount" />
                     <asp:ListItem Text="Title: A to Z" Value="title" />
@@ -100,7 +77,7 @@
             </div>
         </div>
         <div class="table-wrap tender-list-wrap">
-        <asp:GridView ID="TendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="tender-list" EmptyDataText="No published tenders match the selected filters. Clear filters or check again later.">
+        <asp:GridView ID="TendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="tender-list" EmptyDataText="No tenders match the selected filters. Clear filters or check again later.">
             <Columns>
                 <asp:TemplateField HeaderText="Sr. No.">
                     <ItemTemplate><%# TenderSerialNumber(Container.DataItemIndex) %></ItemTemplate>
@@ -110,19 +87,23 @@
                 <asp:BoundField DataField="DepartmentName" HeaderText="Department" />
                 <asp:BoundField DataField="TenderCategory" HeaderText="Category" />
                 <asp:BoundField DataField="TenderType" HeaderText="Tender method" />
-                <asp:BoundField DataField="PublicationDate" HeaderText="Publication date" DataFormatString="{0:dd MMM yyyy}" NullDisplayText="-" />
-                <asp:BoundField DataField="CurrentClosingUtc" HeaderText="Closing date and time (IST)" DataFormatString="{0:dd MMM yyyy HH:mm}" NullDisplayText="-" />
+                <asp:BoundField DataField="CreatedDate" HeaderText="Created" DataFormatString="{0:dd MMM yyyy}" />
+                <asp:BoundField DataField="PublicationDate" HeaderText="Publication date" DataFormatString="{0:dd MMM yyyy}" NullDisplayText="Not published" />
+                <asp:BoundField DataField="CurrentClosingUtc" HeaderText="Closing date and time (IST)" DataFormatString="{0:dd MMM yyyy HH:mm}" NullDisplayText="Not scheduled" />
                 <asp:BoundField DataField="EstimatedAmount" HeaderText="Estimated cost" DataFormatString="{0:N2}" NullDisplayText="-" />
                 <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
                 <asp:TemplateField HeaderText="Action">
                     <ItemTemplate>
                         <asp:HyperLink ID="ViewTenderLink" runat="server" CssClass="button secondary tender-details-link"
-                            Text="View details" NavigateUrl='<%# ResolveUrl("~/Pages/TenderDetails.aspx?id=" + Eval("TenderId")) %>' />
+                            Text="View details" NavigateUrl='<%# ResolveUrl("~/Pages/TenderDetails.aspx?id=" + Eval("TenderId")) %>'
+                            Visible='<%# Convert.ToBoolean(Eval("CanViewTenderDetails")) %>' />
                         <asp:HyperLink ID="ApplyTenderLink" runat="server" CssClass="button tender-details-link"
                             Text="Apply" NavigateUrl='<%# ResolveUrl("~/Pages/Bids.aspx?tenderId=" + Eval("TenderId")) %>'
                             Visible='<%# Convert.ToBoolean(Eval("IsApplicationOpen")) %>' />
                         <asp:Literal ID="ApplicationClosedText" runat="server" Text="Applications closed"
-                            Visible='<%# !Convert.ToBoolean(Eval("IsApplicationOpen")) %>' />
+                            Visible='<%# Convert.ToBoolean(Eval("IsPublicTender")) && !Convert.ToBoolean(Eval("IsApplicationOpen")) %>' />
+                        <asp:Literal ID="TenderDetailsUnavailableText" runat="server" Text="Public actions unavailable"
+                            Visible='<%# !Convert.ToBoolean(Eval("CanViewTenderDetails")) %>' />
                     </ItemTemplate>
                 </asp:TemplateField>
             </Columns>

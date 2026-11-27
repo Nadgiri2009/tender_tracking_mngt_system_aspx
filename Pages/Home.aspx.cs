@@ -14,17 +14,19 @@ namespace DepartmentModule.Pages
         private const int TendersPerPage = 10;
         private const string PageIndexKey = "HomeTenderPageIndex";
         private const string PublicTenderVisibility = TenderStatusBuckets.PublicTenderVisibility;
-        private const string PublicTenderSource =
+        private const string AllTenderSource =
             " FROM dbo.Tender t INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId " +
-            "LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId WHERE " + PublicTenderVisibility;
-        private const string PublicTenderFilter =
-            PublicTenderSource +
+            "LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId WHERE t.IsDeleted=0";
+        private const string AllTenderFilter =
+            AllTenderSource +
             @" AND (@Search=N'' OR t.TenderNumber LIKE @SearchPattern OR t.Title LIKE @SearchPattern)
                AND (@DepartmentId=0 OR t.DepartmentId=@DepartmentId)
                AND (@Category=N'' OR COALESCE(NULLIF(t.TenderCategory,N''),N'Uncategorized')=@Category)
                AND (@TenderType=N'' OR t.TenderType=@TenderType)
                AND (@TenderStatus=N'' OR
-                    (@TenderStatus=N'open' AND t.CurrentStatus=N'Tender Published'
+                    (@TenderStatus=N'open' AND " + PublicTenderVisibility + @"
+                     AND t.CurrentStatus=N'Tender Published'
+                     AND (s.PublicationStartUtc IS NULL OR s.PublicationStartUtc<=SYSUTCDATETIME())
                      AND COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline)>SYSUTCDATETIME()
                      AND (t.SubmissionStartDate IS NULL OR t.SubmissionStartDate<=SYSUTCDATETIME())
                      AND (t.SubmissionDeadline IS NULL OR t.SubmissionDeadline>=SYSUTCDATETIME())) OR
@@ -37,9 +39,6 @@ namespace DepartmentModule.Pages
         protected GridView TendersGrid, AnnouncementsGrid;
         protected LinkButton PreviousPageButton, NextPageButton;
         protected Repeater PageNumbers;
-        protected Panel InternalTendersPanel;
-        protected GridView InternalTendersGrid;
-        protected Literal InternalTendersSummary;
 
         protected override bool RequiresAuthentication
         {
@@ -66,7 +65,6 @@ namespace DepartmentModule.Pages
                     BindCurrentPage();
                 }
             }
-            BindInternalTenders();
         }
 
         private void LoadPortalData()
@@ -127,97 +125,6 @@ namespace DepartmentModule.Pages
             }
         }
 
-        private void BindInternalTenders()
-        {
-            InternalTendersPanel.Visible = String.Equals(
-                CurrentAccountType, "Internal", StringComparison.OrdinalIgnoreCase);
-            if (!InternalTendersPanel.Visible) return;
-
-            bool isDepartmentOfficer = String.Equals(CurrentRole, "DepartmentOfficer",
-                StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase);
-            bool canReadDepartment = HasPermission("tender.read.department");
-            string accessScope;
-            if (IsJeAdministrator)
-            {
-                accessScope = String.Empty;
-            }
-            else if (isDepartmentOfficer)
-            {
-                accessScope = " AND t.CreatedBy=@InternalUserId";
-            }
-            else if (canReadDepartment)
-            {
-                accessScope = " AND @InternalDepartmentId IS NOT NULL AND t.DepartmentId=@InternalDepartmentId";
-            }
-            else
-            {
-                accessScope = @" AND EXISTS
-                    (
-                        SELECT 1 FROM dbo.TenderWorkflowAssignments a
-                        WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
-                          AND a.AssignedRoleId=@InternalRoleId
-                          AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@InternalUserId)
-                    )";
-            }
-
-            try
-            {
-                using (SqlConnection connection = ModuleDb.OpenConnection())
-                using (SqlCommand command = new SqlCommand(
-                    @"SELECT t.TenderId,t.TenderNumber,t.Title,t.CurrentStatus,t.CreatedDate,d.DepartmentName
-                      FROM dbo.Tender t
-                      INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
-                      WHERE t.IsDeleted=0
-                        AND NOT EXISTS
-                        (
-                            SELECT 1 FROM dbo.ApprovalHistory ah
-                            WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published'
-                        )
-                        AND NOT EXISTS
-                        (
-                            SELECT 1 FROM dbo.TenderWorkflowHistory wh
-                            WHERE wh.TenderId=t.TenderId AND wh.WorkflowVersion=2
-                              AND wh.NewStatus=N'Tender Published'
-                        )" + accessScope + @"
-                      ORDER BY t.CreatedDate DESC,t.TenderId DESC;", connection))
-                {
-                    if (!IsJeAdministrator)
-                    {
-                        if (isDepartmentOfficer)
-                        {
-                            ModuleDb.AddParameter(command, "@InternalUserId", SqlDbType.Int, CurrentUserId);
-                        }
-                        else if (canReadDepartment)
-                        {
-                            ModuleDb.AddParameter(command, "@InternalDepartmentId", SqlDbType.Int,
-                                CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
-                        }
-                        else
-                        {
-                            ModuleDb.AddParameter(command, "@InternalUserId", SqlDbType.Int, CurrentUserId);
-                            ModuleDb.AddParameter(command, "@InternalRoleId", SqlDbType.Int, CurrentRoleId);
-                        }
-                    }
-
-                    using (SqlDataAdapter adapter = new SqlDataAdapter(command))
-                    {
-                        DataTable data = new DataTable();
-                        adapter.Fill(data);
-                        InternalTendersGrid.DataSource = data;
-                        InternalTendersGrid.DataBind();
-                        InternalTendersSummary.Text = String.Format(
-                            CultureInfo.CurrentCulture, "<p class=\"muted\">{0} unpublished tender(s)</p>", data.Rows.Count);
-                    }
-                }
-            }
-            catch (SqlException ex)
-            {
-                Trace.Warn("DepartmentModule", "Internal unpublished tenders could not be loaded.", ex);
-                Message.Text = "<div class=\"message\">Internal tender records could not be loaded. Please retry or contact support.</div>";
-            }
-        }
-
         private void BindTenders(SqlConnection connection)
         {
             if (TenderSearchText.Text.Trim().Length > 100)
@@ -227,7 +134,7 @@ namespace DepartmentModule.Pages
             }
 
             int count;
-            using (SqlCommand countCommand = new SqlCommand("SELECT COUNT(*)" + PublicTenderFilter + ";", connection))
+            using (SqlCommand countCommand = new SqlCommand("SELECT COUNT(*)" + AllTenderFilter + ";", connection))
             {
                 AddTenderFilterParameters(countCommand);
                 count = Convert.ToInt32(countCommand.ExecuteScalar());
@@ -236,22 +143,46 @@ namespace DepartmentModule.Pages
             int pageCount = Math.Max(1, (int)Math.Ceiling(count / (double)TendersPerPage));
             CurrentPage = Math.Max(1, Math.Min(CurrentPage, pageCount));
             using (SqlCommand command = new SqlCommand(
-                @"SELECT t.TenderId,t.TenderNumber,t.Title,t.TenderType,t.EstimatedAmount,
+                @"SELECT t.TenderId,t.TenderNumber,t.Title,t.TenderType,t.EstimatedAmount,t.CreatedDate,
                          COALESCE(t.TenderCategory,N'Uncategorized') AS TenderCategory,d.DepartmentName,
                          COALESCE((SELECT MIN(ah.ApprovalDate)
                                    FROM dbo.ApprovalHistory ah
                                    WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published'),
                                   t.PublicationDate,s.PublicationStartUtc,t.SubmissionStartDate) AS PublicationDate,
                          COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline) AS CurrentClosingUtc,t.CurrentStatus,
-                         CASE WHEN t.CurrentStatus=N'Tender Published'
+                         CASE WHEN " + PublicTenderVisibility + @"
+                                   THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsPublicTender,
+                         CASE WHEN " + PublicTenderVisibility + @"
+                                   OR (@IsInternalAccount=1 AND
+                                       NOT EXISTS (SELECT 1 FROM dbo.ApprovalHistory ah
+                                                   WHERE ah.TenderId=t.TenderId AND ah.NewStatus=N'Tender Published')
+                                       AND NOT EXISTS (SELECT 1 FROM dbo.TenderWorkflowHistory wh
+                                                       WHERE wh.TenderId=t.TenderId AND wh.WorkflowVersion=2
+                                                         AND wh.NewStatus=N'Tender Published')
+                                       AND
+                                       (
+                                           @IsJeAdministrator=1
+                                           OR (@IsDepartmentOfficer=1 AND t.CreatedBy=@InternalUserId)
+                                           OR (@CanReadDepartment=1 AND @InternalDepartmentId IS NOT NULL
+                                               AND t.DepartmentId=@InternalDepartmentId)
+                                           OR EXISTS (SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                                      WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                                        AND a.AssignedRoleId=@InternalRoleId
+                                                        AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@InternalUserId))
+                                       ))
+                              THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS CanViewTenderDetails,
+                         CASE WHEN " + PublicTenderVisibility + @"
+                                   AND t.CurrentStatus=N'Tender Published'
+                                   AND (s.PublicationStartUtc IS NULL OR s.PublicationStartUtc<=SYSUTCDATETIME())
                                    AND COALESCE(s.CurrentClosingUtc,t.SubmissionDeadline)>SYSUTCDATETIME()
                                    AND (t.SubmissionStartDate IS NULL OR t.SubmissionStartDate<=SYSUTCDATETIME())
                                    AND (t.SubmissionDeadline IS NULL OR t.SubmissionDeadline>=SYSUTCDATETIME())
-                              THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsApplicationOpen" + PublicTenderFilter + @"
+                              THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsApplicationOpen" + AllTenderFilter + @"
                   ORDER BY " + GetTenderSortExpression() + @"
                   OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;", connection))
             {
                 AddTenderFilterParameters(command);
+                AddInternalTenderDetailPermissions(command);
                 ModuleDb.AddParameter(command, "@Offset", SqlDbType.Int, (CurrentPage - 1) * TendersPerPage);
                 ModuleDb.AddParameter(command, "@PageSize", SqlDbType.Int, TendersPerPage);
                 using (SqlDataAdapter adapter = new SqlDataAdapter(command))
@@ -259,7 +190,7 @@ namespace DepartmentModule.Pages
                     DataTable tenders = new DataTable();
                     adapter.Fill(tenders);
                     TenderLifecycleFiles.ConvertDatesToIndia(
-                        tenders, "CurrentClosingUtc");
+                        tenders, "CreatedDate", "PublicationDate", "CurrentClosingUtc");
                     TendersGrid.DataSource = tenders;
                     TendersGrid.DataBind();
                 }
@@ -282,7 +213,7 @@ namespace DepartmentModule.Pages
             DepartmentFilter.Items.Clear();
             DepartmentFilter.Items.Add(new ListItem("All departments", "0"));
             using (SqlCommand command = new SqlCommand(
-                "SELECT DISTINCT d.DepartmentId,d.DepartmentName" + PublicTenderSource +
+                "SELECT DISTINCT d.DepartmentId,d.DepartmentName" + AllTenderSource +
                 " ORDER BY d.DepartmentName;", connection))
             using (SqlDataReader reader = command.ExecuteReader())
             {
@@ -296,7 +227,7 @@ namespace DepartmentModule.Pages
             CategoryFilter.Items.Add(new ListItem("All categories", String.Empty));
             using (SqlCommand command = new SqlCommand(
                 "SELECT DISTINCT COALESCE(NULLIF(t.TenderCategory,N''),N'Uncategorized') AS Category" +
-                PublicTenderSource + " ORDER BY Category;", connection))
+                AllTenderSource + " ORDER BY Category;", connection))
             using (SqlDataReader reader = command.ExecuteReader())
             {
                 while (reader.Read())
@@ -309,7 +240,7 @@ namespace DepartmentModule.Pages
             TenderTypeFilter.Items.Clear();
             TenderTypeFilter.Items.Add(new ListItem("All tender types", String.Empty));
             using (SqlCommand command = new SqlCommand(
-                "SELECT DISTINCT t.TenderType" + PublicTenderSource + " ORDER BY t.TenderType;", connection))
+                "SELECT DISTINCT t.TenderType" + AllTenderSource + " ORDER BY t.TenderType;", connection))
             using (SqlDataReader reader = command.ExecuteReader())
             {
                 while (reader.Read())
@@ -334,6 +265,23 @@ namespace DepartmentModule.Pages
             ModuleDb.AddParameter(command, "@TenderStatus", SqlDbType.NVarChar, TenderStatusFilter.SelectedValue, 20);
         }
 
+        private void AddInternalTenderDetailPermissions(SqlCommand command)
+        {
+            bool isInternal = String.Equals(CurrentAccountType, "Internal", StringComparison.OrdinalIgnoreCase);
+            bool isDepartmentOfficer = String.Equals(CurrentRole, "DepartmentOfficer",
+                StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(CurrentRoleCode, "DEPARTMENT_OFFICER", StringComparison.OrdinalIgnoreCase);
+            ModuleDb.AddParameter(command, "@IsInternalAccount", SqlDbType.Bit, isInternal);
+            ModuleDb.AddParameter(command, "@IsJeAdministrator", SqlDbType.Bit, IsJeAdministrator);
+            ModuleDb.AddParameter(command, "@IsDepartmentOfficer", SqlDbType.Bit, isDepartmentOfficer);
+            ModuleDb.AddParameter(command, "@CanReadDepartment", SqlDbType.Bit,
+                HasPermission("tender.read.department"));
+            ModuleDb.AddParameter(command, "@InternalUserId", SqlDbType.Int, CurrentUserId);
+            ModuleDb.AddParameter(command, "@InternalRoleId", SqlDbType.Int, CurrentRoleId);
+            ModuleDb.AddParameter(command, "@InternalDepartmentId", SqlDbType.Int,
+                CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+        }
+
         private string GetTenderSortExpression()
         {
             switch (SortBySelect.SelectedValue)
@@ -345,9 +293,7 @@ namespace DepartmentModule.Pages
                 case "title":
                     return "t.Title ASC,t.TenderId DESC";
                 default:
-                    return "COALESCE(t.PublicationDate,(SELECT MIN(ah.ApprovalDate) " +
-                        "FROM dbo.ApprovalHistory ah WHERE ah.TenderId=t.TenderId " +
-                        "AND ah.NewStatus=N'Tender Published'),s.PublicationStartUtc,t.SubmissionStartDate) DESC,t.TenderId DESC";
+                    return "t.CreatedDate DESC,t.TenderId DESC";
             }
         }
 

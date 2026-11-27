@@ -350,7 +350,7 @@ CREATE TABLE dbo.Tender (
     TenderId           INT IDENTITY(1,1) PRIMARY KEY,
     TenderNumber       NVARCHAR(50)   NOT NULL UNIQUE,
     TrackingId         NVARCHAR(100)  NOT NULL UNIQUE DEFAULT (CONVERT(NVARCHAR(100), NEWID())),
-    Title              NVARCHAR(250)  NOT NULL,
+    Title              NVARCHAR(MAX)  NOT NULL,
     Description        NVARCHAR(MAX)  NULL,
     DepartmentId       INT            NOT NULL,
     EstimatedAmount    DECIMAL(18,2)  NOT NULL DEFAULT 0,
@@ -379,6 +379,18 @@ BEGIN
         ALTER TABLE dbo.Tender ADD RowVer ROWVERSION NOT NULL;
     IF COL_LENGTH(N'dbo.Tender',N'CreationToken') IS NULL
         ALTER TABLE dbo.Tender ADD CreationToken UNIQUEIDENTIFIER NULL;
+
+    DECLARE @TenderTitleMaxLength SMALLINT;
+    SELECT @TenderTitleMaxLength = max_length
+    FROM sys.columns
+    WHERE object_id=OBJECT_ID(N'dbo.Tender') AND name=N'Title';
+    IF @TenderTitleMaxLength IS NOT NULL AND @TenderTitleMaxLength >= 0
+    BEGIN
+        IF EXISTS (SELECT 1 FROM sys.indexes
+                   WHERE object_id=OBJECT_ID(N'dbo.Tender') AND name=N'IX_Tender_Status_Dept')
+            DROP INDEX IX_Tender_Status_Dept ON dbo.Tender;
+        ALTER TABLE dbo.Tender ALTER COLUMN Title NVARCHAR(MAX) NOT NULL;
+    END;
 END;
 GO
 IF N'$(InstallMode)'=N'Fresh'

@@ -129,11 +129,18 @@ namespace DepartmentModule.Pages
                 workflowScope = " AND @AuthorizedDepartmentId IS NOT NULL AND t.DepartmentId=@AuthorizedDepartmentId";
             else if (!HasPermission("system.admin") &&
                 HasAnyRole("Nivida Kaksh (Tender Cell)", "Nivida Samiti Adhyaksha", "Chief Auditor"))
-                workflowScope = @" AND t.WorkflowVersion=2 AND EXISTS
-                                   (SELECT 1 FROM dbo.TenderWorkflowAssignments scopeAssignment
-                                    WHERE scopeAssignment.TenderId=t.TenderId AND scopeAssignment.IsCurrent=1
-                                      AND scopeAssignment.AssignedRoleId=@WorkflowRoleId
-                                      AND (scopeAssignment.AssignedUserId IS NULL OR scopeAssignment.AssignedUserId=@WorkflowUserId))";
+                workflowScope = @" AND t.WorkflowVersion=2 AND
+                                   (EXISTS
+                                    (SELECT 1 FROM dbo.TenderWorkflowAssignments scopeAssignment
+                                     WHERE scopeAssignment.TenderId=t.TenderId AND scopeAssignment.IsCurrent=1
+                                       AND scopeAssignment.AssignedRoleId=@WorkflowRoleId
+                                       AND (scopeAssignment.AssignedUserId IS NULL OR scopeAssignment.AssignedUserId=@WorkflowUserId))
+                                    OR EXISTS
+                                    (SELECT 1 FROM dbo.TenderWorkflowHistory priorAction
+                                     WHERE priorAction.TenderId=t.TenderId
+                                       AND priorAction.WorkflowVersion=2
+                                       AND priorAction.RoleId=@WorkflowRoleId
+                                       AND priorAction.UserId=@WorkflowUserId))";
             string statusBucket = TenderStatusBuckets.Predicate(StatusFilter.SelectedValue);
             object dateFrom;
             object dateTo;

@@ -27,12 +27,12 @@
         <div class="tender-wizard-panel" data-wizard-step="1">
         <h2>Basic tender information</h2>
         <p class="muted">The tender reference number is assigned automatically when the draft is saved.</p>
-        <div class="field"><label for="TitleText">Project title</label><asp:TextBox ID="TitleText" runat="server" MaxLength="100" />
-            <span id="TitleCharacterCount" class="field-help" aria-live="polite">0/100</span>
+        <div class="field"><label for="TitleText">Project title</label><asp:TextBox ID="TitleText" runat="server" />
+            <span id="TitleCharacterCount" class="field-help" aria-live="polite">0 characters</span>
             <asp:RequiredFieldValidator ID="TitleRequired" runat="server" ControlToValidate="TitleText" ErrorMessage="Title is required." CssClass="validation" />
-            <asp:CustomValidator ID="TitleLength" runat="server" ControlToValidate="TitleText" OnServerValidate="TitleLength_ServerValidate" ErrorMessage="Title must be 5 to 100 characters." CssClass="validation" /></div>
-        <div class="field"><label for="DescriptionText">Project description</label><asp:TextBox ID="DescriptionText" runat="server" TextMode="MultiLine" Rows="3" MaxLength="4000" />
-            <span id="DescriptionCharacterCount" class="field-help" aria-live="polite">0/4000</span></div>
+            <asp:CustomValidator ID="TitleLength" runat="server" ControlToValidate="TitleText" OnServerValidate="TitleLength_ServerValidate" ErrorMessage="Title must be at least 5 characters." CssClass="validation" /></div>
+        <div class="field"><label for="DescriptionText">Project description</label><asp:TextBox ID="DescriptionText" runat="server" TextMode="MultiLine" Rows="3" />
+            <span id="DescriptionCharacterCount" class="field-help" aria-live="polite">0 characters</span></div>
         <div class="row">
             <asp:Panel ID="DepartmentPanel" runat="server" CssClass="field"><label for="DepartmentSelect">Department</label><asp:DropDownList ID="DepartmentSelect" runat="server" />
                 <asp:RequiredFieldValidator ID="DepartmentRequired" runat="server" ControlToValidate="DepartmentSelect" InitialValue="" ErrorMessage="A valid Department must be selected." CssClass="validation" /></asp:Panel>
@@ -469,8 +469,8 @@
                 var description = wizard.querySelector("[id$='DescriptionText']");
                 var titleCount = document.getElementById("TitleCharacterCount");
                 var descriptionCount = document.getElementById("DescriptionCharacterCount");
-                if (title && titleCount) titleCount.textContent = title.value.length + "/100";
-                if (description && descriptionCount) descriptionCount.textContent = description.value.length + "/4000";
+                if (title && titleCount) titleCount.textContent = title.value.length + " characters";
+                if (description && descriptionCount) descriptionCount.textContent = description.value.length + " characters";
             }
 
             var requirementUpload = wizard.querySelector("[id$='RequirementDocumentsUpload']");
@@ -502,6 +502,10 @@
             }
 
             function renderRequirementUploads() {
+                if (requirementCategoriesField)
+                    requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
+                        return entry.category;
+                    }));
                 if (!requirementSelectionList) return;
                 requirementSelectionList.textContent = "";
                 if (!selectedRequirementFiles.length) return;
@@ -585,10 +589,6 @@
                 heading.textContent = "Files selected for upload";
                 requirementSelectionList.appendChild(heading);
                 requirementSelectionList.appendChild(table);
-                if (requirementCategoriesField)
-                    requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
-                        return entry.category;
-                    }));
             }
 
             if (requirementUpload) requirementUpload.addEventListener("change", function () {
@@ -609,7 +609,7 @@
                     var department = panel.querySelector("[id$='DepartmentSelect']");
                     var year = panel.querySelector("[id$='FinancialYearSelect']");
                     var amount = panel.querySelector("[id$='AmountText']");
-                    return title && title.value.trim().length >= 5 && title.value.trim().length <= 100 &&
+                    return title && title.value.trim().length >= 5 &&
                         method && method.value &&
                         category && category.value && year && year.value && amount &&
                         amount.value !== "" && Number(amount.value) > 0 &&
