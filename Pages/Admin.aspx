@@ -7,28 +7,49 @@
         <h2>Tender overview</h2>
         <div class="page-heading department-tenders-heading">
             <div><h3>Department-wise tender breakdown</h3>
-                <p class="muted">Select a department card to view its tenders and compare status totals.</p></div>
+                <p class="muted">Select a department name or a coloured status count to view matching tenders.</p></div>
         </div>
         <asp:Repeater ID="DepartmentTendersCards" runat="server" OnItemCommand="DepartmentTendersCards_ItemCommand">
             <HeaderTemplate><div class="department-tender-cards"></HeaderTemplate>
             <ItemTemplate>
-                <asp:LinkButton ID="ViewDepartmentTendersButton" runat="server"
-                    CssClass="department-tender-card" CommandName="ViewDepartmentTenders"
-                    CommandArgument='<%# Eval("DepartmentId") %>' CausesValidation="false"
-                    aria-label='<%# "View tenders for " + Eval("DepartmentName") %>'>
+                <asp:Panel ID="DepartmentTenderCard" runat="server" CssClass="department-tender-card">
                     <span class="department-tender-card-heading">
-                        <strong><%# Eval("DepartmentName") %></strong>
+                        <asp:LinkButton ID="ViewDepartmentTendersButton" runat="server"
+                            CssClass="department-tender-department" CommandName="ViewDepartmentTenders"
+                            CommandArgument='<%# Eval("DepartmentId") %>' CausesValidation="false"
+                            aria-label='<%# "View all tenders for " + Eval("DepartmentName") %>'>
+                            <strong><%# Eval("DepartmentName") %></strong>
+                        </asp:LinkButton>
                         <span class="department-tender-total"><%# Eval("TenderCount") %> tenders</span>
                     </span>
                     <span class="department-tender-card-metrics">
-                        <span><span>Draft</span><strong><%# Eval("DraftCount") %></strong></span>
-                        <span><span>Published</span><strong><%# Eval("PublishedCount") %></strong></span>
-                        <span><span>Active</span><strong><%# Eval("ActiveCount") %></strong></span>
-                        <span><span>Closed</span><strong><%# Eval("ClosedCount") %></strong></span>
-                        <span><span>Cancelled</span><strong><%# Eval("CancelledCount") %></strong></span>
+                        <asp:LinkButton ID="ViewDraftTendersButton" runat="server"
+                            CssClass="department-tender-metric draft" CommandName="ViewDepartmentStatus"
+                            CommandArgument='<%# Eval("DepartmentId") + "|Draft" %>' CausesValidation="false"
+                            aria-label='<%# "View " + Eval("DraftCount") + " draft tenders in " + Eval("DepartmentName") %>'>
+                            <span>Draft</span><strong><%# Eval("DraftCount") %></strong>
+                        </asp:LinkButton>
+                        <asp:LinkButton ID="ViewPublishedTendersButton" runat="server"
+                            CssClass="department-tender-metric published" CommandName="ViewDepartmentStatus"
+                            CommandArgument='<%# Eval("DepartmentId") + "|Published" %>' CausesValidation="false"
+                            aria-label='<%# "View " + Eval("PublishedCount") + " published tenders in " + Eval("DepartmentName") %>'>
+                            <span>Published</span><strong><%# Eval("PublishedCount") %></strong>
+                        </asp:LinkButton>
+                        <asp:LinkButton ID="ViewActiveTendersButton" runat="server"
+                            CssClass="department-tender-metric active" CommandName="ViewDepartmentStatus"
+                            CommandArgument='<%# Eval("DepartmentId") + "|Active" %>' CausesValidation="false"
+                            aria-label='<%# "View " + Eval("ActiveCount") + " active tenders in " + Eval("DepartmentName") %>'>
+                            <span>Active</span><strong><%# Eval("ActiveCount") %></strong>
+                        </asp:LinkButton>
+                        <asp:LinkButton ID="ViewClosedTendersButton" runat="server"
+                            CssClass="department-tender-metric closed" CommandName="ViewDepartmentStatus"
+                            CommandArgument='<%# Eval("DepartmentId") + "|Closed" %>' CausesValidation="false"
+                            aria-label='<%# "View " + Eval("ClosedCount") + " closed tenders in " + Eval("DepartmentName") %>'>
+                            <span>Closed</span><strong><%# Eval("ClosedCount") %></strong>
+                        </asp:LinkButton>
                     </span>
-                    <span class="department-tender-card-action">View department tenders</span>
-                </asp:LinkButton>
+                    <span class="department-tender-card-action">Select a status or department name to view tenders</span>
+                </asp:Panel>
             </ItemTemplate>
             <FooterTemplate></div></FooterTemplate>
         </asp:Repeater>
@@ -39,8 +60,9 @@
             Visible="false" aria-live="polite">
             <div class="page-heading">
                 <div>
-                    <h3>Tenders in <asp:Literal ID="SelectedDepartmentName" runat="server" /></h3>
-                    <p class="muted">Tender records for the selected department.</p>
+                    <h3><asp:Literal ID="SelectedDepartmentStatus" runat="server" /> tenders in
+                        <asp:Literal ID="SelectedDepartmentName" runat="server" /></h3>
+                    <p class="muted">Select a tender reference to open its complete details.</p>
                 </div>
                 <asp:LinkButton ID="ClearDepartmentSelectionButton" runat="server" CssClass="button secondary"
                     Text="Back to departments" CausesValidation="false"
@@ -48,7 +70,7 @@
             </div>
             <div class="table-wrap">
                 <asp:GridView ID="DepartmentTenderDetailsGrid" runat="server" AutoGenerateColumns="false"
-                    GridLines="None" EmptyDataText="This department has no tenders.">
+                    GridLines="None" EmptyDataText="No tenders match the selected department and status.">
                     <Columns>
                         <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId"
                             DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender no." />

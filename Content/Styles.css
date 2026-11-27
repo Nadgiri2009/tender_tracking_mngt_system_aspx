@@ -230,7 +230,7 @@ h3 { margin: .3rem 0; color: var(--plum); font-size: 1rem; }
 .department-tender-details p { margin: .25rem 0 0; }
 .department-tender-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
     gap: .7rem;
 }
 .department-tender-card {
@@ -243,26 +243,45 @@ h3 { margin: .3rem 0; color: var(--plum); font-size: 1rem; }
     border-radius: 12px;
     background: var(--surface);
     color: var(--text);
-    text-align: left;
+    box-shadow: 0 2px 8px #3e115408;
+}
+.department-tender-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
+.department-tender-department {
+    min-width: 0;
+    color: var(--purple-dark);
+    text-decoration: none;
+}
+.department-tender-department:hover,
+.department-tender-department:focus-visible { color: var(--purple); text-decoration: underline; }
+.department-tender-department:focus-visible,
+.department-tender-metric:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.department-tender-card-heading strong { display: block; min-width: 0; font-size: .95rem; line-height: 1.3; }
+.department-tender-total { flex: 0 0 auto; color: var(--purple-dark); font-size: .78rem; font-weight: 750; white-space: nowrap; }
+.department-tender-card-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .35rem; }
+.department-tender-metric {
+    display: flex;
+    min-width: 0;
+    min-height: 3.5rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: .15rem;
+    padding: .45rem .5rem;
+    border: 1px solid transparent;
+    border-radius: 9px;
     text-decoration: none;
     transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-.department-tender-card:hover,
-.department-tender-card:focus-visible {
-    border-color: var(--purple);
-    box-shadow: 0 5px 16px #3e115414;
-    color: var(--text);
+.department-tender-metric:hover {
+    box-shadow: 0 3px 9px #3e115414;
     text-decoration: none;
     transform: translateY(-1px);
 }
-.department-tender-card:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
-.department-tender-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
-.department-tender-card-heading strong { min-width: 0; font-size: .95rem; line-height: 1.3; }
-.department-tender-total { flex: 0 0 auto; color: var(--purple-dark); font-size: .78rem; font-weight: 750; white-space: nowrap; }
-.department-tender-card-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; }
-.department-tender-card-metrics > span { display: flex; min-width: 0; flex-direction: column; gap: .15rem; }
-.department-tender-card-metrics > span > span { overflow: hidden; color: var(--muted); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
-.department-tender-card-metrics strong { font-size: .9rem; line-height: 1.15; }
+.department-tender-metric > span { overflow: hidden; font-size: .68rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.department-tender-metric strong { font-size: .95rem; line-height: 1.15; }
+.department-tender-metric.draft { border-color: #ded8eb; background: #f5f2fa; color: #59476f; }
+.department-tender-metric.published { border-color: #e5d4ed; background: #faf3fd; color: #753b8b; }
+.department-tender-metric.active { border-color: #c9e6d3; background: #eff8f2; color: #236a42; }
+.department-tender-metric.closed { border-color: #d3e0ee; background: #f0f5fa; color: #375c7c; }
 .department-tender-card-action { color: var(--accent); font-size: .76rem; font-weight: 700; }
 .department-tender-details { margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--border); }
 .department-tender-details .page-heading { margin-bottom: .65rem; }
@@ -1093,24 +1112,36 @@ tr:hover td { background: #fdfafd; }
 }
 .workflow-timeline {
     display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(260px, 1fr);
+    align-items: stretch;
     gap: 0;
     margin: 0;
-    padding: 0;
+    padding: .2rem .15rem .8rem;
+    overflow-x: auto;
     list-style: none;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
 }
 .workflow-step {
     position: relative;
     display: grid;
-    grid-template-columns: 2.4rem minmax(0, 1fr);
-    gap: .85rem;
-    padding: 0 0 1rem;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 2.2rem minmax(0, 1fr);
+    gap: .55rem;
+    padding: 0 .7rem .1rem 0;
+    scroll-snap-align: start;
 }
 .workflow-step:not(:last-child)::before {
     position: absolute;
-    top: 2.15rem;
-    bottom: -.1rem;
-    left: 1.05rem;
-    border-left: 2px solid #ded9e3;
+    z-index: 0;
+    top: 1.05rem;
+    right: -1.4rem;
+    left: 2.5rem;
+    height: 2px;
+    background: #ded9e3;
     content: "";
 }
 .workflow-step-number {
@@ -1126,13 +1157,16 @@ tr:hover td { background: #fdfafd; }
     color: #68616e;
     font-size: .82rem;
     font-weight: 800;
+    margin-left: .3rem;
 }
 .workflow-step-content {
     min-width: 0;
+    height: 100%;
     padding: .8rem 1rem;
     border: 1px solid #e8e3eb;
     border-radius: 12px;
     background: #fff;
+    scroll-snap-align: start;
 }
 .workflow-step-heading {
     display: flex;
@@ -1239,9 +1273,11 @@ tr:hover td { background: #fdfafd; }
 }
 .workflow-step.completed .workflow-step-number { border-color: #1a7f4b; background: #e8f5ed; color: #17653e; }
 .workflow-step.completed .workflow-status { background: #e8f5ed; color: #17653e; }
+.workflow-step.completed:not(:last-child)::before { background: #78b994; }
 .workflow-step.current .workflow-step-content { border-color: #8db9e8; background: #f4f9ff; box-shadow: 0 0 0 2px #e8f2fd; }
 .workflow-step.current .workflow-step-number { border-color: #2672bd; background: #eaf3ff; color: #15539a; }
 .workflow-step.current .workflow-status { background: #e3f0ff; color: #15539a; }
+.workflow-step.current:not(:last-child)::before { background: linear-gradient(90deg, #2672bd, #ded9e3); }
 .workflow-step.upcoming .workflow-step-content { background: #fbfafc; }
 .workflow-step.returned .workflow-step-number,
 .workflow-step.returned .workflow-status { border-color: #b3261e; background: #fff0ef; color: #9c201a; }
@@ -1308,6 +1344,8 @@ tr:hover td { background: #fdfafd; }
     .workflow-current-stage { border-radius: 10px; text-align: left; }
     .workflow-step-content { padding: .7rem; }
     .workflow-status { align-self: flex-start; }
+    .workflow-timeline { grid-auto-columns: minmax(250px, 82vw); }
+    .department-tender-card-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tender-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 380px) {

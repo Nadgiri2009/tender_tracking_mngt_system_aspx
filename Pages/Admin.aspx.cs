@@ -18,7 +18,7 @@ namespace DepartmentModule.Pages
             PendingAdminActions, RecentTendersPageSummary;
         protected GridView RecentTendersGrid, DepartmentTenderDetailsGrid;
         protected Panel DepartmentTenderDetailsPanel;
-        protected Literal SelectedDepartmentName;
+        protected Literal SelectedDepartmentName, SelectedDepartmentStatus;
         protected Panel DepartmentTendersEmptyPanel;
         protected Repeater DepartmentTendersCards;
 
@@ -90,8 +90,7 @@ namespace DepartmentModule.Pages
                                    AND (t.CurrentStatus LIKE N'%closed%'
                                         OR (s.CurrentClosingUtc<=SYSUTCDATETIME()
                                             AND published.TenderId IS NOT NULL))
-                                   THEN 1 ELSE 0 END) AS ClosedCount,
-                         SUM(CASE WHEN t.CurrentStatus LIKE N'%cancel%' THEN 1 ELSE 0 END) AS CancelledCount
+                                   THEN 1 ELSE 0 END) AS ClosedCount
                   FROM dbo.Departments d
                   INNER JOIN dbo.Tender t ON t.DepartmentId=d.DepartmentId AND t.IsDeleted=0
                   LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
@@ -164,15 +163,21 @@ namespace DepartmentModule.Pages
 
         protected void DepartmentTendersCards_ItemCommand(object source, RepeaterCommandEventArgs e)
         {
-            if (!String.Equals(e.CommandName, "ViewDepartmentTenders", StringComparison.Ordinal))
+            bool filterByStatus = String.Equals(e.CommandName, "ViewDepartmentStatus", StringComparison.Ordinal);
+            if (!filterByStatus &&
+                !String.Equals(e.CommandName, "ViewDepartmentTenders", StringComparison.Ordinal))
                 return;
 
             int departmentId;
-            if (!Int32.TryParse(Convert.ToString(e.CommandArgument, CultureInfo.InvariantCulture),
+            string[] arguments = Convert.ToString(e.CommandArgument, CultureInfo.InvariantCulture).Split('|');
+            string departmentValue = arguments.Length > 0 ? arguments[0] : String.Empty;
+            string selectedStatus = filterByStatus && arguments.Length == 2 ? arguments[1] : String.Empty;
+            if (!Int32.TryParse(departmentValue,
                     NumberStyles.None, CultureInfo.InvariantCulture, out departmentId) ||
-                departmentId <= 0)
+                departmentId <= 0 ||
+                (filterByStatus && TenderStatusBuckets.Predicate(selectedStatus) == null))
             {
-                Message.Text = "<div class=\"message\">Select a department from the list and try again.</div>";
+                Message.Text = "<div class=\"message\">Select a valid department and tender status, then try again.</div>";
                 return;
             }
 
@@ -192,11 +197,15 @@ namespace DepartmentModule.Pages
                         departmentName = Convert.ToString(value);
                     }
 
+                    string statusPredicate = filterByStatus
+                        ? " AND (" + TenderStatusBuckets.Predicate(selectedStatus) + ")"
+                        : String.Empty;
                     using (SqlCommand command = new SqlCommand(
-                        @"SELECT TenderId,TenderNumber,Title,CurrentStatus,CreatedDate
-                          FROM dbo.Tender
-                          WHERE DepartmentId=@DepartmentId AND IsDeleted=0
-                          ORDER BY CreatedDate DESC,TenderId DESC;", connection))
+                        @"SELECT t.TenderId,t.TenderNumber,t.Title,t.CurrentStatus,t.CreatedDate
+                          FROM dbo.Tender t
+                          LEFT JOIN dbo.TenderPublicationSchedule s ON s.TenderId=t.TenderId
+                          WHERE t.DepartmentId=@DepartmentId AND t.IsDeleted=0" + statusPredicate +
+                        " ORDER BY t.CreatedDate DESC,t.TenderId DESC;", connection))
                     using (SqlDataAdapter adapter = new SqlDataAdapter(command))
                     {
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
@@ -207,6 +216,9 @@ namespace DepartmentModule.Pages
                     }
 
                     SelectedDepartmentName.Text = HttpUtility.HtmlEncode(departmentName);
+                    SelectedDepartmentStatus.Text = filterByStatus
+                        ? HttpUtility.HtmlEncode(selectedStatus)
+                        : "All";
                     DepartmentTenderDetailsPanel.Visible = true;
                 }
             }
@@ -225,6 +237,7 @@ namespace DepartmentModule.Pages
         {
             DepartmentTenderDetailsPanel.Visible = false;
             SelectedDepartmentName.Text = String.Empty;
+            SelectedDepartmentStatus.Text = String.Empty;
         }
 
         protected int RecentTenderSerialNumber(int rowIndex)
