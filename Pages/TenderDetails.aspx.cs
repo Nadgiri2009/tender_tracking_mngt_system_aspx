@@ -204,7 +204,7 @@ namespace DepartmentModule.Pages
                                             AND priorAction.UserId=@CurrentUserId))
                                      OR (t.WorkflowVersion=1 AND
                                          (@CurrentRole<>N'DepartmentOfficer' OR t.CreatedBy=@CurrentUserId)
-                                         AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId)))
+                                         AND (@DepartmentId IS NULL OR t.DepartmentId=@DepartmentId))))
                             );", connection))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);

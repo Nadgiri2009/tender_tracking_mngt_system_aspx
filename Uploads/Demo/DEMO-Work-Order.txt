@@ -1,0 +1,6 @@
+DEMO ONLY - NOT A REAL WORK ORDER
+
+Sample work order
+This file demonstrates the generated-document list for the completed DEMO
+tender lifecycle. The reference, value, contractor, scope, dates, and signatory
+must not be treated as an issued municipal order.

@@ -1,0 +1,6 @@
+DEMO ONLY - NOT A REAL BIDDER REGISTRATION
+
+Sample bidder document: business registration
+This file is a placeholder for demonstrating the technical document review
+screen. It does not certify any company, registration, eligibility, or legal
+standing. The linked contractor record is used only as existing demo data.

@@ -412,7 +412,7 @@
                         <asp:BoundField DataField="DocumentKind" HeaderText="Document" />
                         <asp:BoundField DataField="VersionNumber" HeaderText="Version" />
                         <asp:HyperLinkField DataTextField="FileName" DataNavigateUrlFields="GeneratedDocumentId"
-                            DataNavigateUrlFormatString="DocumentDownload.aspx?generatedDocumentId={0}" HeaderText="PDF" />
+                            DataNavigateUrlFormatString="DocumentDownload.aspx?generatedDocumentId={0}" HeaderText="Download" />
                         <asp:BoundField DataField="GeneratedAtUtc" HeaderText="Generated" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                     </Columns>
                 </asp:GridView>
