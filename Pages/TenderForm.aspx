@@ -65,7 +65,9 @@
                 <label for="RequirementDocumentsUpload" class="button secondary document-upload-trigger requirement-document-upload-trigger">Browse files</label>
             </div>
             <asp:HiddenField ID="RequirementDocumentCategories" runat="server" />
-            <p class="help">Add documents one at a time or select several. Assign each to Scope of Work, Technical Requirements, or Financial Requirements. PDF, Office documents, JPEG or PNG; maximum 10 MB per file.</p>
+            <p class="help">Add documents one at a time or select several. Assign each to Scope of Work, Technical Requirements, or Financial Requirements. PDF, Office documents, JPEG or PNG; maximum 10 MB per file. Attached documents are saved with the tender.</p>
+            <p id="RequirementDocumentsCompletionStatus" class="requirement-document-completion is-incomplete"
+                role="status" aria-live="polite">0 of 3 required document categories attached.</p>
             <p id="RequirementDocumentSelectionStatus" class="upload-status" role="status" aria-live="polite" hidden="hidden"></p>
             <div id="RequirementDocumentSelectionList" class="requirement-document-list" aria-live="polite" aria-relevant="additions removals"></div>
             <asp:Panel ID="UploadedRequirementDocumentsPanel" runat="server" Visible="false">
@@ -557,6 +559,34 @@
                 }) && selectedRequirementFiles.every(function (item) { return !!item.category; });
             }
 
+            function updateRequirementDocumentsStatus() {
+                var required = ["Scope of Work", "Technical Requirements", "Financial Requirements"];
+                var categories = requirementDocumentCategories();
+                var completedCategories = required.filter(function (category) {
+                    return categories.indexOf(category) >= 0;
+                }).length;
+                var complete = completedCategories === required.length &&
+                    selectedRequirementFiles.every(function (item) { return !!item.category; });
+                var hasUncategorizedFile = selectedRequirementFiles.some(function (item) {
+                    return !item.category;
+                });
+                var completionStatus = document.getElementById("RequirementDocumentsCompletionStatus");
+                var emptyState = wizard.querySelector("[id$='RequirementDocumentsEmptyState']");
+
+                if (completionStatus) {
+                    completionStatus.classList.toggle("is-complete", complete);
+                    completionStatus.classList.toggle("is-incomplete", !complete);
+                    completionStatus.textContent = complete
+                        ? "Complete — all 3 required document categories are attached."
+                        : (hasUncategorizedFile
+                            ? "Assign a category to each attached document. " + completedCategories +
+                                " of 3 required categories are covered."
+                            : completedCategories + " of 3 required document categories attached.");
+                }
+                if (emptyState)
+                    emptyState.hidden = selectedRequirementFiles.length > 0;
+            }
+
             function requirementFileExtension(file) {
                 var name = file && file.name ? file.name : "";
                 var separator = name.lastIndexOf(".");
@@ -615,6 +645,7 @@
                     requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
                         return entry.category;
                     }));
+                updateRequirementDocumentsStatus();
                 if (!requirementSelectionList) return;
                 requirementSelectionList.textContent = "";
                 if (!selectedRequirementFiles.length) return;
@@ -661,6 +692,7 @@
                             requirementCategoriesField.value = JSON.stringify(selectedRequirementFiles.map(function (entry) {
                                 return entry.category;
                             }));
+                        updateRequirementDocumentsStatus();
                         render();
                     });
                     var categoryCell = document.createElement("td");
@@ -668,7 +700,7 @@
                     row.appendChild(categoryCell);
                     var status = document.createElement("span");
                     status.className = "upload-status is-ready";
-                    status.textContent = item.status || "Ready to upload";
+                    status.textContent = item.status || "Attached";
                     var statusCell = document.createElement("td");
                     statusCell.appendChild(status);
                     row.appendChild(statusCell);
@@ -698,7 +730,7 @@
                 table.appendChild(body);
                 var heading = document.createElement("h3");
                 heading.className = "requirement-document-list-heading";
-                heading.textContent = "Files selected for upload";
+                heading.textContent = "Attached documents";
                 requirementSelectionList.appendChild(heading);
                 requirementSelectionList.appendChild(table);
             }
@@ -711,7 +743,7 @@
                         errors.push(file.name + error);
                         return;
                     }
-                    selectedRequirementFiles.push({ file: file, category: "", status: "Ready to upload" });
+                    selectedRequirementFiles.push({ file: file, category: "", status: "Attached" });
                 });
                 syncRequirementUploadInput();
                 renderRequirementUploads();
@@ -1876,7 +1908,7 @@
                 state.selectedRequirementFiles.forEach(function (item) {
                     rows.push("<div class='tender-review-row'><dt>" +
                         escapeTenderReviewText(item.category || "Uncategorized") + "</dt><dd>" +
-                        escapeTenderReviewText(item.file.name + " · Ready to upload") + "</dd></div>");
+                        escapeTenderReviewText(item.file.name + " · Attached") + "</dd></div>");
                 });
                 return rows.length ? rows.join("") :
                     "<div class='tender-review-row'><dt>Documents</dt><dd>Not uploaded</dd></div>";

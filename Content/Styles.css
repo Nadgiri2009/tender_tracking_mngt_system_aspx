@@ -886,6 +886,9 @@ tr:hover td { background: #fdfafd; }
 .requirement-document-replace-submit { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .requirement-document-upload-date { display: block; margin-top: .2rem; color: var(--muted); }
 .requirement-document-empty { margin-top: .7rem; padding: .8rem 1rem; border: 1px dashed var(--border); border-radius: 10px; background: #fcf9fd; color: var(--muted); }
+.requirement-document-completion { margin: 0; padding: .65rem .85rem; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); }
+.requirement-document-completion.is-complete { border-color: #86efac; background: #f0fdf4; color: #166534; font-weight: 650; }
+.requirement-document-completion.is-incomplete { border-color: #f2d6a5; background: #fffaf0; color: #805400; }
 .upload-status.is-error { color: var(--danger); }
 .upload-status.is-error:before { display: none; }
 .requirement-document .file-upload-action { margin: 0; }
