@@ -22,18 +22,18 @@ namespace DepartmentModule.Pages
 
         private int TenderId { get { return QueryId("tenderId"); } }
         private bool IsAdministrator { get { return IsJeAdministrator; } }
-        private bool CanReview { get { return IsAdministrator || HasAnyRole("CAFOOfficer"); } }
+        private bool CanReview { get { return IsAdministrator; } }
         private bool CanRequest { get { return IsAdministrator || HasAnyRole("DepartmentOfficer"); } }
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!IsAdministrator && !HasAnyRole("DepartmentOfficer", "CAFOOfficer"))
+            if (!IsAdministrator && !HasAnyRole("DepartmentOfficer"))
             {
-                RequireRoles("DepartmentOfficer", "CAFOOfficer");
+                RequireRoles("DepartmentOfficer");
                 return;
             }
             EvaluationLink.Visible = IsAdministrator ||
-                HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection");
+                HasAnyRole("TenderCommittee", "TenderSection");
             SchedulePanel.Visible = CanReview && TenderId > 0;
             ExtensionRequestPanel.Visible = CanRequest && TenderId > 0;
             PendingRequestsPanel.Visible = CanReview;
@@ -243,7 +243,7 @@ namespace DepartmentModule.Pages
 
                 SubmitExtension(proposedUtc, applicationPath, supportingPath);
 
-                Message.Text = "<div class=\"message success\">Extension request submitted for CAFO review.</div>";
+                Message.Text = "<div class=\"message success\">Extension request submitted for review.</div>";
                 BindTenders();
                 BindHistory();
             }
@@ -368,12 +368,11 @@ namespace DepartmentModule.Pages
                 string status; int tenderDepartmentId, createdBy;
                 if (!ModuleDb.LockTender(connection, tx, TenderId, out status, out tenderDepartmentId, out createdBy))
                     throw new InvalidOperationException("Tender not found.");
-                if ((CurrentRole != "CAFOOfficer" && CurrentRole != "Admin") ||
-                    !ModuleDb.UserHasRole(connection, tx, CurrentUserId, CurrentRole))
-                    throw new InvalidOperationException("Only the authorized CAFO or administrator can approve a publication schedule.");
+                if (!IsAdministrator || !ModuleDb.UserHasRole(connection, tx, CurrentUserId, CurrentRole))
+                    throw new InvalidOperationException("Only the authorized JE administrator can approve a publication schedule.");
                 if (CurrentDepartmentId.HasValue && CurrentDepartmentId.Value != tenderDepartmentId)
                     throw new InvalidOperationException("The tender is outside your department.");
-                if (CurrentRole != "Admin" && ModuleDb.UserOutsideTenderDepartment(connection, tx, CurrentUserId, tenderDepartmentId))
+                if (!IsAdministrator && ModuleDb.UserOutsideTenderDepartment(connection, tx, CurrentUserId, tenderDepartmentId))
                     throw new InvalidOperationException("The tender is outside your assigned department.");
                 if (status != "Tender Published")
                     throw new InvalidOperationException("A publication schedule can only be configured for a tender approved for publication.");
@@ -509,9 +508,8 @@ namespace DepartmentModule.Pages
             using (SqlConnection connection = ModuleDb.OpenConnection())
             using (SqlTransaction tx = connection.BeginTransaction())
             {
-                if ((CurrentRole != "CAFOOfficer" && CurrentRole != "Admin") ||
-                    !ModuleDb.UserHasRole(connection, tx, CurrentUserId, CurrentRole))
-                    throw new InvalidOperationException("Only the authorized CAFO or administrator can review extensions.");
+                if (!IsAdministrator || !ModuleDb.UserHasRole(connection, tx, CurrentUserId, CurrentRole))
+                    throw new InvalidOperationException("Only the authorized JE administrator can review extensions.");
 
                 int tenderId = 0, submittedBy = 0, extensionNo = 0;
                 DateTime originalClosing = DateTime.MinValue, proposedClosing = DateTime.MinValue;

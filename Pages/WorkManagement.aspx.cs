@@ -67,7 +67,7 @@ namespace DepartmentModule.Pages
                     BindGrid(connection, PaymentsGrid,
                         @"SELECT p.Amount,p.TransactionNo,p.PaymentDate,b.BillNo FROM dbo.Payments p INNER JOIN dbo.Bills b ON b.BillId=p.BillId WHERE b.TenderId=@TenderId ORDER BY p.PaymentDate DESC;");
                     if (!IsPostBack) LoadApprovedBills(connection);
-                    PaymentPanel.Visible = IsJeAdministrator || HasAnyRole("CAFOOfficer");
+                    PaymentPanel.Visible = IsJeAdministrator;
                 }
                 CreateAgreementButton.Visible = IsJeAdministrator || HasAnyRole("DepartmentOfficer");
                 CreateWorkOrderButton.Visible = IsJeAdministrator || HasAnyRole("DepartmentOfficer");
@@ -232,11 +232,11 @@ namespace DepartmentModule.Pages
         {
             int billId;
             if (!Int32.TryParse(Convert.ToString(e.CommandArgument), out billId) || billId <= 0) { ShowError("Invalid bill."); return; }
-            if (e.CommandName == "ApproveBill" && (IsJeAdministrator || HasAnyRole("CAFOOfficer")))
+            if (e.CommandName == "ApproveBill" && IsJeAdministrator)
             {
                 UpdateBill(billId, "Approved");
             }
-            else if (e.CommandName == "PayBill" && (IsJeAdministrator || HasAnyRole("CAFOOfficer")))
+            else if (e.CommandName == "PayBill" && IsJeAdministrator)
             {
                 BillSelect.SelectedValue = billId.ToString(CultureInfo.InvariantCulture);
                 PaymentAmount.Focus();
@@ -272,7 +272,7 @@ namespace DepartmentModule.Pages
         protected void ProcessPaymentButton_Click(object sender, EventArgs e)
         {
             int billId; decimal amount;
-            if (!(IsJeAdministrator || HasAnyRole("CAFOOfficer")) || !Int32.TryParse(BillSelect.SelectedValue, out billId) ||
+            if (!IsJeAdministrator || !Int32.TryParse(BillSelect.SelectedValue, out billId) ||
                 !Decimal.TryParse(PaymentAmount.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out amount) || amount <= 0 ||
                 String.IsNullOrWhiteSpace(TransactionNo.Text) || TransactionNo.Text.Trim().Length > 100)
             {

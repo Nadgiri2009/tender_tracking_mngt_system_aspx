@@ -9,7 +9,7 @@
 
     <asp:Panel ID="PublishedTendersPanel" runat="server" CssClass="card">
         <h2>Published tenders</h2>
-        <p class="help">JE users can request an extension for a tender they own. CAFO users can configure a schedule and review extension requests.</p>
+        <p class="help">JE users can request an extension for a tender they own. The JE administrator configures publication schedules and reviews extension requests.</p>
         <div class="table-wrap">
             <asp:GridView ID="PublishedTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
                 EmptyDataText="No published tenders are available for your role and department.">
@@ -55,11 +55,11 @@
             <div class="field"><label for="SupportingFile">Supporting document</label><asp:FileUpload ID="SupportingFile" runat="server" /></div>
         </div>
         <asp:Button ID="SubmitExtensionButton" runat="server" Text="Submit extension request" OnClick="SubmitExtensionButton_Click"
-            OnClientClick="return confirm('Submit this extension request to CAFO for review?');" />
+            OnClientClick="return confirm('Submit this extension request for review?');" />
     </asp:Panel>
 
     <asp:Panel ID="PendingRequestsPanel" runat="server" CssClass="card">
-        <h2>Extension requests awaiting CAFO review</h2>
+        <h2>Extension requests awaiting JE administrator review</h2>
         <div class="field"><label for="ReviewRemarks">Review remarks</label><asp:TextBox ID="ReviewRemarks" runat="server" TextMode="MultiLine" MaxLength="1000" Rows="2" /></div>
         <div class="table-wrap">
             <asp:GridView ID="PendingRequestsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"

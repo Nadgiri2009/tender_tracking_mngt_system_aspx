@@ -385,7 +385,7 @@ namespace DepartmentModule.Pages
                          COALESCE(NULLIF(d.FileExtension,N''),RIGHT(d.FileName,CHARINDEX(N'.',REVERSE(d.FileName)))) AS FileExtension
                   FROM dbo.TenderDocuments d
                   LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
-                  WHERE d.TenderId=@TenderId
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                     AND COALESCE(dt.TypeName,d.DocumentType) IN
                         (N'Scope of Work',N'Technical Requirements',N'Financial Requirements')
                   ORDER BY d.UploadedDate DESC,d.DocumentId DESC;", connection))
@@ -463,10 +463,11 @@ namespace DepartmentModule.Pages
                       FROM dbo.TenderRequirementVerificationHistory h
                       WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
                         AND h.ReviewStage=@ReviewStage
+                        AND h.DocumentRevision=d.DocumentRevision
                       ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
                   ) latest
                   LEFT JOIN dbo.Users reviewer ON reviewer.UserId=latest.ReviewerId
-                  WHERE d.TenderId=@TenderId
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                   ORDER BY d.UploadedDate,d.DocumentId;", connection))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
@@ -789,7 +790,7 @@ namespace DepartmentModule.Pages
                     @"SELECT DISTINCT COALESCE(dt.TypeName,d.DocumentType)
                       FROM dbo.TenderDocuments d
                       LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
-                      WHERE d.TenderId=@TenderId
+                      WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                         AND COALESCE(dt.TypeName,d.DocumentType) IN
                             (N'Scope of Work',N'Technical Requirements',N'Financial Requirements');", connection))
                 {
@@ -904,7 +905,7 @@ namespace DepartmentModule.Pages
                         @"SELECT d.FilePath
                           FROM dbo.TenderDocuments d
                           INNER JOIN dbo.Tender t ON t.TenderId=d.TenderId
-                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND t.IsDeleted=0
+                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND d.IsDeleted=0 AND t.IsDeleted=0
                             AND
                             (
                                 (t.WorkflowVersion=1 AND
@@ -941,11 +942,14 @@ namespace DepartmentModule.Pages
 
                     RecordRequirementDocumentFileHistory(connection, transaction, documentId, "Deleted");
                     using (SqlCommand command = new SqlCommand(
-                        "DELETE FROM dbo.TenderDocuments WHERE DocumentId=@DocumentId AND TenderId=@TenderId;",
+                        @"UPDATE dbo.TenderDocuments
+                          SET IsDeleted=1,DeletedAtUtc=SYSUTCDATETIME(),DeletedBy=@UserId
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
+                        ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         if (command.ExecuteNonQuery() != 1)
                             throw new InvalidOperationException("The selected document has changed; refresh the page and retry.");
                     }
@@ -1018,7 +1022,7 @@ namespace DepartmentModule.Pages
                         @"SELECT d.FilePath,d.DocumentType
                           FROM dbo.TenderDocuments d WITH (UPDLOCK,HOLDLOCK)
                           INNER JOIN dbo.Tender t WITH (UPDLOCK,HOLDLOCK) ON t.TenderId=d.TenderId
-                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND t.IsDeleted=0
+                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND d.IsDeleted=0 AND t.IsDeleted=0
                             AND
                             (
                                 (t.WorkflowVersion=1 AND
@@ -1070,8 +1074,9 @@ namespace DepartmentModule.Pages
                           SET DocumentName=@DocumentName,FileName=@FileName,FilePath=@FilePath,
                               FileExtension=@FileExtension,FileSizeBytes=@FileSizeBytes,MimeType=@MimeType,
                               UploadedBy=@UploadedBy,UploadedDate=SYSUTCDATETIME(),
-                              VerificationStatus=NULL,VerificationRemarks=NULL,VerifiedBy=NULL,VerifiedAtUtc=NULL
-                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                              VerificationStatus=NULL,VerificationRemarks=NULL,VerifiedBy=NULL,VerifiedAtUtc=NULL,
+                              DocumentRevision=DocumentRevision+1
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
                     {
                         AddText(command, "@DocumentName", SqlDbType.NVarChar, documentName, 250);
                         AddText(command, "@FileName", SqlDbType.NVarChar, newAsset.OriginalName, 260);
@@ -1136,7 +1141,7 @@ namespace DepartmentModule.Pages
                          d.FileExtension,d.FileSizeBytes,d.MimeType,d.UploadedBy,d.UploadedDate,
                          @ActionName,@ActionBy
                   FROM dbo.TenderDocuments d
-                  WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId;", connection, transaction))
+                  WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND d.IsDeleted=0;", connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, EditingTenderId);
@@ -1190,7 +1195,7 @@ namespace DepartmentModule.Pages
                         @"SELECT d.DocumentId
                           FROM dbo.TenderDocuments d WITH (UPDLOCK,HOLDLOCK)
                           INNER JOIN dbo.Tender t WITH (UPDLOCK,HOLDLOCK) ON t.TenderId=d.TenderId
-                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND t.IsDeleted=0
+                          WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND d.IsDeleted=0 AND t.IsDeleted=0
                             AND
                             (
                                 (t.WorkflowVersion=1 AND
@@ -1238,7 +1243,7 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"UPDATE dbo.TenderDocuments
                           SET DocumentTypeId=@DocumentTypeId,DocumentType=@Category
-                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@DocumentTypeId", SqlDbType.Int, documentTypeId);
                         ModuleDb.AddParameter(command, "@Category", SqlDbType.NVarChar, category, 80);
@@ -1314,6 +1319,36 @@ namespace DepartmentModule.Pages
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 using (SqlTransaction transaction = connection.BeginTransaction(IsolationLevel.Serializable))
                 {
+                    if (decision.SelectedValue == "Verified")
+                    {
+                        using (SqlCommand command = new SqlCommand(
+                            @"SELECT DocumentName,FileName,FilePath,FileExtension,FileSizeBytes
+                              FROM dbo.TenderDocuments WITH (UPDLOCK,HOLDLOCK)
+                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;",
+                            connection, transaction))
+                        {
+                            ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                            ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                            using (SqlDataReader reader = command.ExecuteReader())
+                            {
+                                if (!reader.Read())
+                                    throw new InvalidOperationException("The selected document no longer exists on this tender.");
+                                string fullPath;
+                                string fileError = TenderLifecycleFiles.ValidateStoredTenderDocument(this,
+                                    Convert.ToString(reader["FilePath"]),
+                                    Convert.ToString(reader["FileName"]),
+                                    Convert.ToString(reader["FileExtension"]),
+                                    reader["FileSizeBytes"] == DBNull.Value
+                                        ? (long?)null
+                                        : Convert.ToInt64(reader["FileSizeBytes"], CultureInfo.InvariantCulture),
+                                    out fullPath);
+                                if (!String.IsNullOrEmpty(fileError))
+                                    throw new InvalidOperationException("Cannot verify \"" +
+                                        Convert.ToString(reader["DocumentName"]) + "\": " + fileError);
+                            }
+                        }
+                    }
+
                     using (SqlCommand command = new SqlCommand(
                         @"UPDATE d
                           SET VerificationStatus=@Status,VerificationRemarks=@Remarks,
@@ -1322,7 +1357,7 @@ namespace DepartmentModule.Pages
                           FROM dbo.TenderDocuments d
                           INNER JOIN dbo.Tender t ON t.TenderId=d.TenderId
                           WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId
-                            AND t.IsDeleted=0 AND
+                            AND d.IsDeleted=0 AND t.IsDeleted=0 AND
                             (
                                 (t.WorkflowVersion=2 AND @ReviewStage=N'JE'
                                  AND @IsJE=1 AND t.CurrentStatus=N'Draft'
@@ -1388,9 +1423,12 @@ namespace DepartmentModule.Pages
                         using (SqlCommand command = new SqlCommand(
                             @"INSERT INTO dbo.TenderRequirementVerificationHistory
                                 (TenderId,DocumentId,ReviewStage,VerificationStatus,ReviewerId,
-                                 ReviewerRoleId,Remarks)
-                              VALUES(@TenderId,@DocumentId,@ReviewStage,@Status,@ReviewerId,
-                                     @RoleId,@Remarks);", connection, transaction))
+                                 ReviewerRoleId,Remarks,DocumentRevision)
+                              SELECT @TenderId,@DocumentId,@ReviewStage,@Status,@ReviewerId,
+                                     @RoleId,@Remarks,d.DocumentRevision
+                              FROM dbo.TenderDocuments d
+                              WHERE d.TenderId=@TenderId AND d.DocumentId=@DocumentId AND d.IsDeleted=0;",
+                            connection, transaction))
                         {
                             ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
                             ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
@@ -1441,7 +1479,7 @@ namespace DepartmentModule.Pages
                     @"SELECT d.FilePath
                       FROM dbo.TenderDocuments d WITH (UPDLOCK,HOLDLOCK)
                       LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
-                      WHERE d.TenderId=@TenderId
+                      WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                         AND COALESCE(dt.TypeName,d.DocumentType)=@DocumentType;", connection, transaction))
                 {
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
@@ -1464,14 +1502,16 @@ namespace DepartmentModule.Pages
                 if (existingPaths.Count > 0)
                 {
                     using (SqlCommand command = new SqlCommand(
-                        @"DELETE d
+                        @"UPDATE d
+                          SET IsDeleted=1,DeletedAtUtc=SYSUTCDATETIME(),DeletedBy=@UserId
                           FROM dbo.TenderDocuments d
                           LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
-                          WHERE d.TenderId=@TenderId
+                          WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                             AND COALESCE(dt.TypeName,d.DocumentType)=@DocumentType;",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                        ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         AddText(command, "@DocumentType", SqlDbType.NVarChar, input.TypeName, 80);
                         command.ExecuteNonQuery();
                     }

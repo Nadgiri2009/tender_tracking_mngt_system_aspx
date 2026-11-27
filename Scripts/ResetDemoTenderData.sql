@@ -90,6 +90,7 @@ BEGIN TRY
     DELETE FROM dbo.TechnicalBid WHERE TenderId IN (SELECT TenderId FROM @DemoTenders);
 
     DELETE FROM dbo.TenderRequirementVerificationHistory WHERE TenderId IN (SELECT TenderId FROM @DemoTenders);
+    DELETE FROM dbo.TenderDocumentFileHistory WHERE TenderId IN (SELECT TenderId FROM @DemoTenders);
     DELETE FROM dbo.TenderAdministrativeApprovalHistory WHERE TenderId IN (SELECT TenderId FROM @DemoTenders);
     DELETE FROM dbo.TenderAdministrativeApprovals WHERE TenderId IN (SELECT TenderId FROM @DemoTenders);
     DELETE FROM dbo.ApprovalHistory WHERE TenderId IN (SELECT TenderId FROM @DemoTenders);

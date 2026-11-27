@@ -371,7 +371,7 @@ namespace DepartmentModule.Pages
                         TableName = "dbo.DocumentTypes", KeyColumn = "TypeName", MaxLength = 80,
                         DisplayName = "Document type name",
                         UsageQuery = @"SELECT
-                            (SELECT COUNT(*) FROM dbo.TenderDocuments WHERE DocumentType=@Value) +
+                            (SELECT COUNT(*) FROM dbo.TenderDocuments WHERE DocumentType=@Value AND IsDeleted=0) +
                             (SELECT COUNT(*) FROM dbo.TechnicalBidDocuments WHERE DocumentType=@Value) +
                             (SELECT COUNT(*) FROM dbo.TenderRequiredBidDocuments WHERE DocumentType=@Value);"
                     };

@@ -24,14 +24,14 @@ namespace DepartmentModule.Pages
 
         private int TenderId { get { return QueryId("tenderId"); } }
         private bool IsAdministrator { get { return IsJeAdministrator; } }
-        private bool CanOpen { get { return IsAdministrator || HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection"); } }
+        private bool CanOpen { get { return IsAdministrator || HasAnyRole("TenderCommittee", "TenderSection"); } }
         private bool CanEvaluate { get { return IsAdministrator || HasAnyRole("TenderSection", "TenderCommittee"); } }
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (!IsAdministrator && !HasAnyRole("CAFOOfficer", "TenderCommittee", "TenderSection"))
+            if (!IsAdministrator && !HasAnyRole("TenderCommittee", "TenderSection"))
             {
-                RequireRoles("CAFOOfficer", "TenderCommittee", "TenderSection");
+                RequireRoles("TenderCommittee", "TenderSection");
                 return;
             }
             OpeningPanel.Visible = CanOpen;
@@ -584,13 +584,12 @@ namespace DepartmentModule.Pages
                 string status; int tenderDepartmentId, createdBy;
                 if (!ModuleDb.LockTender(connection, tx, tenderId, out status, out tenderDepartmentId, out createdBy))
                     throw new InvalidOperationException("Tender not found.");
-                if ((CurrentRole != "CAFOOfficer" && CurrentRole != "TenderCommittee" &&
-                     CurrentRole != "TenderSection" && CurrentRole != "Admin") ||
+                if ((!CanOpen && CurrentRole != "Admin") ||
                     !ModuleDb.UserHasRole(connection, tx, CurrentUserId, CurrentRole))
                     throw new InvalidOperationException("Your role is not authorized to open tender bids.");
                 if (CurrentDepartmentId.HasValue && CurrentDepartmentId.Value != tenderDepartmentId)
                     throw new InvalidOperationException("The tender is outside your department.");
-                if (CurrentRole != "Admin" && ModuleDb.UserOutsideTenderDepartment(connection, tx, CurrentUserId, tenderDepartmentId))
+                if (!IsAdministrator && ModuleDb.UserOutsideTenderDepartment(connection, tx, CurrentUserId, tenderDepartmentId))
                     throw new InvalidOperationException("The tender is outside your assigned department.");
                 if (status != "Tender Published")
                     throw new InvalidOperationException("Only a published tender can be opened.");

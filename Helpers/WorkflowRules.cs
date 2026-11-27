@@ -27,7 +27,7 @@ namespace DepartmentModule.Helpers
                 { "GB Approved", Submit("AdministrativeApproval", "Administrative Approval Pending", "DepartmentOfficer") },
                 { "Administrative Approval Pending", Approve("AdministrativeApproval", "Administrative Approved", "DPDCOfficer") },
                 { "Administrative Approved", Submit("BudgetApproval", "Budget Approval Pending", "DepartmentOfficer") },
-                { "Budget Approval Pending", Approve("BudgetApproval", "Budget Approved", "CAFOOfficer") },
+                { "Budget Approval Pending", Approve("BudgetApproval", "Budget Approved", "Junior Engineer (JE)") },
                 { "Budget Revision Required", Submit("BudgetRevisionSubmission", "Budget Approval Pending", "DepartmentOfficer") },
                 { "Budget Approved", Submit("TenderDraftPreparation", "Tender Draft Created", "DepartmentOfficer") },
                 { "Tender Draft Created", Submit("TenderCommitteeApproval", "Tender Committee Approval", "DepartmentOfficer") },
@@ -37,8 +37,8 @@ namespace DepartmentModule.Helpers
                 { "Technical Bid Opening", Submit("TechnicalEvaluation", "Technical Evaluation", "TenderCommittee") },
                 { "Technical Evaluation", Approve("TechnicalEvaluation", "Technical Evaluation Approved", "TenderSection") },
                 { "Technical Evaluation Approved", Approve("TechnicalEvaluationCommitteeApproval", "Financial Bid Opening", "TenderCommittee") },
-                { "Financial Bid Opening", Submit("CAFORateOpinion", "CAFO Rate Opinion", "TenderCommittee") },
-                { "CAFO Rate Opinion", Approve("CAFORateOpinion", "Financial Evaluation", "CAFOOfficer") },
+                { "Financial Bid Opening", Submit("FinancialRateOpinion", "Financial Rate Opinion", "TenderCommittee") },
+                { "Financial Rate Opinion", Approve("FinancialRateOpinion", "Financial Evaluation", "Junior Engineer (JE)") },
                 { "Financial Evaluation", Submit("MCAOpinion", "MCA Opinion", "TenderCommittee") },
                 { "MCA Opinion", Approve("MCAOpinion", "Tender Committee Recommendation", "MCAOfficer", "Admin") },
                 { "Tender Committee Recommendation", Approve("TenderCommitteeRecommendation", "Final Approval", "TenderCommittee") },
@@ -47,8 +47,8 @@ namespace DepartmentModule.Helpers
                 { "Work Order Generated", Submit("WorkExecution", "Work Started", "Contractor", "DepartmentOfficer") },
                 { "Work Started", Submit("MeasurementBook", "Measurement Book Updated", "Contractor", "DepartmentOfficer") },
                 { "Measurement Book Updated", Submit("BillSubmission", "Bill Submitted", "Contractor") },
-                { "Bill Submitted", Approve("BillApproval", "Bill Approved", "CAFOOfficer") },
-                { "Bill Approved", Submit("PaymentRelease", "Payment Completed", "CAFOOfficer", "Admin") }
+                { "Bill Submitted", Approve("BillApproval", "Bill Approved", "Junior Engineer (JE)") },
+                { "Bill Approved", Submit("PaymentRelease", "Payment Completed", "Junior Engineer (JE)") }
             };
 
         private static WorkflowTransition Submit(string stage, string next, params string[] roles)
@@ -121,7 +121,7 @@ namespace DepartmentModule.Helpers
             public const string Draft = "t.CurrentStatus=N'Draft'";
             public const string UnderReview =
                 "t.CurrentStatus IN (N'Tender Committee Approval',N'Technical Bid Opening',N'Technical Evaluation'," +
-                "N'Financial Bid Opening',N'Financial Evaluation',N'CAFO Rate Opinion',N'MCA Opinion'," +
+                "N'Financial Bid Opening',N'Financial Evaluation',N'Financial Rate Opinion',N'MCA Opinion'," +
                 "N'Tender Committee Recommendation')";
             public const string DraftOrSubmitted =
                 "t.CurrentStatus IN (N'Draft',N'Requirement Submitted',N'Estimate Prepared',N'Tender Draft Created'," +

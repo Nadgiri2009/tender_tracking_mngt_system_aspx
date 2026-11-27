@@ -77,7 +77,13 @@ namespace DepartmentModule.Pages
                 return;
             }
             LoadTender();
-            if (IsAuthorizedTender && String.Equals(Request.QueryString["saved"], "1", StringComparison.Ordinal))
+            if (IsAuthorizedTender &&
+                String.Equals(Request.QueryString["workflowForwarded"], "1", StringComparison.Ordinal))
+            {
+                Message.Text = "<div class=\"message success\">Documents verified and the tender was forwarded to the next team in the configured approval workflow.</div>";
+            }
+            else if (IsAuthorizedTender &&
+                String.Equals(Request.QueryString["saved"], "1", StringComparison.Ordinal))
             {
                 bool documentsSaved = String.Equals(Request.QueryString["documentsSaved"], "1",
                     StringComparison.Ordinal);
@@ -325,11 +331,19 @@ namespace DepartmentModule.Pages
                      HasPermission("financial.open.approve") || HasPermission("financial.open.execute") ||
                      HasPermission("financial.approve.final") || HasPermission("workorder.manage") ||
                      HasPermission("agreement.manage") || HasPermission("system.admin"));
+                bool canResumeJeSubmission = IsFinalWorkflow && IsEditableDraft &&
+                    HasPermission("tender.create.department");
+                FinalWorkflowLink.Text = canResumeJeSubmission
+                    ? "Resume JE review and forward to Tender Cell"
+                    : "Open finalized workflow";
+                FinalWorkflowLink.CssClass = canResumeJeSubmission ? "button" : "button secondary";
+                FinalWorkflowLink.ToolTip = canResumeJeSubmission
+                    ? "Resume the JE readiness checklist. The forwarding action is available after the required checks."
+                    : "Open the tender's workflow stages and history.";
                 FinalWorkflowLink.NavigateUrl = "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
                 BudgetOpinionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
                 bool budgetApprovalPending = String.Equals(TenderStatus, "Budget Approval Pending", StringComparison.OrdinalIgnoreCase);
-                BudgetOpinionPanel.Visible = budgetApprovalPending &&
-                    (IsJeAdministrator || HasAnyRole("CAFOOfficer"));
+                BudgetOpinionPanel.Visible = budgetApprovalPending && IsJeAdministrator;
                 if (budgetApprovalPending)
                 {
                     ApproveButton.Text = "Positive budget opinion";
@@ -752,7 +766,7 @@ namespace DepartmentModule.Pages
                 @"SELECT d.DocumentId,COALESCE(dt.TypeName,d.DocumentType) AS DocumentType,d.FileName
                   FROM dbo.TenderDocuments d
                   LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
-                  WHERE d.TenderId=@TenderId
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                     AND COALESCE(dt.TypeName,d.DocumentType) IN
                         (N'Scope of Work',N'Technical Requirements',N'Financial Requirements')
                   ORDER BY d.UploadedDate DESC,d.DocumentId DESC;", connection))
@@ -814,10 +828,38 @@ namespace DepartmentModule.Pages
         {
             using (SqlCommand command = new SqlCommand(
                 @"SELECT d.DocumentId,d.DocumentTypeId,COALESCE(dt.TypeName,d.DocumentType) AS DocumentType,
-                         d.DocumentName,d.FileName,d.FilePath,d.FileExtension,d.FileSizeBytes,d.Remarks,d.UploadedDate
+                         d.DocumentName,d.FileName,d.FilePath,d.FileExtension,d.FileSizeBytes,d.Remarks,d.UploadedDate,
+                         uploader.FullName AS UploadedBy,
+                         CASE WHEN je.VerificationHistoryId IS NOT NULL THEN je.VerificationStatus
+                              WHEN d.VerifiedAtUtc IS NOT NULL THEN COALESCE(d.VerificationStatus,N'Pending')
+                              ELSE N'Pending' END AS JeVerificationStatus,
+                         CASE WHEN cell.VerificationHistoryId IS NOT NULL THEN cell.VerificationStatus
+                              ELSE N'Pending' END AS CellVerificationStatus,
+                         COALESCE(cellReviewer.FullName,jeReviewer.FullName,legacyReviewer.FullName,N'Not reviewed') AS VerifiedBy,
+                         COALESCE(cell.ReviewedAtUtc,je.ReviewedAtUtc,d.VerifiedAtUtc) AS VerifiedAtUtc
                   FROM dbo.TenderDocuments d
                   LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
-                  WHERE d.TenderId=@TenderId
+                  LEFT JOIN dbo.Users uploader ON uploader.UserId=d.UploadedBy
+                  LEFT JOIN dbo.Users legacyReviewer ON legacyReviewer.UserId=d.VerifiedBy
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) h.VerificationHistoryId,h.VerificationStatus,h.ReviewerId,h.ReviewedAtUtc
+                      FROM dbo.TenderRequirementVerificationHistory h
+                      WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId AND h.ReviewStage=N'JE'
+                        AND h.DocumentRevision=d.DocumentRevision
+                      ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
+                  ) je
+                  LEFT JOIN dbo.Users jeReviewer ON jeReviewer.UserId=je.ReviewerId
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) h.VerificationHistoryId,h.VerificationStatus,h.ReviewerId,h.ReviewedAtUtc
+                      FROM dbo.TenderRequirementVerificationHistory h
+                      WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId AND h.ReviewStage=N'TENDER_CELL'
+                        AND h.DocumentRevision=d.DocumentRevision
+                      ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
+                  ) cell
+                  LEFT JOIN dbo.Users cellReviewer ON cellReviewer.UserId=cell.ReviewerId
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                   ORDER BY d.UploadedDate,d.DocumentId;", connection))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -827,10 +869,18 @@ namespace DepartmentModule.Pages
                 foreach (DataRow document in documents.Rows)
                 {
                     string fullPath;
-                    document["DocumentStatus"] =
-                        TenderLifecycleFiles.TryResolveStoredFilePath(this, Convert.ToString(document["FilePath"]), out fullPath)
-                            ? "Uploaded"
-                            : "Missing file";
+                    string error = TenderLifecycleFiles.ValidateStoredTenderDocument(this,
+                        Convert.ToString(document["FilePath"]),
+                        Convert.ToString(document["FileName"]),
+                        Convert.ToString(document["FileExtension"]),
+                        document["FileSizeBytes"] == DBNull.Value
+                            ? (long?)null
+                            : Convert.ToInt64(document["FileSizeBytes"], CultureInfo.InvariantCulture),
+                        out fullPath);
+                    document["DocumentStatus"] = error ?? "Valid";
+                    document["VerificationStatus"] = "JE: " +
+                        Convert.ToString(document["JeVerificationStatus"]) + " / Tender Cell: " +
+                        Convert.ToString(document["CellVerificationStatus"]);
                 }
                 DocumentsGrid.DataSource = documents;
                 DocumentsGrid.DataBind();
@@ -936,7 +986,7 @@ namespace DepartmentModule.Pages
                 using (SqlCommand command = new SqlCommand(
                     @"SELECT d.DocumentName,d.DocumentType,d.Remarks,d.DocumentTypeId
                       FROM dbo.TenderDocuments d
-                      WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId;", connection))
+                      WHERE d.DocumentId=@DocumentId AND d.TenderId=@TenderId AND d.IsDeleted=0;", connection))
                 {
                     ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -1194,7 +1244,7 @@ namespace DepartmentModule.Pages
                     {
                         using (SqlCommand command = new SqlCommand(
                             @"SELECT FilePath,FileName FROM dbo.TenderDocuments WITH (UPDLOCK,HOLDLOCK)
-                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
                         {
                             ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, editingDocumentId);
                             ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -1215,11 +1265,19 @@ namespace DepartmentModule.Pages
                                   FilePath=CASE WHEN @HasFile=1 THEN @FilePath ELSE FilePath END,
                                   FileExtension=CASE WHEN @HasFile=1 THEN @FileExtension ELSE FileExtension END,
                                   MimeType=CASE WHEN @HasFile=1 THEN @MimeType ELSE MimeType END,
-                                  FileSizeBytes=CASE WHEN @HasFile=1 THEN @FileSizeBytes ELSE FileSizeBytes END
-                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                                  FileSizeBytes=CASE WHEN @HasFile=1 THEN @FileSizeBytes ELSE FileSizeBytes END,
+                                  UploadedBy=CASE WHEN @HasFile=1 THEN @UploadedBy ELSE UploadedBy END,
+                                  UploadedDate=CASE WHEN @HasFile=1 THEN SYSUTCDATETIME() ELSE UploadedDate END,
+                                  VerificationStatus=CASE WHEN @HasFile=1 THEN NULL ELSE VerificationStatus END,
+                                  VerificationRemarks=CASE WHEN @HasFile=1 THEN NULL ELSE VerificationRemarks END,
+                                  VerifiedBy=CASE WHEN @HasFile=1 THEN NULL ELSE VerifiedBy END,
+                                  VerifiedAtUtc=CASE WHEN @HasFile=1 THEN NULL ELSE VerifiedAtUtc END,
+                                  DocumentRevision=CASE WHEN @HasFile=1 THEN DocumentRevision+1 ELSE DocumentRevision END
+                              WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
                         {
                             AddTenderDocumentParameters(command, documentTypeId, originalName, savedRelativePath,
                                 extension, fileSize, hasFile);
+                            ModuleDb.AddParameter(command, "@UploadedBy", SqlDbType.Int, CurrentUserId);
                             ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, editingDocumentId);
                             ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                             if (command.ExecuteNonQuery() != 1)
@@ -1350,7 +1408,7 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"SELECT FilePath,FileName,DocumentName
                           FROM dbo.TenderDocuments WITH (UPDLOCK,HOLDLOCK)
-                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId;", connection, transaction))
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -1365,11 +1423,14 @@ namespace DepartmentModule.Pages
                     }
 
                     using (SqlCommand command = new SqlCommand(
-                        "DELETE FROM dbo.TenderDocuments WHERE DocumentId=@DocumentId AND TenderId=@TenderId;",
+                        @"UPDATE dbo.TenderDocuments
+                          SET IsDeleted=1,DeletedAtUtc=SYSUTCDATETIME(),DeletedBy=@UserId
+                          WHERE DocumentId=@DocumentId AND TenderId=@TenderId AND IsDeleted=0;",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
                         if (command.ExecuteNonQuery() != 1)
                             throw new InvalidOperationException("The selected document could not be deleted.");
                     }
@@ -1585,7 +1646,7 @@ namespace DepartmentModule.Pages
 
             bool isSubmit = action == "Submitted";
             bool isBudgetOpinion = String.Equals(TenderStatus, "Budget Approval Pending", StringComparison.OrdinalIgnoreCase) &&
-                (IsJeAdministrator || HasAnyRole("CAFOOfficer"));
+                IsJeAdministrator;
             decimal? approvedBudgetAmount = null;
             if (isBudgetOpinion && action == "Approved")
             {
@@ -1726,7 +1787,7 @@ namespace DepartmentModule.Pages
                     COUNT(CASE WHEN DocumentType=N'Technical Supporting Document' THEN 1 END) AS TechnicalDocumentCount,
                     COUNT(CASE WHEN DocumentType=N'Financial Supporting Document' THEN 1 END) AS FinancialDocumentCount
                   FROM dbo.TenderDocuments
-                  WHERE TenderId=@TenderId;", connection, transaction))
+                  WHERE TenderId=@TenderId AND IsDeleted=0;", connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                 using (SqlDataReader reader = command.ExecuteReader())
@@ -1785,7 +1846,7 @@ namespace DepartmentModule.Pages
             string[] bidStatuses =
             {
                 "Tender Published", "Technical Bid Opening", "Technical Evaluation",
-                "Technical Evaluation Approved", "Financial Bid Opening", "CAFO Rate Opinion",
+                "Technical Evaluation Approved", "Financial Bid Opening", "Financial Rate Opinion",
                 "Financial Evaluation", "MCA Opinion", "Tender Committee Recommendation",
                 "Final Approval", "Agreement Completed", "Work Order Generated", "Work Started",
                 "Measurement Book Updated", "Bill Submitted", "Bill Approved", "Payment Completed"

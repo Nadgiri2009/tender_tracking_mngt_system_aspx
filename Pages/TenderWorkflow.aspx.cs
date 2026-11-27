@@ -23,6 +23,7 @@ namespace DepartmentModule.Pages
             WorkOrderCreatePanel, WorkOrderGeneratePanel, AgreementCreatePanel,
             AgreementGeneratePanel, CompleteTenderPanel, ShortfallClearancePanel;
         protected GridView WorkflowQueue, HistoryGrid, PrimaryBidderGrid, PrimaryDocumentGrid,
+            JeRequirementDocumentsGrid, CellRequirementDocumentsGrid,
             SecondaryApplicationsGrid, ShortfallItemsGrid, FinancialEntryGrid, FinancialReviewGrid,
             GeneratedDocumentsGrid, ShortfallClearanceGrid, ShortfallApplicationsGrid;
         protected Repeater TenderSubmissionReadiness;
@@ -367,12 +368,15 @@ namespace DepartmentModule.Pages
                             TenderId.ToString(CultureInfo.InvariantCulture);
                         LoadRequiredBidDocumentTypes(connection);
                         BindTenderSubmissionReadiness(connection);
+                        BindRequirementDocumentReviewGrid(connection, JeRequirementDocumentsGrid, "JE");
                     }
                     if (InitialTenderCellVerificationPanel.Visible)
                     {
                         TenderDocumentVerificationLink.NavigateUrl =
-                            "~/Pages/TenderForm.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+                            "~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture) +
+                            "#tender-documents-section";
                         LoadTenderDocumentShortfallSummary(connection);
+                        BindRequirementDocumentReviewGrid(connection, CellRequirementDocumentsGrid, "TENDER_CELL");
                     }
                     if (JeDocumentCorrectionPanel.Visible)
                     {
@@ -471,6 +475,63 @@ namespace DepartmentModule.Pages
                     " pending. The tender will remain with JE until these are complete.";
         }
 
+        private void BindRequirementDocumentReviewGrid(SqlConnection connection,
+            GridView grid, string reviewStage)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT d.DocumentId,d.DocumentTypeId,
+                         COALESCE(dt.TypeName,d.DocumentType) AS DocumentType,
+                         COALESCE(NULLIF(d.DocumentName,N''),NULLIF(d.FileName,N''),N'Untitled document') AS DocumentName,
+                         d.FileName,d.FilePath,d.FileExtension,d.FileSizeBytes,d.UploadedDate,
+                         uploader.FullName AS UploadedBy,
+                         CASE WHEN latest.VerificationHistoryId IS NOT NULL THEN latest.VerificationStatus
+                              WHEN @ReviewStage=N'JE' AND d.VerifiedAtUtc IS NOT NULL THEN d.VerificationStatus
+                              ELSE N'' END AS VerificationStatus,
+                         CASE WHEN latest.VerificationHistoryId IS NOT NULL THEN latest.VerificationStatus
+                              WHEN @ReviewStage=N'JE' AND d.VerifiedAtUtc IS NOT NULL THEN d.VerificationStatus
+                              ELSE N'Pending' END AS VerificationStatusText,
+                         CASE WHEN latest.VerificationHistoryId IS NOT NULL THEN latest.Remarks
+                              WHEN @ReviewStage=N'JE' AND d.VerifiedAtUtc IS NOT NULL THEN d.VerificationRemarks
+                              ELSE N'' END AS VerificationRemarks
+                  FROM dbo.TenderDocuments d
+                  LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                  LEFT JOIN dbo.Users uploader ON uploader.UserId=d.UploadedBy
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) h.VerificationHistoryId,h.VerificationStatus,h.Remarks
+                      FROM dbo.TenderRequirementVerificationHistory h
+                      WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
+                        AND h.ReviewStage=@ReviewStage
+                        AND h.DocumentRevision=d.DocumentRevision
+                      ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
+                  ) latest
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
+                  ORDER BY d.UploadedDate,d.DocumentId;", connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                AddText(command, "@ReviewStage", SqlDbType.NVarChar, reviewStage, 20);
+                DataTable documents = new DataTable();
+                adapter.Fill(documents);
+                documents.Columns.Add("FileStatus", typeof(string));
+                foreach (DataRow document in documents.Rows)
+                {
+                    string fullPath;
+                    string fileError = TenderLifecycleFiles.ValidateStoredTenderDocument(this,
+                        Convert.ToString(document["FilePath"]),
+                        Convert.ToString(document["FileName"]),
+                        Convert.ToString(document["FileExtension"]),
+                        document["FileSizeBytes"] == DBNull.Value
+                            ? (long?)null
+                            : Convert.ToInt64(document["FileSizeBytes"], CultureInfo.InvariantCulture),
+                        out fullPath);
+                    document["FileStatus"] = fileError ?? "Valid";
+                }
+                grid.DataSource = documents;
+                grid.DataBind();
+            }
+        }
+
         private List<TenderSubmissionReadinessItem> GetTenderSubmissionReadiness(
             SqlConnection connection, SqlTransaction transaction)
         {
@@ -491,14 +552,17 @@ namespace DepartmentModule.Pages
                          (SELECT COUNT(*) FROM dbo.TenderDocuments d
                           LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
                           WHERE d.TenderId=t.TenderId
+                            AND d.IsDeleted=0
                             AND COALESCE(dt.TypeName,d.DocumentType)=N'Scope of Work') AS ScopeCount,
                          (SELECT COUNT(*) FROM dbo.TenderDocuments d
                           LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
                           WHERE d.TenderId=t.TenderId
+                            AND d.IsDeleted=0
                             AND COALESCE(dt.TypeName,d.DocumentType)=N'Technical Requirements') AS TechnicalCount,
                          (SELECT COUNT(*) FROM dbo.TenderDocuments d
                           LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
                           WHERE d.TenderId=t.TenderId
+                            AND d.IsDeleted=0
                             AND COALESCE(dt.TypeName,d.DocumentType)=N'Financial Requirements') AS FinancialCount
                   FROM dbo.Tender t
                   WHERE t.TenderId=@TenderId AND t.IsDeleted=0;", connection, transaction))
@@ -548,7 +612,8 @@ namespace DepartmentModule.Pages
             using (SqlCommand command = new SqlCommand(
                 @"SELECT d.DocumentId,
                          COALESCE(NULLIF(d.DocumentName,N''),NULLIF(d.FileName,N''),N'Untitled document') AS DocumentName,
-                         CASE WHEN ISNULL(COALESCE(latest.VerificationStatus,d.VerificationStatus),N'')=N'Verified'
+                         CASE WHEN ISNULL(COALESCE(latest.VerificationStatus,
+                              CASE WHEN d.VerifiedAtUtc IS NOT NULL THEN d.VerificationStatus END),N'')=N'Verified'
                               THEN 1 ELSE 0 END AS IsVerified
                   FROM dbo.TenderDocuments d
                   OUTER APPLY
@@ -557,9 +622,10 @@ namespace DepartmentModule.Pages
                       FROM dbo.TenderRequirementVerificationHistory h
                       WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
                         AND h.ReviewStage=N'JE'
+                        AND h.DocumentRevision=d.DocumentRevision
                       ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
                   ) latest
-                  WHERE d.TenderId=@TenderId
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                   ORDER BY d.UploadedDate,d.DocumentId;", connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -820,6 +886,220 @@ namespace DepartmentModule.Pages
             }
         }
 
+        protected void RequirementDocumentGrid_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (!String.Equals(e.CommandName, "RecordTenderRequirementDocumentReview",
+                StringComparison.Ordinal))
+                return;
+
+            GridView grid = sender as GridView;
+            int rowIndex;
+            if (grid == null || !Int32.TryParse(Convert.ToString(e.CommandArgument,
+                CultureInfo.InvariantCulture), out rowIndex) || rowIndex < 0 ||
+                rowIndex >= grid.Rows.Count || rowIndex >= grid.DataKeys.Count)
+            {
+                ShowMessage("The selected document row is invalid. Refresh the workflow and retry.");
+                return;
+            }
+
+            bool isJeReview = grid.ID == "JeRequirementDocumentsGrid";
+            if ((!isJeReview && grid.ID != "CellRequirementDocumentsGrid") ||
+                (isJeReview && (!TenderFinalizedWorkflowService.IsJuniorEngineer(CurrentRoleCode) ||
+                    !HasPermission("tender.create.department"))) ||
+                (!isJeReview && (!IsTenderCell || !HasPermission("tender.cell.verify"))))
+            {
+                ShowMessage("Your role is not authorized to review tender documents at this stage.");
+                return;
+            }
+
+            GridViewRow row = grid.Rows[rowIndex];
+            DropDownList decision = row.FindControl(isJeReview
+                ? "JeDocumentDecision" : "CellDocumentDecision") as DropDownList;
+            TextBox remarks = row.FindControl(isJeReview
+                ? "JeDocumentRemarks" : "CellDocumentRemarks") as TextBox;
+            string reviewStage = isJeReview ? "JE" : "TENDER_CELL";
+            string permission = isJeReview ? "tender.create.department" : "tender.cell.verify";
+            string expectedStage = isJeReview
+                ? "Final_JE_SubmitTender"
+                : "Final_Cell_InitialTenderDocumentVerification";
+
+            int documentId = Convert.ToInt32(grid.DataKeys[rowIndex].Value, CultureInfo.InvariantCulture);
+            string status = decision == null ? String.Empty : decision.SelectedValue;
+            string reviewRemarks = remarks == null ? String.Empty : remarks.Text.Trim();
+            if (!HasPermission(permission) ||
+                (status != "Verified" && status != "Not Verified") ||
+                reviewRemarks.Length > 1000 ||
+                (status == "Not Verified" && String.IsNullOrWhiteSpace(reviewRemarks)))
+            {
+                ShowMessage(status == "Not Verified" && String.IsNullOrWhiteSpace(reviewRemarks)
+                    ? "Enter remarks explaining why this document was not verified."
+                    : "Select a valid document decision and keep remarks within 1,000 characters.");
+                return;
+            }
+
+            string documentName = null;
+            try
+            {
+                using (SqlConnection connection = ModuleDb.OpenConnection())
+                using (SqlTransaction transaction = connection.BeginTransaction(IsolationLevel.Serializable))
+                {
+                    int assignedRoleId;
+                    int? assignedUserId;
+                    int departmentId;
+                    string currentStatus;
+                    string pendingStatus;
+                    string fileName;
+                    string filePath;
+                    string fileExtension;
+                    long? fileSize;
+                    using (SqlCommand command = new SqlCommand(
+                        @"SELECT t.CurrentStatus,s.StatusOnPending,s.StageName,
+                                 a.AssignedRoleId,a.AssignedUserId,a.DepartmentId,
+                                 d.DocumentName,d.FileName,d.FilePath,d.FileExtension,d.FileSizeBytes
+                          FROM dbo.Tender t WITH (UPDLOCK,HOLDLOCK)
+                          INNER JOIN dbo.TenderWorkflowAssignments a WITH (UPDLOCK,HOLDLOCK)
+                            ON a.TenderId=t.TenderId AND a.IsCurrent=1 AND a.DepartmentId=t.DepartmentId
+                          INNER JOIN dbo.WorkflowStages s
+                            ON s.StageId=a.StageId AND s.WorkflowVersion=2 AND s.IsActive=1
+                          INNER JOIN dbo.TenderDocuments d WITH (UPDLOCK,HOLDLOCK)
+                            ON d.TenderId=t.TenderId AND d.DocumentId=@DocumentId AND d.IsDeleted=0
+                          WHERE t.TenderId=@TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0;",
+                        connection, transaction))
+                    {
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        using (SqlDataReader reader = command.ExecuteReader())
+                        {
+                            if (!reader.Read())
+                                throw new InvalidOperationException("The selected document no longer exists on this tender.");
+                            currentStatus = Convert.ToString(reader["CurrentStatus"]);
+                            pendingStatus = Convert.ToString(reader["StatusOnPending"]);
+                            if (!String.Equals(Convert.ToString(reader["StageName"]), expectedStage,
+                                    StringComparison.Ordinal) ||
+                                !String.Equals(currentStatus, pendingStatus, StringComparison.Ordinal))
+                                throw new InvalidOperationException("The tender has moved to another workflow stage. Refresh and retry.");
+                            assignedRoleId = Convert.ToInt32(reader["AssignedRoleId"], CultureInfo.InvariantCulture);
+                            assignedUserId = reader["AssignedUserId"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["AssignedUserId"], CultureInfo.InvariantCulture);
+                            departmentId = Convert.ToInt32(reader["DepartmentId"], CultureInfo.InvariantCulture);
+                            documentName = Convert.ToString(reader["DocumentName"]);
+                            fileName = Convert.ToString(reader["FileName"]);
+                            filePath = Convert.ToString(reader["FilePath"]);
+                            fileExtension = Convert.ToString(reader["FileExtension"]);
+                            fileSize = reader["FileSizeBytes"] == DBNull.Value
+                                ? (long?)null
+                                : Convert.ToInt64(reader["FileSizeBytes"], CultureInfo.InvariantCulture);
+                        }
+                    }
+
+                    if (assignedRoleId != CurrentRoleId ||
+                        (assignedUserId.HasValue && assignedUserId.Value != CurrentUserId) ||
+                        (isJeReview && (!CurrentDepartmentId.HasValue ||
+                            CurrentDepartmentId.Value != departmentId)))
+                        throw new InvalidOperationException("The tender is not assigned to your role, user, or department.");
+
+                    if (status == "Verified")
+                    {
+                        string fullPath;
+                        string fileError = TenderLifecycleFiles.ValidateStoredTenderDocument(this,
+                            filePath, fileName, fileExtension, fileSize, out fullPath);
+                        if (!String.IsNullOrEmpty(fileError))
+                            throw new InvalidOperationException("Cannot verify \"" + documentName + "\": " + fileError);
+                    }
+
+                    using (SqlCommand command = new SqlCommand(
+                        @"INSERT INTO dbo.TenderRequirementVerificationHistory
+                            (TenderId,DocumentId,ReviewStage,VerificationStatus,ReviewerId,ReviewerRoleId,
+                             Remarks,DocumentRevision)
+                          SELECT @TenderId,@DocumentId,@ReviewStage,@Status,@ReviewerId,@RoleId,@Remarks,
+                                 d.DocumentRevision
+                          FROM dbo.TenderDocuments d
+                          WHERE d.TenderId=@TenderId AND d.DocumentId=@DocumentId AND d.IsDeleted=0;",
+                        connection, transaction))
+                    {
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        AddText(command, "@ReviewStage", SqlDbType.NVarChar, reviewStage, 20);
+                        AddText(command, "@Status", SqlDbType.NVarChar, status, 20);
+                        ModuleDb.AddParameter(command, "@ReviewerId", SqlDbType.Int, CurrentUserId);
+                        ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
+                        ModuleDb.AddParameter(command, "@Remarks", SqlDbType.NVarChar,
+                            String.IsNullOrWhiteSpace(reviewRemarks) ? (object)null : reviewRemarks, 1000);
+                        command.ExecuteNonQuery();
+                    }
+
+                    using (SqlCommand command = new SqlCommand(
+                        @"UPDATE dbo.TenderDocuments
+                          SET VerificationStatus=@Status,VerificationRemarks=@Remarks,
+                              VerifiedBy=@UserId,VerifiedAtUtc=SYSUTCDATETIME()
+                          WHERE TenderId=@TenderId AND DocumentId=@DocumentId;",
+                        connection, transaction))
+                    {
+                        AddText(command, "@Status", SqlDbType.NVarChar, status, 30);
+                        ModuleDb.AddParameter(command, "@Remarks", SqlDbType.NVarChar,
+                            String.IsNullOrWhiteSpace(reviewRemarks) ? (object)null : reviewRemarks, 1000);
+                        ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
+                        ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                        ModuleDb.AddParameter(command, "@DocumentId", SqlDbType.Int, documentId);
+                        if (command.ExecuteNonQuery() != 1)
+                            throw new InvalidOperationException("The selected document could not be updated.");
+                    }
+
+                    ModuleDb.AddAudit(connection, transaction, CurrentUserId,
+                        "VerifyTenderRequirementDocument", "TenderDocument", documentId,
+                        reviewStage + ": " + status, Request.UserHostAddress);
+                    transaction.Commit();
+                }
+
+                LoadTender();
+                ShowMessage("Document verification saved.");
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "Tender requirement document review failed.", ex);
+                ShowMessage("The document decision could not be saved. Please retry or contact support.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowMessage(ex.Message);
+            }
+        }
+
+        private void EnsureTenderRequirementDocumentsAreValid(SqlConnection connection,
+            SqlTransaction transaction)
+        {
+            DataTable documents = new DataTable();
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT DocumentName,FileName,FilePath,FileExtension,FileSizeBytes
+                  FROM dbo.TenderDocuments WHERE TenderId=@TenderId AND IsDeleted=0
+                  ORDER BY UploadedDate,DocumentId;", connection, transaction))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                adapter.Fill(documents);
+            }
+
+            if (documents.Rows.Count == 0)
+                throw new InvalidOperationException("Upload the required tender documents before forwarding.");
+
+            foreach (DataRow document in documents.Rows)
+            {
+                string fullPath;
+                string fileError = TenderLifecycleFiles.ValidateStoredTenderDocument(this,
+                    Convert.ToString(document["FilePath"]),
+                    Convert.ToString(document["FileName"]),
+                    Convert.ToString(document["FileExtension"]),
+                    document["FileSizeBytes"] == DBNull.Value
+                        ? (long?)null
+                        : Convert.ToInt64(document["FileSizeBytes"], CultureInfo.InvariantCulture),
+                    out fullPath);
+                if (!String.IsNullOrEmpty(fileError))
+                    throw new InvalidOperationException("Cannot forward: \"" +
+                        Convert.ToString(document["DocumentName"]) + "\" " + fileError);
+            }
+        }
+
         protected void SubmitDraftButton_Click(object sender, EventArgs e)
         {
             ProcessStage("Final_JE_SubmitTender", "tender.create.department",
@@ -833,6 +1113,7 @@ namespace DepartmentModule.Pages
                 "Submitted", CellDocumentVerificationRemarksText.Text, CurrentShortfallId,
                 (connection, transaction, departmentId, previousStatus, newStatus) =>
                 {
+                    EnsureTenderRequirementDocumentsAreValid(connection, transaction);
                     TenderFinalizedWorkflowService.EnsureTenderRequirementDocumentsVerified(
                         connection, transaction, TenderId, "TENDER_CELL");
                     if (CurrentShortfallId.HasValue)
@@ -1247,8 +1528,12 @@ namespace DepartmentModule.Pages
                 TenderFinalizedWorkflowService.Transition(TenderId, CurrentUserId, CurrentRoleId,
                     CurrentRoleCode, CurrentDepartmentId, stageName, newStatus, remarks,
                     shortfallId, permission, Request.UserHostAddress, action);
-                Response.Redirect("~/Pages/TenderWorkflow.aspx?id=" +
-                    TenderId.ToString(CultureInfo.InvariantCulture), false);
+                string destination = stageName == "Final_Cell_InitialTenderDocumentVerification" &&
+                    newStatus == "Submitted"
+                    ? "~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture) +
+                        "&workflowForwarded=1"
+                    : "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+                Response.Redirect(destination, false);
                 Context.ApplicationInstance.CompleteRequest();
             }
             catch (SqlException ex)
@@ -1631,6 +1916,7 @@ namespace DepartmentModule.Pages
                     if (expectedStageName == "Final_JE_SubmitTender")
                     {
                         EnsureTenderPreparationComplete(connection, transaction);
+                        EnsureTenderRequirementDocumentsAreValid(connection, transaction);
                         TenderFinalizedWorkflowService.EnsureTenderRequirementDocumentsVerified(
                             connection, transaction, TenderId, "JE");
                         SaveRequiredBidDocumentTypes(connection, transaction);
@@ -1760,7 +2046,11 @@ namespace DepartmentModule.Pages
                     transaction.Commit();
                 }
 
-                Response.Redirect("~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture), false);
+                string destination = expectedStageName == "Final_JE_SubmitTender"
+                    ? "~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture) +
+                        "&workflowForwarded=1"
+                    : "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+                Response.Redirect(destination, false);
                 Context.ApplicationInstance.CompleteRequest();
             }
             catch (SqlException ex)

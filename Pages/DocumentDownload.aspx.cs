@@ -79,7 +79,7 @@ namespace DepartmentModule.Pages
                     @"SELECT td.FilePath,td.FileName
                       FROM dbo.TenderDocuments td
                       INNER JOIN dbo.Tender t ON t.TenderId=td.TenderId
-                      WHERE td.DocumentId=@DocumentId AND t.IsDeleted=0
+                      WHERE td.DocumentId=@DocumentId AND td.IsDeleted=0 AND t.IsDeleted=0
                         AND (
                             ((@CurrentUserId=0 OR @IsContractor=1) AND
                                 (EXISTS(SELECT 1 FROM dbo.ApprovalHistory publicHistory
@@ -213,7 +213,7 @@ namespace DepartmentModule.Pages
 
         private void DownloadExtensionDocument(int requestId, string kind)
         {
-            if (!IsJeAdministrator && !HasAnyRole("DepartmentOfficer", "CAFOOfficer")) { NotFound(); return; }
+            if (!IsJeAdministrator && !HasAnyRole("DepartmentOfficer")) { NotFound(); return; }
             string storedPath, fileName;
             bool isAdmin = IsJeAdministrator;
             string departmentScope = isAdmin ? String.Empty :
@@ -233,7 +233,7 @@ namespace DepartmentModule.Pages
                       WHERE e.ExtensionRequestId=@RequestId AND t.IsDeleted=0 AND
                         (@IsAdmin=1
                          OR (@Role=N'DepartmentOfficer' AND e.SubmittedBy=@UserId)
-                         OR @Role=N'CAFOOfficer')" + departmentScope + ";", connection))
+                         )" + departmentScope + ";", connection))
                 {
                     ModuleDb.AddParameter(command, "@Kind", SqlDbType.NVarChar, kind, 12);
                     ModuleDb.AddParameter(command, "@RequestId", SqlDbType.Int, requestId);
@@ -363,7 +363,7 @@ namespace DepartmentModule.Pages
             bool isContractor = HasAnyRole("ExternalBidder", "Contractor");
             bool isSystemAdministrator = HasPermission("system.admin");
             bool isAssignedReviewer = HasPermission("document.read.assigned");
-            bool isLegacyReviewer = HasAnyRole("TenderSection", "TenderCommittee", "CAFOOfficer");
+            bool isLegacyReviewer = HasAnyRole("TenderSection", "TenderCommittee");
             if (CurrentUserId <= 0 ||
                 (!isContractor && !isSystemAdministrator && !isAssignedReviewer && !isLegacyReviewer))
             {

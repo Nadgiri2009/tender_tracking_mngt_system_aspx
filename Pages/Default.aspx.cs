@@ -69,7 +69,7 @@ namespace DepartmentModule.Pages
                 }
                 PendingApprovalsPanel.Visible = !isRespOfficer;
                 LifecycleSummaryPanel.Visible = !HasAnyRole("Contractor");
-                LifecycleReviewSummaryPanel.Visible = HasAnyRole("CAFOOfficer", "TenderSection", "TenderCommittee");
+                LifecycleReviewSummaryPanel.Visible = HasAnyRole("TenderSection", "TenderCommittee");
                 RecentHeading.Text = isRespOfficer ? "My recent tenders" : "Recently updated tenders";
                 LoadDashboard();
             }

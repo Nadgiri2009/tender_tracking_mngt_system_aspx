@@ -225,6 +225,7 @@ BEGIN TRY
     (
         SELECT 1 FROM dbo.TenderDocuments existing
         WHERE existing.TenderId = t.TenderId AND existing.DocumentTypeId = docs.DocumentTypeId
+          AND existing.IsDeleted=0
     );
 
     INSERT INTO dbo.TenderRequiredBidDocuments
@@ -313,7 +314,7 @@ BEGIN TRY
         N'DEMO initial JE review.',DATEADD(DAY,-2,@Now)
     FROM @Seeds d
     INNER JOIN dbo.Tender t ON t.TenderNumber=d.TenderNumber
-    INNER JOIN dbo.TenderDocuments doc ON doc.TenderId=t.TenderId
+    INNER JOIN dbo.TenderDocuments doc ON doc.TenderId=t.TenderId AND doc.IsDeleted=0
     WHERE d.DemoNumber<>1
       AND NOT EXISTS
       (
@@ -334,7 +335,7 @@ BEGIN TRY
         DATEADD(DAY,-1,@Now)
     FROM @Seeds d
     INNER JOIN dbo.Tender t ON t.TenderNumber=d.TenderNumber
-    INNER JOIN dbo.TenderDocuments doc ON doc.TenderId=t.TenderId
+    INNER JOIN dbo.TenderDocuments doc ON doc.TenderId=t.TenderId AND doc.IsDeleted=0
     WHERE (d.HistoryThrough>=2 OR d.HasShortfall=1)
       AND NOT EXISTS
       (

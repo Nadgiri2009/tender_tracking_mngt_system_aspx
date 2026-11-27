@@ -35,16 +35,24 @@
                             <div class="workflow-step-heading">
                                 <div>
                                     <h3><%#: Eval("ResponsibleRole") %> — <%#: Eval("StageTitle") %></h3>
-                                    <p class="workflow-assignee">Assigned officer: <%#: Eval("AssignedOfficer") %></p>
+                                    <asp:Panel runat="server" CssClass="workflow-assignee"
+                                        Visible='<%# !String.Equals(Convert.ToString(Eval("AssignedOfficer")), "—", StringComparison.Ordinal) %>'>
+                                        <p>Assigned officer: <%#: Eval("AssignedOfficer") %></p>
+                                    </asp:Panel>
                                 </div>
                                 <span class="workflow-status"><%#: Eval("Status") %></span>
                             </div>
-                            <div class="workflow-step-meta">
+                            <asp:Panel runat="server" CssClass="workflow-step-meta"
+                                Visible='<%# !String.Equals(Convert.ToString(Eval("SubmissionDate")), "—", StringComparison.Ordinal) || !String.Equals(Convert.ToString(Eval("ApprovalDate")), "—", StringComparison.Ordinal) %>'>
                                 <span><strong>Submitted:</strong> <%#: Eval("SubmissionDate") %></span>
                                 <span><strong>Approved:</strong> <%#: Eval("ApprovalDate") %></span>
-                            </div>
-                            <p class="workflow-remarks"><strong>Remarks:</strong> <%#: Eval("Remarks") %></p>
-                            <details class="workflow-history">
+                            </asp:Panel>
+                            <asp:Panel runat="server" CssClass="workflow-remarks"
+                                Visible='<%# !String.Equals(Convert.ToString(Eval("Remarks")), "—", StringComparison.Ordinal) && !String.IsNullOrWhiteSpace(Convert.ToString(Eval("Remarks"))) %>'>
+                                <p><strong>Remarks:</strong> <%#: Eval("Remarks") %></p>
+                            </asp:Panel>
+                            <details class="workflow-history"
+                                runat="server" visible='<%# !String.IsNullOrWhiteSpace(Convert.ToString(Eval("ActionHistory"))) %>'>
                                 <summary>Action history</summary>
                                 <pre><%#: Eval("ActionHistory") %></pre>
                             </details>
@@ -231,9 +239,13 @@
                     <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
                     <asp:BoundField DataField="DocumentName" HeaderText="Document name" />
                     <asp:BoundField DataField="FileName" HeaderText="File name" />
-                    <asp:BoundField DataField="UploadedDate" HeaderText="Uploaded date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                    <asp:BoundField DataField="UploadedDate" HeaderText="Upload date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                    <asp:BoundField DataField="UploadedBy" HeaderText="Uploaded by" />
+                    <asp:BoundField DataField="VerificationStatus" HeaderText="Verification status" />
+                    <asp:BoundField DataField="VerifiedBy" HeaderText="Verified by" />
+                    <asp:BoundField DataField="VerifiedAtUtc" HeaderText="Verified at" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                     <asp:TemplateField HeaderText="Status"><ItemTemplate>
-                        <span class='badge <%# Convert.ToString(Eval("DocumentStatus")) == "Uploaded" ? "status-approved" : "status-rejected" %>'>
+                        <span class='badge <%# Convert.ToString(Eval("DocumentStatus")) == "Valid" ? "status-approved" : "status-rejected" %>'>
                             <%# HttpUtility.HtmlEncode(Convert.ToString(Eval("DocumentStatus"))) %>
                         </span>
                     </ItemTemplate></asp:TemplateField>
@@ -348,7 +360,7 @@
         <section class="card">
             <h2>Workflow action</h2>
             <asp:Panel ID="BudgetOpinionPanel" runat="server" CssClass="card" Visible="false">
-                <h3>CAFO budget opinion</h3>
+                <h3>Financial budget opinion</h3>
                 <p class="help">Choose positive to approve the amount, or negative to return the proposal for JE revision. Previous decisions remain in the history.</p>
                 <div class="field"><label for="ApprovedBudgetAmount">Approved amount (₹) — required for a positive opinion</label><asp:TextBox ID="ApprovedBudgetAmount" runat="server" TextMode="Number" step="0.01" min="0.01" /></div>
             </asp:Panel>
@@ -361,12 +373,12 @@
             <p class="help">Workflow status changes are validated against the current status and the signed-in role before being saved.</p>
         </section>
         <asp:Panel ID="BudgetOpinionHistoryPanel" runat="server" CssClass="card">
-            <h2>CAFO budget-opinion history</h2>
+            <h2>Financial budget-opinion history</h2>
             <div class="table-wrap"><asp:GridView ID="BudgetOpinionsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No budget opinions have been recorded.">
                 <Columns>
                     <asp:BoundField DataField="Opinion" HeaderText="Opinion" />
                     <asp:BoundField DataField="ApprovedAmount" HeaderText="Approved amount" DataFormatString="₹{0:N2}" NullDisplayText="—" />
-                    <asp:BoundField DataField="ActionTakenBy" HeaderText="CAFO officer" />
+                    <asp:BoundField DataField="ActionTakenBy" HeaderText="Approved by" />
                     <asp:BoundField DataField="OpinionAtUtc" HeaderText="Date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                     <asp:BoundField DataField="Remarks" HeaderText="Remarks" />
                 </Columns>

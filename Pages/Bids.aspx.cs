@@ -34,7 +34,7 @@ namespace DepartmentModule.Pages
         protected GridView TechnicalDocumentsGrid;
         private int TenderId { get { return QueryId("tenderId"); } }
         private bool IsReviewer { get { return IsJeAdministrator || HasAnyRole("TENDER_CELL", "CHAIRMAN",
-            "DIRECTOR_AUDITOR", "TenderSection", "TenderCommittee", "CAFOOfficer"); } }
+            "DIRECTOR_AUDITOR", "TenderSection", "TenderCommittee"); } }
         private bool IsContractor { get { return HasAnyRole("ExternalBidder", "Contractor"); } }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -844,7 +844,7 @@ namespace DepartmentModule.Pages
                         @"UPDATE dbo.FinancialBid SET Status=CASE WHEN ContractorId=@ContractorId THEN N'Selected' ELSE N'Rejected' END
                           WHERE TenderId=@TenderId
                             AND EXISTS(SELECT 1 FROM dbo.Tender t WHERE t.TenderId=@TenderId
-                                       AND t.CurrentStatus IN (N'Financial Bid Opening',N'CAFO Rate Opinion',
+                                       AND t.CurrentStatus IN (N'Financial Bid Opening',N'Financial Rate Opinion',
                                            N'Financial Evaluation',N'MCA Opinion',N'Tender Committee Recommendation',
                                            N'Final Approval',N'Agreement Completed')
                                        AND (@IsJeAdministrator=1 OR
@@ -909,7 +909,7 @@ namespace DepartmentModule.Pages
         {
             string[] statuses =
             {
-                "Financial Bid Opening", "CAFO Rate Opinion", "Financial Evaluation", "MCA Opinion",
+                "Financial Bid Opening", "Financial Rate Opinion", "Financial Evaluation", "MCA Opinion",
                 "Tender Committee Recommendation", "Final Approval", "Agreement Completed",
                 "Work Order Generated", "Work Started", "Measurement Book Updated", "Bill Submitted",
                 "Bill Approved", "Payment Completed"
@@ -922,7 +922,7 @@ namespace DepartmentModule.Pages
             string[] bidStatuses =
             {
                 "Tender Published", "Technical Bid Opening", "Technical Evaluation",
-                "Technical Evaluation Approved", "Financial Bid Opening", "CAFO Rate Opinion",
+                "Technical Evaluation Approved", "Financial Bid Opening", "Financial Rate Opinion",
                 "Financial Evaluation", "MCA Opinion", "Tender Committee Recommendation",
                 "Final Approval", "Agreement Completed", "Work Order Generated", "Work Started",
                 "Measurement Book Updated", "Bill Submitted", "Bill Approved", "Payment Completed"

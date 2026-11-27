@@ -62,7 +62,43 @@
                 <span class="help">Enter one document name per line. Use the requirements manager to set descriptions, optional items, accepted formats, and file-size limits.</span>
                 <asp:TextBox ID="RequiredBidDocumentsText" runat="server" TextMode="MultiLine" MaxLength="8000" Rows="6" /></div>
             <div class="field"><label for="SubmitRemarksText">Remarks</label><asp:TextBox ID="SubmitRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
-            <asp:Button ID="SubmitDraftButton" runat="server" Text="Approve initial verification and forward to Tender Cell"
+            <h3>Uploaded tender documents</h3>
+            <p class="help">Review the actual files attached to this tender and record a JE decision for each one. The forwarding action remains blocked until every document is valid and verified.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="JeRequirementDocumentsGrid" runat="server" AutoGenerateColumns="false"
+                    GridLines="None" DataKeyNames="DocumentId" OnRowCommand="RequirementDocumentGrid_RowCommand"
+                    EmptyDataText="No tender documents are attached. Upload the required documents before forwarding.">
+                    <Columns>
+                        <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
+                        <asp:BoundField DataField="DocumentName" HeaderText="Document name" />
+                        <asp:BoundField DataField="UploadedDate" HeaderText="Uploaded" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                        <asp:BoundField DataField="UploadedBy" HeaderText="Uploaded by" />
+                        <asp:BoundField DataField="FileStatus" HeaderText="File status" />
+                        <asp:BoundField DataField="VerificationStatusText" HeaderText="JE verification" />
+                        <asp:TemplateField HeaderText="Document"><ItemTemplate>
+                            <asp:HyperLink runat="server" Text="View" Target="_blank" rel="noopener"
+                                NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId") + "&amp;preview=true") %>' />
+                            <asp:Literal runat="server" Text=" | " />
+                            <asp:HyperLink runat="server" Text="Download"
+                                NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId")) %>' />
+                        </ItemTemplate></asp:TemplateField>
+                        <asp:TemplateField HeaderText="Review decision"><ItemTemplate>
+                            <asp:DropDownList ID="JeDocumentDecision" runat="server"
+                                SelectedValue='<%# Eval("VerificationStatus") %>'>
+                                <asp:ListItem Value="">Select decision</asp:ListItem>
+                                <asp:ListItem Value="Verified">Verified</asp:ListItem>
+                                <asp:ListItem Value="Not Verified">Not Verified</asp:ListItem>
+                            </asp:DropDownList>
+                            <asp:TextBox ID="JeDocumentRemarks" runat="server" TextMode="MultiLine"
+                                MaxLength="1000" Rows="2" Text='<%# Eval("VerificationRemarks") %>' />
+                            <asp:Button runat="server" Text="Save decision"
+                                CommandName="RecordTenderRequirementDocumentReview"
+                                CommandArgument='<%# Container.DataItemIndex %>' CausesValidation="false" />
+                        </ItemTemplate></asp:TemplateField>
+                    </Columns>
+                </asp:GridView>
+            </div>
+            <asp:Button ID="SubmitDraftButton" runat="server" Text="Verify Documents &amp; Forward to Next Team"
                 OnClick="SubmitDraftButton_Click" OnClientClick="return validateTenderSubmissionReadiness();" />
         </asp:Panel>
         <asp:Panel ID="InitialTenderCellVerificationPanel" runat="server" CssClass="card" Visible="false">
@@ -72,6 +108,42 @@
                 Review tender documents
             </asp:HyperLink>
             <asp:Literal ID="TenderDocumentShortfallSummary" runat="server" />
+            <h3>Uploaded tender documents</h3>
+            <p class="help">Review the actual files attached to this tender and record a separate Tender Cell decision for each one.</p>
+            <div class="table-wrap">
+                <asp:GridView ID="CellRequirementDocumentsGrid" runat="server" AutoGenerateColumns="false"
+                    GridLines="None" DataKeyNames="DocumentId" OnRowCommand="RequirementDocumentGrid_RowCommand"
+                    EmptyDataText="No tender documents are attached. A tender without required documents cannot be forwarded.">
+                    <Columns>
+                        <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
+                        <asp:BoundField DataField="DocumentName" HeaderText="Document name" />
+                        <asp:BoundField DataField="UploadedDate" HeaderText="Uploaded" DataFormatString="{0:dd MMM yyyy HH:mm}" />
+                        <asp:BoundField DataField="UploadedBy" HeaderText="Uploaded by" />
+                        <asp:BoundField DataField="FileStatus" HeaderText="File status" />
+                        <asp:BoundField DataField="VerificationStatusText" HeaderText="Tender Cell verification" />
+                        <asp:TemplateField HeaderText="Document"><ItemTemplate>
+                            <asp:HyperLink runat="server" Text="View" Target="_blank" rel="noopener"
+                                NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId") + "&amp;preview=true") %>' />
+                            <asp:Literal runat="server" Text=" | " />
+                            <asp:HyperLink runat="server" Text="Download"
+                                NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?id=" + Eval("DocumentId")) %>' />
+                        </ItemTemplate></asp:TemplateField>
+                        <asp:TemplateField HeaderText="Review decision"><ItemTemplate>
+                            <asp:DropDownList ID="CellDocumentDecision" runat="server"
+                                SelectedValue='<%# Eval("VerificationStatus") %>'>
+                                <asp:ListItem Value="">Select decision</asp:ListItem>
+                                <asp:ListItem Value="Verified">Verified</asp:ListItem>
+                                <asp:ListItem Value="Not Verified">Not Verified</asp:ListItem>
+                            </asp:DropDownList>
+                            <asp:TextBox ID="CellDocumentRemarks" runat="server" TextMode="MultiLine"
+                                MaxLength="1000" Rows="2" Text='<%# Eval("VerificationRemarks") %>' />
+                            <asp:Button runat="server" Text="Save decision"
+                                CommandName="RecordTenderRequirementDocumentReview"
+                                CommandArgument='<%# Container.DataItemIndex %>' CausesValidation="false" />
+                        </ItemTemplate></asp:TemplateField>
+                    </Columns>
+                </asp:GridView>
+            </div>
             <div class="field">
                 <label for="CellDocumentVerificationRemarksText">Verification remarks</label>
                 <asp:TextBox ID="CellDocumentVerificationRemarksText" runat="server" TextMode="MultiLine"
@@ -85,7 +157,7 @@
             </div>
             <div class="row">
                 <asp:Button ID="ApproveInitialTenderDocumentsButton" runat="server"
-                    Text="Approve document verification"
+                    Text="Verify Documents &amp; Forward to Next Team"
                     OnClick="ApproveInitialTenderDocumentsButton_Click" />
                 <asp:Button ID="RaiseTenderDocumentShortfallButton" runat="server"
                     Text="Raise Document Shortfall" CssClass="button secondary"

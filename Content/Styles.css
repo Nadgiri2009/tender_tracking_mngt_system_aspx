@@ -1117,16 +1117,17 @@ tr:hover td { background: #fdfafd; }
     gap: 1rem;
     margin-bottom: 1.1rem;
 }
+.workflow-tracker-heading { gap: .75rem; margin-bottom: .75rem; }
 .workflow-tracker-heading h2,
 .tender-details-heading h2 { margin: .2rem 0 0; }
 .workflow-current-stage {
     flex: 0 1 auto;
-    padding: .5rem .75rem;
+    padding: .35rem .6rem;
     border: 1px solid #b8d5f3;
     border-radius: 999px;
     background: #eef6ff;
     color: #15539a;
-    font-size: .78rem;
+    font-size: .72rem;
     font-weight: 800;
     letter-spacing: .025em;
     text-align: center;
@@ -1134,11 +1135,11 @@ tr:hover td { background: #fdfafd; }
 .workflow-timeline {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(260px, 1fr);
+    grid-auto-columns: minmax(205px, 220px);
     align-items: stretch;
-    gap: 0;
+    gap: .65rem;
     margin: 0;
-    padding: .2rem .15rem .8rem;
+    padding: .1rem .1rem .55rem;
     overflow-x: auto;
     list-style: none;
     overscroll-behavior-inline: contain;
@@ -1150,17 +1151,17 @@ tr:hover td { background: #fdfafd; }
     display: grid;
     min-width: 0;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 2.2rem minmax(0, 1fr);
-    gap: .55rem;
-    padding: 0 .7rem .1rem 0;
+    grid-template-rows: 1.8rem minmax(0, 1fr);
+    gap: .4rem;
+    padding: 0 0 .1rem;
     scroll-snap-align: start;
 }
 .workflow-step:not(:last-child)::before {
     position: absolute;
     z-index: 0;
-    top: 1.05rem;
-    right: -1.4rem;
-    left: 2.5rem;
+    top: .88rem;
+    right: calc(-50% - .325rem);
+    left: 50%;
     height: 2px;
     background: #ded9e3;
     content: "";
@@ -1168,43 +1169,45 @@ tr:hover td { background: #fdfafd; }
 .workflow-step-number {
     z-index: 1;
     display: inline-flex;
-    width: 2.2rem;
-    height: 2.2rem;
+    width: 1.8rem;
+    height: 1.8rem;
     align-items: center;
     justify-content: center;
     border: 2px solid #d5d0da;
     border-radius: 50%;
     background: #f3f1f5;
     color: #68616e;
-    font-size: .82rem;
+    font-size: .75rem;
     font-weight: 800;
-    margin-left: .3rem;
+    justify-self: center;
 }
 .workflow-step-content {
     min-width: 0;
     height: 100%;
-    padding: .8rem 1rem;
+    padding: .6rem .7rem;
     border: 1px solid #e8e3eb;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #fff;
     scroll-snap-align: start;
 }
 .workflow-step-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: .75rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: .3rem;
 }
-.workflow-step-heading h3 { margin: 0; font-size: .96rem; }
+.workflow-step-heading h3 { margin: 0; font-size: .84rem; line-height: 1.3; }
 .workflow-assignee,
-.workflow-remarks { margin: .25rem 0 0; color: var(--muted); font-size: .83rem; }
+.workflow-remarks { margin-top: .3rem; color: var(--muted); font-size: .73rem; line-height: 1.4; }
+.workflow-assignee p,
+.workflow-remarks p { margin: 0; }
 .workflow-status {
-    flex: 0 0 auto;
-    padding: .25rem .55rem;
+    justify-self: start;
+    padding: .18rem .45rem;
     border-radius: 999px;
     background: #f0eef2;
     color: #625c69;
-    font-size: .73rem;
+    font-size: .68rem;
     font-weight: 800;
 }
 .submission-readiness {
@@ -1272,23 +1275,23 @@ tr:hover td { background: #fdfafd; }
 .workflow-step-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: .35rem 1.2rem;
-    margin-top: .55rem;
+    gap: .2rem .6rem;
+    margin-top: .4rem;
     color: var(--muted);
-    font-size: .78rem;
+    font-size: .68rem;
 }
-.workflow-history { margin-top: .55rem; color: var(--purple); font-size: .8rem; }
+.workflow-history { margin-top: .4rem; color: var(--purple); font-size: .72rem; }
 .workflow-history summary { cursor: pointer; font-weight: 700; }
 .workflow-history pre {
     max-height: 12rem;
-    margin: .45rem 0 0;
-    padding: .65rem;
+    margin: .35rem 0 0;
+    padding: .5rem;
     overflow: auto;
     border-radius: 8px;
     background: #f8f6f9;
     color: var(--text);
     font: inherit;
-    font-size: .78rem;
+    font-size: .7rem;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
@@ -1360,12 +1363,10 @@ tr:hover td { background: #fdfafd; }
     .tender-detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-    .workflow-tracker-heading,
-    .workflow-step-heading { align-items: flex-start; flex-direction: column; }
+    .workflow-tracker-heading { align-items: flex-start; flex-direction: column; }
     .workflow-current-stage { border-radius: 10px; text-align: left; }
-    .workflow-step-content { padding: .7rem; }
-    .workflow-status { align-self: flex-start; }
-    .workflow-timeline { grid-auto-columns: minmax(250px, 82vw); }
+    .workflow-step-content { padding: .6rem; }
+    .workflow-timeline { grid-auto-columns: minmax(205px, 245px); }
     .department-tender-card-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tender-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

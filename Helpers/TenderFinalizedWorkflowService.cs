@@ -190,11 +190,13 @@ namespace DepartmentModule.Helpers
                       FROM dbo.TenderRequirementVerificationHistory h
                       WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
                         AND h.ReviewStage=@ReviewStage
+                        AND h.DocumentRevision=d.DocumentRevision
                       ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
                   ) latest
-                  WHERE d.TenderId=@TenderId
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0
                     AND ISNULL(COALESCE(latest.VerificationStatus,
-                        CASE WHEN @ReviewStage=N'JE' THEN d.VerificationStatus END),N'')<>N'Verified';",
+                        CASE WHEN @ReviewStage=N'JE' AND d.VerifiedAtUtc IS NOT NULL
+                             THEN d.VerificationStatus END),N'')<>N'Verified';",
                 connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
@@ -207,7 +209,7 @@ namespace DepartmentModule.Helpers
             }
 
             using (SqlCommand command = new SqlCommand(
-                "SELECT COUNT(1) FROM dbo.TenderDocuments WHERE TenderId=@TenderId;",
+                "SELECT COUNT(1) FROM dbo.TenderDocuments WHERE TenderId=@TenderId AND IsDeleted=0;",
                 connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
@@ -270,7 +272,8 @@ namespace DepartmentModule.Helpers
 
             using (SqlCommand command = new SqlCommand(
                 @"SELECT COUNT(1) FROM dbo.TenderDocuments
-                  WHERE TenderId=@TenderId AND UploadedBy=@UserId AND UploadedDate>=@RaisedAtUtc;",
+                  WHERE TenderId=@TenderId AND IsDeleted=0
+                    AND UploadedBy=@UserId AND UploadedDate>=@RaisedAtUtc;",
                 connection, transaction))
             {
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);

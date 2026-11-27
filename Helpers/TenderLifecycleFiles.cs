@@ -252,6 +252,48 @@ namespace DepartmentModule.Helpers
             return false;
         }
 
+        public static string ValidateStoredTenderDocument(Page page, string storedPath,
+            string originalFileName, string storedExtension, long? expectedSize, out string fullPath)
+        {
+            fullPath = null;
+            string safeName = SafeFileName(originalFileName);
+            string extension = Path.GetExtension(safeName).ToLowerInvariant();
+            if (safeName.Length == 0 || safeName.Length > 260 ||
+                Array.IndexOf(AllowedExtensions, extension) < 0)
+                return "The document name or extension is invalid.";
+            if (!String.IsNullOrWhiteSpace(storedExtension) &&
+                !String.Equals(extension, storedExtension.Trim(), StringComparison.OrdinalIgnoreCase))
+                return "The stored file extension does not match the document name.";
+            if (!TryResolveStoredFilePath(page, storedPath, out fullPath))
+                return "The uploaded file is missing or its stored path is invalid.";
+
+            try
+            {
+                FileInfo file = new FileInfo(fullPath);
+                if (file.Length <= 0)
+                    return "The uploaded file is empty.";
+                if (file.Length > 10L * 1024L * 1024L)
+                    return "The uploaded file exceeds the 10 MB limit.";
+                if (expectedSize.HasValue && expectedSize.Value > 0 && file.Length != expectedSize.Value)
+                    return "The stored file size does not match its document record.";
+
+                using (FileStream stream = File.OpenRead(fullPath))
+                {
+                    if (!HasAllowedContentSignature(stream, extension))
+                        return "The uploaded file content does not match its declared type.";
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return "The uploaded file cannot be accessed by the application.";
+            }
+            catch (IOException)
+            {
+                return "The uploaded file could not be read for verification.";
+            }
+            return null;
+        }
+
         private static void DeleteStoredUpload(Page page, string relativePath, string relativeFolderName)
         {
             if (String.IsNullOrWhiteSpace(relativePath)) return;
