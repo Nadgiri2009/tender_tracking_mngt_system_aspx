@@ -25,6 +25,7 @@ namespace DepartmentModule.Pages
         protected GridView WorkflowQueue, HistoryGrid, PrimaryBidderGrid, PrimaryDocumentGrid,
             SecondaryApplicationsGrid, ShortfallItemsGrid, FinancialEntryGrid, FinancialReviewGrid,
             GeneratedDocumentsGrid, ShortfallClearanceGrid, ShortfallApplicationsGrid;
+        protected Repeater TenderSubmissionReadiness;
         protected HyperLink ApplicationRequirementsLink;
         protected TextBox SubmitRemarksText, PublishRemarksText,
             PrimaryOpenRemarksText, PrimaryCompletionRemarksText, PrimaryForwardRemarksText,
@@ -36,7 +37,8 @@ namespace DepartmentModule.Pages
             AgreementDateText, AgreementTermsText, AgreementSignatoryText;
         protected DropDownList SelectedFinancialBidSelect;
         protected Literal WorkOrderBidderName, WorkOrderBidAmount,
-            AgreementBidderName, AgreementBidAmount, PublicationScheduleSummary;
+            AgreementBidderName, AgreementBidAmount, PublicationScheduleSummary,
+            TenderSubmissionReadinessSummaryText;
         protected Button SubmitDraftButton, PublishButton, OpenTechnicalBidsButton,
             CompletePrimaryVerificationButton, ForwardToTenderCellButton,
             CompleteSecondaryVerificationButton, SendToShortfallCreationButton,
@@ -50,6 +52,16 @@ namespace DepartmentModule.Pages
         protected HyperLink TenderDocumentVerificationLink, CorrectTenderDocumentsLink;
         protected Literal TenderDocumentShortfallSummary, TenderDocumentCorrectionShortfallSummary;
         protected Button ReverifiedOpeningToChairmanButton, ReverifiedOpeningToShortfallButton;
+
+        private sealed class TenderSubmissionReadinessItem
+        {
+            public string Key { get; set; }
+            public string Name { get; set; }
+            public string Step { get; set; }
+            public string Status { get; set; }
+            public string ActionUrl { get; set; }
+            public bool IsComplete { get; set; }
+        }
 
         private int TenderId { get { return QueryId("id"); } }
         private bool IsSystemAdministrator { get { return HasPermission("system.admin"); } }
@@ -355,6 +367,7 @@ namespace DepartmentModule.Pages
                         ApplicationRequirementsLink.NavigateUrl = "~/Pages/ApplicationRequirements.aspx?tenderId=" +
                             TenderId.ToString(CultureInfo.InvariantCulture);
                         LoadRequiredBidDocumentTypes(connection);
+                        BindTenderSubmissionReadiness(connection);
                     }
                     if (InitialTenderCellVerificationPanel.Visible)
                     {
@@ -440,6 +453,190 @@ namespace DepartmentModule.Pages
                 }
             }
             RequiredBidDocumentsText.Text = String.Join(Environment.NewLine, documentTypes.ToArray());
+        }
+
+        private void BindTenderSubmissionReadiness(SqlConnection connection)
+        {
+            List<TenderSubmissionReadinessItem> items =
+                GetTenderSubmissionReadiness(connection, null);
+            TenderSubmissionReadiness.DataSource = items;
+            TenderSubmissionReadiness.DataBind();
+
+            int pendingCount = 0;
+            foreach (TenderSubmissionReadinessItem item in items)
+                if (!item.IsComplete) pendingCount++;
+            TenderSubmissionReadinessSummaryText.Text = pendingCount == 0
+                ? "All required items are complete. This tender is ready for Tender Cell review."
+                : pendingCount.ToString(CultureInfo.InvariantCulture) + " required item" +
+                    (pendingCount == 1 ? " is" : "s are") +
+                    " pending. The tender will remain with JE until these are complete.";
+        }
+
+        private List<TenderSubmissionReadinessItem> GetTenderSubmissionReadiness(
+            SqlConnection connection, SqlTransaction transaction)
+        {
+            List<TenderSubmissionReadinessItem> items = new List<TenderSubmissionReadinessItem>();
+            string tenderDetailsUrl = "TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+            string tenderFormUrl = "TenderForm.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
+            string documentVerificationUrl = tenderFormUrl;
+            string basicStep = "Step 1 — Basic tender information";
+            string documentStep = "Tender details — Tender documents";
+            string boqStep = "Tender details — Bill of Quantities";
+            string verificationStep = "JE initial document verification";
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT t.Title,t.DepartmentId,
+                         COALESCE(NULLIF(t.TenderMethod,N''),t.TenderType) AS TenderMethod,
+                         t.TenderCategory,t.FinancialYear,t.EstimatedAmount,
+                         (SELECT COUNT(*) FROM dbo.BOQ b WHERE b.TenderId=t.TenderId) AS BOQCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                          WHERE d.TenderId=t.TenderId
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Scope of Work') AS ScopeCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                          WHERE d.TenderId=t.TenderId
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Technical Requirements') AS TechnicalCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                          WHERE d.TenderId=t.TenderId
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Financial Requirements') AS FinancialCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Tender Proposal') AS ProposalCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Tender Document') AS TenderDocumentCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Technical Supporting Document') AS TechnicalSupportCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          WHERE d.TenderId=t.TenderId AND d.DocumentType=N'Financial Supporting Document') AS FinancialSupportCount
+                  FROM dbo.Tender t
+                  WHERE t.TenderId=@TenderId AND t.IsDeleted=0;", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        throw new InvalidOperationException("Tender readiness could not be checked.");
+
+                    AddSubmissionReadinessItem(items, "title", "Project title",
+                        Convert.ToString(reader["Title"]).Trim().Length >= 5, basicStep, tenderFormUrl);
+                    AddSubmissionReadinessItem(items, "department", "Department",
+                        Convert.ToInt32(reader["DepartmentId"], CultureInfo.InvariantCulture) > 0,
+                        basicStep, tenderFormUrl);
+                    AddSubmissionReadinessItem(items, "tender-method", "Tender method",
+                        !String.IsNullOrWhiteSpace(Convert.ToString(reader["TenderMethod"])),
+                        basicStep, tenderFormUrl);
+                    AddSubmissionReadinessItem(items, "tender-category", "Tender category",
+                        !String.IsNullOrWhiteSpace(Convert.ToString(reader["TenderCategory"])),
+                        basicStep, tenderFormUrl);
+                    AddSubmissionReadinessItem(items, "financial-year", "Budgeting financial year",
+                        !String.IsNullOrWhiteSpace(Convert.ToString(reader["FinancialYear"])),
+                        basicStep, tenderFormUrl);
+                    AddSubmissionReadinessItem(items, "estimated-value", "Estimated tender value",
+                        reader["EstimatedAmount"] != DBNull.Value &&
+                            Convert.ToDecimal(reader["EstimatedAmount"], CultureInfo.InvariantCulture) > 0,
+                        basicStep, tenderFormUrl);
+
+                    AddSubmissionReadinessItem(items, "boq", "At least one BOQ item",
+                        Convert.ToInt32(reader["BOQCount"], CultureInfo.InvariantCulture) > 0,
+                        boqStep, tenderDetailsUrl + "#tender-boq-section");
+                    AddSubmissionReadinessItem(items, "scope-of-work", "Scope of Work document",
+                        Convert.ToInt32(reader["ScopeCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                    AddSubmissionReadinessItem(items, "technical-requirements", "Technical Requirements document",
+                        Convert.ToInt32(reader["TechnicalCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                    AddSubmissionReadinessItem(items, "financial-requirements", "Financial Requirements document",
+                        Convert.ToInt32(reader["FinancialCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                    AddSubmissionReadinessItem(items, "tender-proposal", "Tender Proposal document",
+                        Convert.ToInt32(reader["ProposalCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                    AddSubmissionReadinessItem(items, "tender-document", "Tender Document",
+                        Convert.ToInt32(reader["TenderDocumentCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                    AddSubmissionReadinessItem(items, "technical-support", "Technical Supporting Document",
+                        Convert.ToInt32(reader["TechnicalSupportCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                    AddSubmissionReadinessItem(items, "financial-support", "Financial Supporting Document",
+                        Convert.ToInt32(reader["FinancialSupportCount"], CultureInfo.InvariantCulture) > 0,
+                        documentStep, tenderDetailsUrl + "#tender-documents-section");
+                }
+            }
+
+            bool foundDocuments = false;
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT d.DocumentId,
+                         COALESCE(NULLIF(d.DocumentName,N''),NULLIF(d.FileName,N''),N'Untitled document') AS DocumentName,
+                         CASE WHEN ISNULL(COALESCE(latest.VerificationStatus,d.VerificationStatus),N'')=N'Verified'
+                              THEN 1 ELSE 0 END AS IsVerified
+                  FROM dbo.TenderDocuments d
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) h.VerificationStatus
+                      FROM dbo.TenderRequirementVerificationHistory h
+                      WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
+                        AND h.ReviewStage=N'JE'
+                      ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
+                  ) latest
+                  WHERE d.TenderId=@TenderId
+                  ORDER BY d.UploadedDate,d.DocumentId;", connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        foundDocuments = true;
+                        bool verified = Convert.ToInt32(reader["IsVerified"], CultureInfo.InvariantCulture) == 1;
+                        AddSubmissionReadinessItem(items,
+                            "je-document-" + Convert.ToString(reader["DocumentId"], CultureInfo.InvariantCulture),
+                            "Verify document: " + Convert.ToString(reader["DocumentName"]),
+                            verified, verificationStep, documentVerificationUrl);
+                    }
+                }
+            }
+            if (!foundDocuments)
+                AddSubmissionReadinessItem(items, "je-document-upload",
+                    "Upload tender documents before JE verification", false,
+                    verificationStep, tenderDetailsUrl + "#tender-documents-section");
+
+            AddSubmissionReadinessItem(items, "bid-document-types",
+                "Required bidder technical document types (one per line)",
+                HasValidRequiredBidDocumentTypes(RequiredBidDocumentsText.Text),
+                "Field: Required bidder technical documents — JE initial document verification",
+                String.Empty);
+            return items;
+        }
+
+        private static void AddSubmissionReadinessItem(List<TenderSubmissionReadinessItem> items,
+            string key, string name, bool isComplete, string step, string actionUrl)
+        {
+            items.Add(new TenderSubmissionReadinessItem
+            {
+                Key = key,
+                Name = name,
+                Step = step,
+                IsComplete = isComplete,
+                Status = isComplete ? "Complete" : "Pending",
+                ActionUrl = actionUrl
+            });
+        }
+
+        private static bool HasValidRequiredBidDocumentTypes(string value)
+        {
+            if (String.IsNullOrWhiteSpace(value) || value.Length > 8000) return false;
+            string[] names = value.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            HashSet<string> uniqueNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int count = 0;
+            foreach (string line in names)
+            {
+                string name = line.Trim();
+                if (name.Length == 0) continue;
+                if (name.Length > 160 || !uniqueNames.Add(name)) return false;
+                count++;
+            }
+            return count > 0 && count <= 30;
         }
 
         private void BindSecondaryApplications(SqlConnection connection)
@@ -1829,26 +2026,17 @@ namespace DepartmentModule.Pages
 
         private void EnsureTenderPreparationComplete(SqlConnection connection, SqlTransaction transaction)
         {
-            using (SqlCommand command = new SqlCommand(
-                @"SELECT (SELECT COUNT(*) FROM dbo.BOQ WHERE TenderId=@TenderId) AS BOQCount,
-                         COUNT(CASE WHEN DocumentType=N'Tender Proposal' THEN 1 END) AS ProposalCount,
-                         COUNT(CASE WHEN DocumentType=N'Tender Document' THEN 1 END) AS TenderDocumentCount,
-                         COUNT(CASE WHEN DocumentType=N'Technical Supporting Document' THEN 1 END) AS TechnicalDocumentCount,
-                         COUNT(CASE WHEN DocumentType=N'Financial Supporting Document' THEN 1 END) AS FinancialDocumentCount
-                  FROM dbo.TenderDocuments WHERE TenderId=@TenderId;", connection, transaction))
-            {
-                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
-                using (SqlDataReader reader = command.ExecuteReader())
-                {
-                    if (!reader.Read()) throw new InvalidOperationException("Tender preparation could not be verified.");
-                    if (Convert.ToInt32(reader["BOQCount"]) == 0 ||
-                        Convert.ToInt32(reader["ProposalCount"]) == 0 ||
-                        Convert.ToInt32(reader["TenderDocumentCount"]) == 0 ||
-                        Convert.ToInt32(reader["TechnicalDocumentCount"]) == 0 ||
-                        Convert.ToInt32(reader["FinancialDocumentCount"]) == 0)
-                        throw new InvalidOperationException("Before submitting, add a BOQ item and all four required tender document categories.");
-                }
-            }
+            List<TenderSubmissionReadinessItem> items =
+                GetTenderSubmissionReadiness(connection, transaction);
+            List<string> pending = new List<string>();
+            foreach (TenderSubmissionReadinessItem item in items)
+                if (!item.IsComplete)
+                    pending.Add(item.Name + " (Step: " + item.Step + ")");
+
+            if (pending.Count > 0)
+                throw new InvalidOperationException(
+                    "This tender remains with JE. Complete the following before forwarding to Tender Cell: " +
+                    String.Join("; ", pending.ToArray()) + ".");
         }
 
         private void SaveRequiredBidDocumentTypes(SqlConnection connection, SqlTransaction transaction)

@@ -173,7 +173,7 @@
             </asp:GridView>
         </div>
     </asp:Panel>
-    <section class="card">
+    <section id="tender-boq-section" class="card">
         <h2>Bill of Quantities</h2>
         <div class="table-wrap">
             <asp:GridView ID="BoqGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No BOQ items added yet." OnRowCommand="BoqGrid_RowCommand">
@@ -202,7 +202,7 @@
             </div>
         </asp:Panel>
     </section>
-    <section class="card tender-documents">
+    <section id="tender-documents-section" class="card tender-documents">
         <div class="page-heading">
             <div><h2>Tender documents</h2><p class="muted">Documents attached to this tender.</p></div>
             <asp:Panel ID="UploadPanel" runat="server" CssClass="document-management-actions" Visible="false">

@@ -27,13 +27,41 @@
         <asp:Panel ID="SubmitDraftPanel" runat="server" CssClass="card" Visible="false">
             <h2>JE initial document verification</h2>
             <p class="help">Review and mark every uploaded tender document as verified before forwarding the tender to Tender Cell.</p>
+            <section class="submission-readiness">
+                <h3>Pre-submission checklist</h3>
+                <p class="help">The tender stays with JE until every required field, document, and preparation step below is complete.</p>
+                <p id="TenderSubmissionReadinessSummary" class="submission-readiness-summary" role="status" aria-live="polite">
+                    <asp:Literal ID="TenderSubmissionReadinessSummaryText" runat="server" />
+                </p>
+                <div id="TenderSubmissionReadinessItems" class="submission-readiness-list">
+                    <asp:Repeater ID="TenderSubmissionReadiness" runat="server">
+                        <ItemTemplate>
+                            <div class='submission-readiness-item <%# Convert.ToBoolean(Eval("IsComplete")) ? "is-complete" : "is-pending" %>'
+                                data-readiness-key='<%# Eval("Key") %>'
+                                data-complete='<%# Convert.ToBoolean(Eval("IsComplete")) ? "true" : "false" %>'>
+                                <span class="submission-readiness-indicator" aria-hidden="true"></span>
+                                <div class="submission-readiness-copy">
+                                    <strong><%#: Eval("Name") %></strong>
+                                    <span>Step: <%#: Eval("Step") %></span>
+                                </div>
+                                <span class='submission-readiness-status <%# Convert.ToBoolean(Eval("IsComplete")) ? "is-complete" : "is-pending" %>'
+                                    data-readiness-status><%#: Eval("Status") %></span>
+                                <asp:HyperLink ID="ReadinessActionLink" runat="server"
+                                    CssClass="submission-readiness-action" Text="Open section"
+                                    NavigateUrl='<%# Eval("ActionUrl") %>'
+                                    Visible='<%# !Convert.ToBoolean(Eval("IsComplete")) && !String.IsNullOrEmpty(Convert.ToString(Eval("ActionUrl"))) %>' />
+                            </div>
+                        </ItemTemplate>
+                    </asp:Repeater>
+                </div>
+            </section>
             <asp:HyperLink ID="ApplicationRequirementsLink" runat="server" CssClass="button secondary">Manage application requirements</asp:HyperLink>
             <div class="field"><label for="RequiredBidDocumentsText">Required bidder technical documents</label>
                 <span class="help">Enter one document name per line. Use the requirements manager to set descriptions, optional items, accepted formats, and file-size limits.</span>
                 <asp:TextBox ID="RequiredBidDocumentsText" runat="server" TextMode="MultiLine" MaxLength="8000" Rows="6" /></div>
             <div class="field"><label for="SubmitRemarksText">Remarks</label><asp:TextBox ID="SubmitRemarksText" runat="server" TextMode="MultiLine" MaxLength="2000" Rows="3" /></div>
             <asp:Button ID="SubmitDraftButton" runat="server" Text="Approve initial verification and forward to Tender Cell"
-                OnClick="SubmitDraftButton_Click" />
+                OnClick="SubmitDraftButton_Click" OnClientClick="return validateTenderSubmissionReadiness();" />
         </asp:Panel>
         <asp:Panel ID="InitialTenderCellVerificationPanel" runat="server" CssClass="card" Visible="false">
             <h2>Tender Cell independent document verification</h2>
@@ -405,4 +433,75 @@
             </div>
         </section>
     </asp:Panel>
+    <script type="text/javascript">
+        function hasValidBidDocumentTypes() {
+            var input = document.querySelector("[id$='RequiredBidDocumentsText']");
+            if (!input || input.value.length > 8000) return false;
+            var names = input.value.split(/\r?\n/).map(function (name) { return name.trim(); })
+                .filter(function (name) { return name.length > 0; });
+            if (names.length < 1 || names.length > 30) return false;
+            var uniqueNames = {};
+            return names.every(function (name) {
+                var key = name.toLowerCase();
+                if (name.length > 160 || uniqueNames[key]) return false;
+                uniqueNames[key] = true;
+                return true;
+            });
+        }
+
+        function updateBidDocumentReadiness() {
+            var row = document.querySelector("[data-readiness-key='bid-document-types']");
+            if (!row) return;
+            var complete = hasValidBidDocumentTypes();
+            row.setAttribute("data-complete", complete ? "true" : "false");
+            row.classList.toggle("is-complete", complete);
+            row.classList.toggle("is-pending", !complete);
+            var status = row.querySelector("[data-readiness-status]");
+            if (status) {
+                status.textContent = complete ? "Complete" : "Pending";
+                status.classList.toggle("is-complete", complete);
+                status.classList.toggle("is-pending", !complete);
+            }
+        }
+
+        function updateTenderReadinessSummary() {
+            var rows = Array.prototype.slice.call(
+                document.querySelectorAll("#TenderSubmissionReadinessItems .submission-readiness-item"));
+            var pending = rows.filter(function (row) {
+                return row.getAttribute("data-complete") !== "true";
+            });
+            var summary = document.getElementById("TenderSubmissionReadinessSummary");
+            if (summary) {
+                summary.classList.toggle("has-pending", pending.length > 0);
+                summary.textContent = pending.length
+                    ? pending.length + " required item" + (pending.length === 1 ? " is" : "s are") +
+                        " still pending. Complete these items before forwarding to Tender Cell."
+                    : "All required items are complete. This tender is ready for Tender Cell review.";
+            }
+            return pending;
+        }
+
+        document.addEventListener("input", function (event) {
+            if (event.target && event.target.id &&
+                /RequiredBidDocumentsText$/.test(event.target.id)) {
+                updateBidDocumentReadiness();
+                updateTenderReadinessSummary();
+            }
+        });
+
+        function validateTenderSubmissionReadiness() {
+            updateBidDocumentReadiness();
+            var pending = updateTenderReadinessSummary();
+            var summary = document.getElementById("TenderSubmissionReadinessSummary");
+            if (pending.length) {
+                if (summary) {
+                    summary.setAttribute("tabindex", "-1");
+                    summary.focus();
+                    summary.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+                return false;
+            }
+            return true;
+        }
+    </script>
 </asp:Content>
