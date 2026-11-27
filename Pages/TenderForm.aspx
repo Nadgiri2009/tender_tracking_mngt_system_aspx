@@ -29,8 +29,7 @@
         <p class="muted">The tender reference number is assigned automatically when the draft is saved.</p>
         <div class="field"><label for="TitleText">Project title</label><asp:TextBox ID="TitleText" runat="server" />
             <span id="TitleCharacterCount" class="field-help" aria-live="polite">0 characters</span>
-            <asp:RequiredFieldValidator ID="TitleRequired" runat="server" ControlToValidate="TitleText" ErrorMessage="Title is required." CssClass="validation" />
-            <asp:CustomValidator ID="TitleLength" runat="server" ControlToValidate="TitleText" OnServerValidate="TitleLength_ServerValidate" ErrorMessage="Title must be at least 5 characters." CssClass="validation" /></div>
+            <asp:RequiredFieldValidator ID="TitleRequired" runat="server" ControlToValidate="TitleText" ErrorMessage="Title is required." CssClass="validation" /></div>
         <div class="field"><label for="DescriptionText">Project description</label><asp:TextBox ID="DescriptionText" runat="server" TextMode="MultiLine" Rows="3" />
             <span id="DescriptionCharacterCount" class="field-help" aria-live="polite">0 characters</span></div>
         <div class="row">
@@ -609,7 +608,7 @@
                     var department = panel.querySelector("[id$='DepartmentSelect']");
                     var year = panel.querySelector("[id$='FinancialYearSelect']");
                     var amount = panel.querySelector("[id$='AmountText']");
-                    return title && title.value.trim().length >= 5 &&
+                    return title && title.value.trim().length > 0 &&
                         method && method.value &&
                         category && category.value && year && year.value && amount &&
                         amount.value !== "" && Number(amount.value) > 0 &&
@@ -1429,7 +1428,7 @@
             }
             function groupComplete(group) {
                 if (group.number === 1)
-                    return wizard.querySelector("[id$='TitleText']").value.trim().length >= 5 &&
+                    return wizard.querySelector("[id$='TitleText']").value.trim().length > 0 &&
                         !!wizard.querySelector("[id$='TenderTypeSelect']").value &&
                         !!wizard.querySelector("[id$='TenderCategorySelect']").value;
                 if (group.number === 2) {

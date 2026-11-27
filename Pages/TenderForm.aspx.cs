@@ -1588,11 +1588,6 @@ namespace DepartmentModule.Pages
                 .ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture);
         }
 
-        protected void TitleLength_ServerValidate(object source, ServerValidateEventArgs args)
-        {
-            args.IsValid = args.Value != null && args.Value.Trim().Length >= 5;
-        }
-
         protected void CreateButton_Click(object sender, EventArgs e)
         {
             if (!HasPermission("system.admin") && !HasPermission("tender.create.department") &&
@@ -1627,9 +1622,9 @@ namespace DepartmentModule.Pages
                 ShowError("Additional conditions and terms cannot exceed 4,000 characters each.");
                 return;
             }
-            if (TitleText.Text == null || TitleText.Text.Trim().Length < 5)
+            if (String.IsNullOrWhiteSpace(TitleText.Text))
             {
-                ShowError("Project title must be at least 5 characters.");
+                ShowError("Project title is required.");
                 return;
             }
             if ((BudgetInformationText.Text != null && BudgetInformationText.Text.Length > 2000) ||
@@ -2399,7 +2394,9 @@ namespace DepartmentModule.Pages
                     SaveAdministrativeApprovals(connection, transaction, EditingTenderId, savedPaths, obsoletePaths);
                     RecordTenderRevision(connection, transaction, EditingTenderId,
                         currentStatus == "Budget Revision Required" ? "Budget proposal revised" : "Draft updated",
-                        DescriptionText.Text);
+                        currentStatus == "Budget Revision Required"
+                            ? "Budget proposal details updated; see the revision snapshot."
+                            : "Tender details updated.");
 
                     if (currentStatus == "Budget Revision Required")
                     {
@@ -2415,7 +2412,8 @@ namespace DepartmentModule.Pages
                             AddText(history, "@Role", SqlDbType.NVarChar, CurrentRole, 50);
                             ModuleDb.AddParameter(history, "@DepartmentId", SqlDbType.Int,
                                 CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
-                            AddText(history, "@Remarks", SqlDbType.NVarChar, DescriptionText.Text, 1000);
+                            AddText(history, "@Remarks", SqlDbType.NVarChar,
+                                "Budget proposal revised; see the tender revision snapshot.", 1000);
                             history.ExecuteNonQuery();
                         }
                     }

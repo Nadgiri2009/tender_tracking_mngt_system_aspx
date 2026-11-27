@@ -510,7 +510,8 @@ namespace DepartmentModule.Pages
                         throw new InvalidOperationException("Tender readiness could not be checked.");
 
                     AddSubmissionReadinessItem(items, "title", "Project title",
-                        Convert.ToString(reader["Title"]).Trim().Length >= 5, basicStep, tenderFormUrl);
+                        !String.IsNullOrWhiteSpace(Convert.ToString(reader["Title"])),
+                        basicStep, tenderFormUrl);
                     AddSubmissionReadinessItem(items, "department", "Department",
                         Convert.ToInt32(reader["DepartmentId"], CultureInfo.InvariantCulture) > 0,
                         basicStep, tenderFormUrl);
