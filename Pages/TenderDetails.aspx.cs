@@ -866,6 +866,7 @@ namespace DepartmentModule.Pages
                 DataTable documents = new DataTable();
                 using (SqlDataAdapter adapter = new SqlDataAdapter(command)) adapter.Fill(documents);
                 documents.Columns.Add("DocumentStatus", typeof(string));
+                documents.Columns.Add("VerificationStatus", typeof(string));
                 foreach (DataRow document in documents.Rows)
                 {
                     string fullPath;
