@@ -143,16 +143,23 @@
                 <div><h3>Keep contractor details current</h3><p>Review your contractor profile and supporting documents before applying for a tender.</p></div>
             </article>
         </div>
-        <h3 class="home-announcements-heading">Official announcements</h3>
-        <div class="table-wrap">
-        <asp:GridView ID="AnnouncementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="There are no current announcements.">
-            <Columns>
-                <asp:BoundField DataField="Title" HeaderText="Notice" />
-                <asp:BoundField DataField="Body" HeaderText="Details" />
-                <asp:BoundField DataField="PublishDate" HeaderText="Published" DataFormatString="{0:dd MMM yyyy}" />
-                <asp:BoundField DataField="ExpiryDate" HeaderText="Expiry" DataFormatString="{0:dd MMM yyyy}" />
-            </Columns>
-        </asp:GridView>
-        </div>
+        <asp:Repeater ID="OfficialAnnouncementsRepeater" runat="server">
+            <HeaderTemplate><div class="home-notice-list home-official-notice-list" aria-label="Official announcements"></HeaderTemplate>
+            <ItemTemplate>
+                <article class="home-notice home-official-notice">
+                    <span class="home-notice-index" aria-hidden="true">OFFICIAL</span>
+                    <div>
+                        <h3><%#: Eval("Title") %></h3>
+                        <p><%#: Eval("Body") %></p>
+                        <small class="home-official-dates">
+                            <asp:Literal runat="server" Text='<%# FormatAnnouncementDate(Eval("PublishDate"), Eval("ExpiryDate")) %>' />
+                        </small>
+                    </div>
+                </article>
+            </ItemTemplate>
+            <FooterTemplate></div></FooterTemplate>
+        </asp:Repeater>
+        <asp:Literal ID="NoOfficialAnnouncements" runat="server" Visible="false"
+            Text="&lt;div class='home-notice-list home-official-notice-list'&gt;&lt;article class='home-notice home-official-notice home-official-empty'&gt;&lt;span class='home-notice-index' aria-hidden='true'&gt;—&lt;/span&gt;&lt;div&gt;&lt;h3&gt;No current official announcements&lt;/h3&gt;&lt;p&gt;Please check again for future portal updates.&lt;/p&gt;&lt;/div&gt;&lt;/article&gt;&lt;/div&gt;" />
     </section>
 </asp:Content>

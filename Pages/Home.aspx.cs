@@ -36,7 +36,9 @@ namespace DepartmentModule.Pages
             TotalContractors, PageSummary;
         protected TextBox TenderSearchText;
         protected DropDownList DepartmentFilter, CategoryFilter, TenderTypeFilter, TenderStatusFilter, SortBySelect;
-        protected GridView TendersGrid, AnnouncementsGrid;
+        protected GridView TendersGrid;
+        protected Repeater OfficialAnnouncementsRepeater;
+        protected Literal NoOfficialAnnouncements;
         protected LinkButton PreviousPageButton, NextPageButton;
         protected Repeater PageNumbers;
 
@@ -107,12 +109,7 @@ namespace DepartmentModule.Pages
                     }
 
                     BindTenders(connection);
-                    Bind(connection, AnnouncementsGrid,
-                        @"SELECT TOP (8) Title,Body,PublishDate,ExpiryDate FROM dbo.Announcements
-                          WHERE IsDeleted=0 AND IsPublished=1
-                            AND (PublishDate IS NULL OR PublishDate<=SYSUTCDATETIME())
-                            AND (ExpiryDate IS NULL OR ExpiryDate>=SYSUTCDATETIME())
-                          ORDER BY COALESCE(PublishDate,CreatedDate) DESC;");
+                    BindOfficialAnnouncements(connection);
                 }
             }
             catch (SqlException ex)
@@ -123,6 +120,49 @@ namespace DepartmentModule.Pages
             {
                 ShowLoadError("Public portal database configuration is invalid.", ex);
             }
+        }
+
+        private void BindOfficialAnnouncements(SqlConnection connection)
+        {
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT TOP (8) Title,Body,PublishDate,ExpiryDate FROM dbo.Announcements
+                  WHERE IsDeleted=0 AND IsPublished=1
+                    AND (PublishDate IS NULL OR PublishDate<=SYSUTCDATETIME())
+                    AND (ExpiryDate IS NULL OR ExpiryDate>=SYSUTCDATETIME())
+                  ORDER BY COALESCE(PublishDate,CreatedDate) DESC;",
+                connection))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                DataTable announcements = new DataTable();
+                adapter.Fill(announcements);
+                OfficialAnnouncementsRepeater.DataSource = announcements;
+                OfficialAnnouncementsRepeater.DataBind();
+                NoOfficialAnnouncements.Visible = announcements.Rows.Count == 0;
+            }
+        }
+
+        protected string FormatAnnouncementDate(object publishDate, object expiryDate)
+        {
+            DateTime published;
+            DateTime expires;
+            string text = String.Empty;
+
+            if (publishDate != DBNull.Value && publishDate != null &&
+                DateTime.TryParse(Convert.ToString(publishDate, CultureInfo.InvariantCulture),
+                    CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out published))
+            {
+                text = "Published " + published.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+            }
+
+            if (expiryDate != DBNull.Value && expiryDate != null &&
+                DateTime.TryParse(Convert.ToString(expiryDate, CultureInfo.InvariantCulture),
+                    CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out expires))
+            {
+                text += (text.Length == 0 ? "Valid until " : " · Valid until ") +
+                    expires.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+            }
+
+            return text;
         }
 
         private void BindTenders(SqlConnection connection)
