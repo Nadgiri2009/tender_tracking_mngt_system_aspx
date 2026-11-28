@@ -165,7 +165,7 @@
     <asp:Panel ID="ApplicationRequirementsPanel" runat="server" CssClass="card" Visible="false">
         <h2>Application document requirements</h2>
         <div class="table-wrap">
-            <asp:GridView ID="ApplicationRequirementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="ApplicationRequirementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No additional application documents are configured.">
                 <Columns>
                     <asp:BoundField DataField="DocumentType" HeaderText="Document" />
@@ -184,7 +184,7 @@
     <section id="tender-boq-section" class="card">
         <h2>Bill of Quantities</h2>
         <div class="table-wrap">
-            <asp:GridView ID="BoqGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No BOQ items added yet." OnRowCommand="BoqGrid_RowCommand">
+            <asp:GridView ID="BoqGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No BOQ items added yet." OnRowCommand="BoqGrid_RowCommand">
                 <Columns>
                     <asp:BoundField DataField="ItemName" HeaderText="Item" />
                     <asp:BoundField DataField="Description" HeaderText="Description" />
@@ -228,7 +228,7 @@
             </asp:Panel>
         </div>
         <div class="table-wrap">
-            <asp:GridView ID="DocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="DocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 DataKeyNames="DocumentId" EmptyDataText="No documents are associated with this tender yet."
                 AllowPaging="true" PageSize="10" OnRowDataBound="DocumentsGrid_RowDataBound"
                 OnPageIndexChanging="DocumentsGrid_PageIndexChanging" OnRowCommand="DocumentsGrid_RowCommand">
@@ -346,7 +346,7 @@
     <asp:Panel ID="AuthenticatedWorkflowPanel" runat="server">
         <asp:Panel ID="RevisionHistoryPanel" runat="server" CssClass="card" Visible="false">
             <h2>Tender revision history</h2>
-            <div class="table-wrap"><asp:GridView ID="RevisionHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <div class="table-wrap"><asp:GridView ID="RevisionHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No revisions have been recorded.">
                 <Columns>
                     <asp:BoundField DataField="RevisionNumber" HeaderText="Revision" />
@@ -374,7 +374,7 @@
         </section>
         <asp:Panel ID="BudgetOpinionHistoryPanel" runat="server" CssClass="card">
             <h2>Financial budget-opinion history</h2>
-            <div class="table-wrap"><asp:GridView ID="BudgetOpinionsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No budget opinions have been recorded.">
+            <div class="table-wrap"><asp:GridView ID="BudgetOpinionsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No budget opinions have been recorded.">
                 <Columns>
                     <asp:BoundField DataField="Opinion" HeaderText="Opinion" />
                     <asp:BoundField DataField="ApprovedAmount" HeaderText="Approved amount" DataFormatString="₹{0:N2}" NullDisplayText="—" />
@@ -389,7 +389,7 @@
                 <asp:HyperLink ID="BidsLink" runat="server" CssClass="button secondary">Review bids</asp:HyperLink>
                 <asp:HyperLink ID="WorkLink" runat="server" CssClass="button secondary">Work management</asp:HyperLink>
             </div>
-            <div class="table-wrap"><asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No workflow actions have been recorded.">
+            <div class="table-wrap"><asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No workflow actions have been recorded.">
                 <Columns>
                     <asp:BoundField DataField="ApprovalStage" HeaderText="Stage" />
                     <asp:BoundField DataField="PreviousStatus" HeaderText="Previous status" />

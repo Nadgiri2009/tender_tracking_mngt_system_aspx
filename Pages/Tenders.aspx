@@ -19,6 +19,7 @@
         </div>
         <div class="table-wrap">
             <asp:GridView ID="TenderGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" AllowCustomPaging="true" AllowSorting="true"
+                CssClass="compact-grid"
                 PageSize="10" GridLines="None" EmptyDataText="No tenders match your filters."
                 OnPageIndexChanging="TenderGrid_PageIndexChanging" OnSorting="TenderGrid_Sorting">
                 <Columns>

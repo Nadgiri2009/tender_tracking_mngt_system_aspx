@@ -41,7 +41,7 @@
         <asp:Panel ID="ContractorSubmitPanel" runat="server" CssClass="card" Visible="false">
             <h2>Submit application</h2>
             <div class="table-wrap">
-                <asp:GridView ID="RequirementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                <asp:GridView ID="RequirementsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                     EmptyDataText="No additional application documents are configured.">
                     <Columns>
                         <asp:BoundField DataField="DocumentType" HeaderText="Document" />
@@ -71,7 +71,7 @@
             <h2>Submit shortfall corrections</h2>
             <p class="help">Each item is subject to the deadline shown. There is no limit on correction attempts before that deadline.</p>
             <div class="table-wrap">
-                <asp:GridView ID="ContractorShortfallGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                <asp:GridView ID="ContractorShortfallGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                     DataKeyNames="ShortfallId,ShortfallItemId" OnRowCommand="ContractorShortfallGrid_RowCommand"
                     EmptyDataText="No shortfall items are currently awaiting your response.">
                     <Columns>
@@ -97,7 +97,7 @@
         <asp:Panel ID="FinalDocumentsPanel" runat="server" CssClass="card" Visible="false">
             <h2>Final tender documents</h2>
             <div class="table-wrap">
-                <asp:GridView ID="FinalDocumentsGrid" runat="server" AutoGenerateColumns="false"
+                <asp:GridView ID="FinalDocumentsGrid" runat="server" AutoGenerateColumns="false" CssClass="compact-grid"
                     GridLines="None" EmptyDataText="Final tender documents are not available yet.">
                     <Columns>
                         <asp:BoundField DataField="DocumentKind" HeaderText="Document" />
@@ -114,16 +114,34 @@
     <section class="card">
         <h2>Uploaded documents</h2>
         <div class="table-wrap">
-            <asp:GridView ID="DocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="DocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No documents have been uploaded.">
                 <Columns>
-                    <asp:BoundField DataField="DocumentType" HeaderText="Requirement" />
-                    <asp:HyperLinkField DataTextField="FileName" DataNavigateUrlFields="TechnicalBidDocumentId"
-                        DataNavigateUrlFormatString="DocumentDownload.aspx?technicalBidDocumentId={0}" HeaderText="File" />
+                    <asp:TemplateField HeaderText="Sr. No."><ItemTemplate>
+                        <%# Container.DataItemIndex + 1 %>
+                    </ItemTemplate></asp:TemplateField>
+                    <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
+                    <asp:BoundField DataField="FileName" HeaderText="Document name" />
                     <asp:BoundField DataField="UploadedAt" HeaderText="Uploaded" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                     <asp:BoundField DataField="UploadedBy" HeaderText="Uploaded by" />
                     <asp:BoundField DataField="VerificationStatus" HeaderText="Verification" NullDisplayText="Pending" />
                     <asp:BoundField DataField="VerificationRemarks" HeaderText="Reviewer remarks" NullDisplayText="—" />
+                    <asp:TemplateField HeaderText="Action"><ItemTemplate>
+                        <div class="document-icon-actions">
+                            <asp:HyperLink ID="ViewApplicationDocumentLink" runat="server" CssClass="icon-action"
+                                Target="_blank" rel="noopener" ToolTip="View document" aria-label="View document"
+                                Visible='<%# !Convert.ToBoolean(Eval("IsMissing")) %>'
+                                NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?technicalBidDocumentId=" + Eval("TechnicalBidDocumentId") + "&amp;preview=true") %>'>
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                            </asp:HyperLink>
+                            <asp:HyperLink ID="DownloadApplicationDocumentLink" runat="server" CssClass="icon-action"
+                                ToolTip="Download document" aria-label="Download document"
+                                Visible='<%# !Convert.ToBoolean(Eval("IsMissing")) %>'
+                                NavigateUrl='<%# ResolveUrl("~/Pages/DocumentDownload.aspx?technicalBidDocumentId=" + Eval("TechnicalBidDocumentId")) %>'>
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+                            </asp:HyperLink>
+                        </div>
+                    </ItemTemplate></asp:TemplateField>
                 </Columns>
             </asp:GridView>
         </div>
@@ -133,7 +151,7 @@
             <h2>Tender Cell document verification</h2>
             <p class="help">A reason is required for a shortfall or rejection. Only the assigned Tender Cell can record a decision.</p>
             <div class="table-wrap">
-                <asp:GridView ID="ReviewDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                <asp:GridView ID="ReviewDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                     DataKeyNames="TechnicalBidDocumentId,DocumentType,IsMissing" OnRowCommand="ReviewDocumentsGrid_RowCommand"
                     EmptyDataText="No application documents are available for review.">
                     <Columns>
@@ -178,7 +196,7 @@
             <h2>Create shortfall items</h2>
             <p class="help">Select each not-verified document and state the deficiency and exact corrective action.</p>
             <div class="table-wrap">
-                <asp:GridView ID="ShortfallRequestItemsGrid" runat="server" AutoGenerateColumns="false"
+                <asp:GridView ID="ShortfallRequestItemsGrid" runat="server" AutoGenerateColumns="false" CssClass="compact-grid"
                     GridLines="None" DataKeyNames="TechnicalBidDocumentId,DocumentType,IsMissing"
                     EmptyDataText="No not-verified documents are available for a shortfall.">
                     <Columns>
@@ -229,7 +247,7 @@
     <section class="card">
         <h2>Remarks and clarifications</h2>
         <div class="table-wrap">
-            <asp:GridView ID="RemarksGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="RemarksGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No remarks have been recorded.">
                 <Columns>
                     <asp:BoundField DataField="RemarkType" HeaderText="Type" />
@@ -243,7 +261,7 @@
     <section class="card">
         <h2>Application history</h2>
         <div class="table-wrap">
-            <asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No application history is available.">
                 <Columns>
                     <asp:BoundField DataField="EventType" HeaderText="Event" />

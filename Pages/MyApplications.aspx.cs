@@ -16,10 +16,56 @@ namespace DepartmentModule.Pages
             RejectedApplicationsCount, PendingActionsCount;
         protected GridView ApplicationsGrid, NotificationsGrid, PendingActionsGrid, UnderEvaluationGrid,
             RejectedApplicationsGrid, DocumentsGrid, AwardedTendersGrid, EmdRequirementsGrid, PaymentsGrid;
+        protected TextBox ApplicationSearchText;
+        protected DropDownList ApplicationStatusFilter;
+        protected Button FilterApplicationsButton;
 
         protected void Page_Init(object sender, EventArgs e)
         {
             if (!RequireRoles("Contractor")) return;
+            BindDashboard();
+        }
+
+        private DataTable FilterApplications(DataTable applications)
+        {
+            string search = (ApplicationSearchText.Text ?? String.Empty).Trim();
+            string statusFilter = ApplicationStatusFilter.SelectedValue;
+            DataTable filtered = applications.Clone();
+            foreach (DataRow application in applications.Rows)
+            {
+                if (!String.IsNullOrEmpty(statusFilter) &&
+                    !String.Equals(Convert.ToString(application["ApplicationStatus"]), statusFilter,
+                        StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (search.Length > 0)
+                {
+                    string[] searchableFields =
+                    {
+                        "ApplicationReference", "TenderNumber", "Title", "DepartmentName", "CurrentStage"
+                    };
+                    bool found = false;
+                    foreach (string field in searchableFields)
+                    {
+                        string value = application[field] == DBNull.Value
+                            ? String.Empty
+                            : Convert.ToString(application[field]);
+                        if (value.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) continue;
+                }
+                filtered.ImportRow(application);
+            }
+            return filtered;
+        }
+
+        protected void FilterApplicationsButton_Click(object sender, EventArgs e)
+        {
+            ApplicationsGrid.PageIndex = 0;
             BindDashboard();
         }
 
@@ -63,6 +109,7 @@ namespace DepartmentModule.Pages
         {
             const string query = @"
                 SELECT t.TenderId,t.WorkflowVersion,t.TenderNumber,t.Title,d.DepartmentName,
+                       COALESCE(currentStage.StageName,t.CurrentStatus) AS CurrentStage,
                        t.CurrentStatus AS TenderStage,t.EMDAmount,t.TenderDocumentFee,t.ProcessingFee,
                        tb.TechnicalBidId,tb.SubmittedDate,
                        COALESCE(latestStatus.NewStatus,tb.Status) AS ApplicationStatus,
@@ -85,6 +132,15 @@ namespace DepartmentModule.Pages
                 INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
                 LEFT JOIN dbo.FinancialBid fb
                     ON fb.TenderId=tb.TenderId AND fb.ContractorId=tb.ContractorId
+                OUTER APPLY
+                (
+                    SELECT TOP (1) REPLACE(REPLACE(s.StageName,N'Final_',N''),N'_',N' ') AS StageName
+                    FROM dbo.TenderWorkflowAssignments a
+                    INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                      AND s.WorkflowVersion=2 AND s.IsActive=1
+                    WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                    ORDER BY a.AssignmentId DESC
+                ) currentStage
                 OUTER APPLY
                 (
                     SELECT TOP (1) h.NewStatus
@@ -124,7 +180,15 @@ namespace DepartmentModule.Pages
                 ) shortfall
                 ORDER BY tb.SubmittedDate DESC,tb.TechnicalBidId DESC;";
 
-            return QueryTable(connection, query, CurrentUserId);
+            DataTable applications = QueryTable(connection, query, CurrentUserId);
+            applications.Columns.Add("ApplicationReference", typeof(string));
+            foreach (DataRow application in applications.Rows)
+            {
+                application["ApplicationReference"] = ContractorApplicationRules.GetReference(
+                    Convert.ToInt32(application["TechnicalBidId"], CultureInfo.InvariantCulture),
+                    Convert.ToDateTime(application["SubmittedDate"], CultureInfo.InvariantCulture));
+            }
+            return applications;
         }
 
         private DataTable GetAwardedTenders(SqlConnection connection)
@@ -167,9 +231,11 @@ namespace DepartmentModule.Pages
                 SELECT N'Application' AS DocumentKind,
                        CONVERT(bigint,d.TechnicalBidDocumentId) AS DocumentId,
                        t.TenderNumber,d.DocumentType,d.FileName,d.UploadedDate AS UploadedAt,
+                       uploader.FullName AS UploadedBy,
                        review.VerificationStatus,review.Remarks
                 FROM dbo.TechnicalBidDocuments d
                 INNER JOIN dbo.TechnicalBid b ON b.TechnicalBidId=d.TechnicalBidId
+                LEFT JOIN dbo.Users uploader ON uploader.UserId=d.UploadedBy
                 INNER JOIN dbo.Contractors c
                     ON c.ContractorId=b.ContractorId AND c.UserId=@UserId AND c.IsActive=1
                 INNER JOIN dbo.Tender t ON t.TenderId=b.TenderId AND t.IsDeleted=0
@@ -183,11 +249,12 @@ namespace DepartmentModule.Pages
                 ) review
                 UNION ALL
                 SELECT N'Shortfall response',s.ShortfallSubmissionId,t.TenderNumber,
-                       i.RequiredDocumentType,s.FileName,s.SubmittedAtUtc,
+                       i.RequiredDocumentType,s.FileName,s.SubmittedAtUtc,uploader.FullName,
                        i.ClearanceStatus,s.Remarks
                 FROM dbo.TenderShortfallSubmissions s
                 INNER JOIN dbo.TenderShortfallItems i ON i.ShortfallItemId=s.ShortfallItemId
                 INNER JOIN dbo.TenderShortfalls sf ON sf.ShortfallId=i.ShortfallId
+                LEFT JOIN dbo.Users uploader ON uploader.UserId=s.SubmittedBy
                 INNER JOIN dbo.Contractors c
                     ON c.ContractorId=sf.ContractorId AND c.UserId=@UserId AND c.IsActive=1
                 INNER JOIN dbo.Tender t ON t.TenderId=sf.TenderId AND t.IsDeleted=0
@@ -212,7 +279,7 @@ namespace DepartmentModule.Pages
 
         private void BindApplicationGrids(DataTable applications)
         {
-            BindGrid(ApplicationsGrid, applications);
+            BindGrid(ApplicationsGrid, FilterApplications(applications));
 
             DataView pendingActions = new DataView(applications,
                 "ApplicationStatus = 'Draft' OR ApplicationStatus = 'Shortfall' OR HasOpenShortfall = true",

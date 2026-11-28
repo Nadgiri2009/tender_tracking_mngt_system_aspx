@@ -74,7 +74,7 @@
             <h3 class="requirement-document-list-heading">Uploaded tender documents</h3>
             <div class="table-wrap requirement-document-table-wrap">
             <asp:GridView ID="RequirementDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                CssClass="requirement-document-grid" DataKeyNames="DocumentId"
+                CssClass="requirement-document-grid compact-grid" DataKeyNames="DocumentId"
                 OnRowCommand="RequirementDocumentsGrid_RowCommand"
                 EmptyDataText="No tender requirement documents uploaded yet.">
                 <Columns>
@@ -292,7 +292,7 @@
                 <h3>Tender document verification</h3>
                 <div class="table-wrap">
                     <asp:GridView ID="TechnicalDocumentVerificationGrid" runat="server" AutoGenerateColumns="false"
-                        GridLines="None" DataKeyNames="DocumentId,TenderId"
+                        GridLines="None" CssClass="compact-grid" DataKeyNames="DocumentId,TenderId"
                         OnRowCommand="TechnicalDocumentVerificationGrid_RowCommand"
                         EmptyDataText="No tender documents are available for verification.">
                         <Columns>

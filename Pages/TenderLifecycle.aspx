@@ -11,7 +11,7 @@
         <h2>Published tenders</h2>
         <p class="help">JE users can request an extension for a tender they own. The JE administrator configures publication schedules and reviews extension requests.</p>
         <div class="table-wrap">
-            <asp:GridView ID="PublishedTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="PublishedTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No published tenders are available for your role and department.">
                 <Columns>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderLifecycle.aspx?tenderId={0}" HeaderText="Tender" />
@@ -62,7 +62,7 @@
         <h2>Extension requests awaiting JE administrator review</h2>
         <div class="field"><label for="ReviewRemarks">Review remarks</label><asp:TextBox ID="ReviewRemarks" runat="server" TextMode="MultiLine" MaxLength="1000" Rows="2" /></div>
         <div class="table-wrap">
-            <asp:GridView ID="PendingRequestsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="PendingRequestsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 OnRowCommand="PendingRequestsGrid_RowCommand" EmptyDataText="No extension requests are awaiting review.">
                 <Columns>
                     <asp:BoundField DataField="TenderNumber" HeaderText="Tender" />
@@ -89,7 +89,7 @@
     <asp:Panel ID="ExtensionHistoryPanel" runat="server" CssClass="card">
         <h2>Extension history</h2>
         <div class="table-wrap">
-            <asp:GridView ID="ExtensionHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="ExtensionHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No extension requests have been submitted.">
                 <Columns>
                     <asp:BoundField DataField="TenderNumber" HeaderText="Tender" />

@@ -12,7 +12,7 @@
     <section class="card">
         <div class="page-heading"><div><h2>Tenders by department</h2><p class="muted">Counts reflect tender records visible to your account.</p></div></div>
         <div class="table-wrap">
-            <asp:GridView ID="DepartmentTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="DepartmentTendersGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No department tender records are available to your account.">
                 <Columns>
                     <asp:HyperLinkField DataTextField="DepartmentName" DataNavigateUrlFields="DepartmentId"
@@ -42,7 +42,7 @@
             <div class="table-wrap">
                 <asp:GridView ID="FinalWorkflowGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true"
                     PageSize="10" OnPageIndexChanging="FinalWorkflowGrid_PageIndexChanging"
-                    GridLines="None" EmptyDataText="No tenders are currently assigned to you.">
+                    GridLines="None" CssClass="compact-grid" EmptyDataText="No tenders are currently assigned to you.">
                     <Columns>
                         <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender" />
                         <asp:BoundField DataField="Title" HeaderText="Title" />
@@ -58,7 +58,7 @@
         <section id="FinalWorkflowHistory" class="card">
             <div class="page-heading"><div><h2>My recent workflow actions</h2><div class="muted">Actions are loaded from your recorded workflow history.</div></div></div>
             <div class="table-wrap">
-                <asp:GridView ID="FinalWorkflowHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+                <asp:GridView ID="FinalWorkflowHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                     EmptyDataText="No workflow actions have been recorded for your account.">
                     <Columns>
                         <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId"
@@ -95,7 +95,8 @@
     <asp:Panel ID="PendingApprovalsPanel" runat="server">
     <section class="card">
         <div class="page-heading"><div><h2>Pending my approval</h2><div class="muted">Tenders waiting for your role.</div></div><a href="Approvals.aspx">View queue</a></div>
-        <asp:GridView ID="PendingGrid" runat="server" AutoGenerateColumns="false" CssClass="table-wrap" GridLines="None" EmptyDataText="Nothing is waiting for your approval.">
+        <div class="table-wrap">
+        <asp:GridView ID="PendingGrid" runat="server" AutoGenerateColumns="false" CssClass="compact-grid" GridLines="None" EmptyDataText="Nothing is waiting for your approval.">
             <Columns>
                 <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
                 <asp:BoundField DataField="Title" HeaderText="Title" />
@@ -103,11 +104,12 @@
                 <asp:BoundField DataField="CurrentStatus" HeaderText="Current Stage" />
             </Columns>
         </asp:GridView>
+        </div>
     </section>
     </asp:Panel>
     <section class="card">
         <div class="page-heading"><div><h2><asp:Literal ID="RecentHeading" runat="server" /></h2></div><a href="Tenders.aspx">Browse tenders</a></div>
-        <asp:GridView ID="RecentGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No tenders found.">
+        <div class="table-wrap"><asp:GridView ID="RecentGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No tenders found.">
             <Columns>
                 <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
                 <asp:BoundField DataField="Title" HeaderText="Title" />
@@ -120,20 +122,20 @@
                 <asp:BoundField DataField="SubmissionDeadline" HeaderText="Submission ends" DataFormatString="{0:dd MMM yyyy}" NullDisplayText="-" />
                 <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
             </Columns>
-        </asp:GridView>
+        </asp:GridView></div>
     </section>
     <section class="card">
         <div class="page-heading"><div><h2>Tenders by category</h2><div class="muted">Historical tenders without a category remain uncategorized.</div></div></div>
-        <asp:GridView ID="CategoryStatsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No category statistics are available.">
+        <div class="table-wrap"><asp:GridView ID="CategoryStatsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No category statistics are available.">
             <Columns>
                 <asp:BoundField DataField="Category" HeaderText="Category" />
                 <asp:BoundField DataField="TenderCount" HeaderText="Tenders" />
             </Columns>
-        </asp:GridView>
+        </asp:GridView></div>
     </section>
     <section class="card">
         <div class="page-heading"><div><h2>Upcoming submission deadlines</h2></div><a href="Tenders.aspx">View tender list</a></div>
-        <asp:GridView ID="UpcomingGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="There are no upcoming submission deadlines.">
+        <div class="table-wrap"><asp:GridView ID="UpcomingGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="There are no upcoming submission deadlines.">
             <Columns>
                 <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />
                 <asp:BoundField DataField="Title" HeaderText="Title" />
@@ -144,7 +146,7 @@
                 <asp:BoundField DataField="SubmissionDeadline" HeaderText="Submission ends" DataFormatString="{0:dd MMM yyyy}" NullDisplayText="-" />
                 <asp:BoundField DataField="CurrentStatus" HeaderText="Status" />
             </Columns>
-        </asp:GridView>
+        </asp:GridView></div>
     </section>
     </asp:Panel>
 </asp:Content>

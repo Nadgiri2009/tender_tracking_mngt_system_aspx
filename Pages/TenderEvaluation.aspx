@@ -15,7 +15,7 @@
             <div class="field"><label for="OpeningRemarks">Opening remarks</label><asp:TextBox ID="OpeningRemarks" runat="server" MaxLength="1000" /></div>
         </div>
         <div class="table-wrap">
-            <asp:GridView ID="OpeningGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="OpeningGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 OnRowCommand="OpeningGrid_RowCommand" EmptyDataText="No published tenders are eligible for bid opening.">
                 <Columns>
                     <asp:BoundField DataField="TenderNumber" HeaderText="Tender" />
@@ -36,7 +36,7 @@
     <asp:Panel ID="OpenedPanel" runat="server" CssClass="card">
         <h2>Opened tenders and evaluation queue</h2>
         <div class="table-wrap">
-            <asp:GridView ID="EvaluationGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="EvaluationGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 OnRowCommand="EvaluationGrid_RowCommand" EmptyDataText="There are no opened tenders in your department.">
                 <Columns>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender" />

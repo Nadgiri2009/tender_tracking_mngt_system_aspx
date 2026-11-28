@@ -12,6 +12,9 @@ namespace DepartmentModule.Pages
         protected Literal Message;
         protected GridView ApplicationsGrid, NotificationsGrid;
         protected HyperLink WorkflowLink;
+        protected TextBox ApplicationSearchText;
+        protected DropDownList ApplicationStatusFilter;
+        protected Button FilterApplicationsButton;
 
         protected void Page_Init(object sender, EventArgs e)
         {
@@ -28,9 +31,11 @@ namespace DepartmentModule.Pages
                 using (SqlConnection connection = ModuleDb.OpenConnection())
                 using (SqlCommand command = new SqlCommand(
                     @"SELECT b.TechnicalBidId,b.TenderId,t.TenderNumber,t.Title AS TenderTitle,c.Name AS ContractorName,
+                             department.DepartmentName,
                              N'TAPP-' + CONVERT(nvarchar(4),YEAR(b.SubmittedDate)) + N'-' +
                                  RIGHT(N'000000' + CONVERT(nvarchar(20),b.TechnicalBidId),6) AS ApplicationReference,
                              COALESCE(latest.NewStatus,b.Status) AS ApplicationStatus,b.SubmittedDate,
+                             COALESCE(currentStage.StageName,t.CurrentStatus) AS CurrentStage,
                              (SELECT COUNT(1) FROM dbo.TechnicalBidDocuments d
                               WHERE d.TechnicalBidId=b.TechnicalBidId) AS DocumentCount,
                              (SELECT COUNT(1) FROM dbo.TenderRequiredBidDocuments r
@@ -43,6 +48,7 @@ namespace DepartmentModule.Pages
                       FROM dbo.TechnicalBid b
                       INNER JOIN dbo.Tender t ON t.TenderId=b.TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0
                       INNER JOIN dbo.Contractors c ON c.ContractorId=b.ContractorId
+                      INNER JOIN dbo.Departments department ON department.DepartmentId=t.DepartmentId
                       OUTER APPLY
                       (
                           SELECT TOP (1) h.NewStatus
@@ -50,7 +56,24 @@ namespace DepartmentModule.Pages
                           WHERE h.TechnicalBidId=b.TechnicalBidId AND h.NewStatus IS NOT NULL
                           ORDER BY h.HistoryId DESC
                       ) latest
+                      OUTER APPLY
+                      (
+                          SELECT TOP (1) REPLACE(REPLACE(s.StageName,N'Final_',N''),N'_',N' ') AS StageName
+                          FROM dbo.TenderWorkflowAssignments a
+                          INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                            AND s.WorkflowVersion=2 AND s.IsActive=1
+                          WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                          ORDER BY a.AssignmentId DESC
+                      ) currentStage
                       WHERE COALESCE(latest.NewStatus,b.Status)<>N'Draft'
+                        AND (@ApplicationStatus=N'' OR COALESCE(latest.NewStatus,b.Status)=@ApplicationStatus)
+                        AND (@SearchPattern IS NULL
+                             OR t.TenderNumber LIKE @SearchPattern OR t.Title LIKE @SearchPattern
+                             OR c.Name LIKE @SearchPattern OR department.DepartmentName LIKE @SearchPattern
+                             OR currentStage.StageName LIKE @SearchPattern
+                             OR CONVERT(nvarchar(20),b.TechnicalBidId) LIKE @SearchPattern
+                             OR (N'TAPP-' + CONVERT(nvarchar(4),YEAR(b.SubmittedDate)) + N'-' +
+                                 RIGHT(N'000000' + CONVERT(nvarchar(20),b.TechnicalBidId),6)) LIKE @SearchPattern)
                         AND EXISTS
                         (
                             SELECT 1 FROM dbo.TenderWorkflowAssignments a
@@ -67,6 +90,11 @@ namespace DepartmentModule.Pages
                     ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit, HasAnyRole("Junior Engineer (JE)"));
                     ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                         CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                    string search = (ApplicationSearchText.Text ?? String.Empty).Trim();
+                    ModuleDb.AddParameter(command, "@SearchPattern", SqlDbType.NVarChar,
+                        search.Length == 0 ? null : "%" + search + "%", 240);
+                    ModuleDb.AddParameter(command, "@ApplicationStatus", SqlDbType.NVarChar,
+                        ApplicationStatusFilter.SelectedValue, 30);
                     DataTable data = new DataTable();
                     using (SqlDataAdapter adapter = new SqlDataAdapter(command)) adapter.Fill(data);
                     ApplicationsGrid.DataSource = data;
@@ -86,6 +114,24 @@ namespace DepartmentModule.Pages
         {
             ApplicationsGrid.PageIndex = e.NewPageIndex;
             BindApplications();
+        }
+
+        protected void FilterApplicationsButton_Click(object sender, EventArgs e)
+        {
+            ApplicationsGrid.PageIndex = 0;
+            BindApplications();
+        }
+
+        protected void ApplicationsGrid_RowDataBound(object sender, GridViewRowEventArgs e)
+        {
+            if (e.Row.RowType != DataControlRowType.DataRow) return;
+            DataRowView row = e.Row.DataItem as DataRowView;
+            if (row == null) return;
+            e.Row.Cells[2].ToolTip = Convert.ToString(row["TenderNumber"]);
+            e.Row.Cells[3].ToolTip = Convert.ToString(row["TenderTitle"]);
+            e.Row.Cells[4].ToolTip = Convert.ToString(row["ContractorName"]);
+            e.Row.Cells[5].ToolTip = Convert.ToString(row["DepartmentName"]);
+            e.Row.Cells[6].ToolTip = Convert.ToString(row["CurrentStage"]);
         }
 
         protected int ApplicationSerialNumber(int rowIndex)

@@ -9,7 +9,7 @@
     <asp:Panel ID="QueuePanel" runat="server" CssClass="card">
         <h2>Department tenders</h2>
         <div class="table-wrap">
-            <asp:GridView ID="TenderQueue" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="TenderQueue" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="There are no tenders in your department.">
                 <Columns>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId"
@@ -50,7 +50,7 @@
         <asp:Button ID="SaveDatesButton" runat="server" Text="Save important dates" OnClick="SaveDatesButton_Click" />
         <h3>Date modification history</h3>
         <div class="table-wrap">
-            <asp:GridView ID="DateHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="DateHistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No date changes have been recorded.">
                 <Columns>
                     <asp:BoundField DataField="FieldName" HeaderText="Field" />

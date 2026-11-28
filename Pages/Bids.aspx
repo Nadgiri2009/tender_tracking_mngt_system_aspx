@@ -7,7 +7,7 @@
         <h2>Technical bids</h2>
         <div class="table-wrap">
             <h3>Required bidder documents</h3>
-            <asp:GridView ID="RequiredBidDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="RequiredBidDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No version-2 document checklist is configured for this tender.">
                 <Columns>
                     <asp:BoundField DataField="DocumentType" HeaderText="Required document type" />
@@ -70,7 +70,7 @@
                 <asp:Button ID="SubmitApplicationButton" runat="server" Text="Submit application" OnClick="SubmitApplicationButton_Click" />
             </div>
         </asp:Panel>
-        <div class="table-wrap"><asp:GridView ID="TechnicalGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No technical bids submitted yet.">
+        <div class="table-wrap"><asp:GridView ID="TechnicalGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No technical bids submitted yet.">
             <Columns>
                 <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
                 <asp:TemplateField HeaderText="Bid document"><ItemTemplate>
@@ -84,7 +84,7 @@
             </Columns>
         </asp:GridView></div>
         <div class="table-wrap">
-            <asp:GridView ID="TechnicalDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
+            <asp:GridView ID="TechnicalDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid"
                 EmptyDataText="No uploaded technical bid documents.">
                 <Columns>
                     <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
@@ -120,7 +120,7 @@
             </div>
             <asp:Button ID="SubmitFinancialButton" runat="server" Text="Submit financial bid" OnClick="SubmitFinancialButton_Click" />
         </asp:Panel>
-        <div class="table-wrap"><asp:GridView ID="FinancialGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No financial bids submitted yet.">
+        <div class="table-wrap"><asp:GridView ID="FinancialGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No financial bids submitted yet.">
             <Columns>
                 <asp:BoundField DataField="Rank" HeaderText="Rank" DataFormatString="L{0}" />
                 <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />

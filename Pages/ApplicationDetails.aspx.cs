@@ -292,7 +292,9 @@ namespace DepartmentModule.Pages
         private void BindDocuments()
         {
             DataTable documents = GetDocuments();
-            DocumentsGrid.DataSource = documents;
+            DataView uploadedDocuments = new DataView(documents);
+            uploadedDocuments.RowFilter = "IsMissing = false";
+            DocumentsGrid.DataSource = uploadedDocuments;
             DocumentsGrid.DataBind();
         }
 

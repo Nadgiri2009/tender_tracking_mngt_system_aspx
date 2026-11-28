@@ -6,7 +6,7 @@
     <asp:Panel ID="QueuePanel" runat="server" CssClass="card">
         <h2>My assigned queue</h2>
         <div class="table-wrap">
-            <asp:GridView ID="WorkflowQueue" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No tenders are currently assigned to you.">
+            <asp:GridView ID="WorkflowQueue" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No tenders are currently assigned to you.">
                 <Columns>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender" />
                     <asp:BoundField DataField="Title" HeaderText="Title" />
@@ -66,7 +66,7 @@
             <p class="help">Review the actual files attached to this tender and record a JE decision for each one. The forwarding action remains blocked until every document is valid and verified.</p>
             <div class="table-wrap">
                 <asp:GridView ID="JeRequirementDocumentsGrid" runat="server" AutoGenerateColumns="false"
-                    GridLines="None" DataKeyNames="DocumentId" OnRowCommand="RequirementDocumentGrid_RowCommand"
+                    GridLines="None" CssClass="compact-grid" DataKeyNames="DocumentId" OnRowCommand="RequirementDocumentGrid_RowCommand"
                     EmptyDataText="No tender documents are attached. Upload the required documents before forwarding.">
                     <Columns>
                         <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
@@ -112,7 +112,7 @@
             <p class="help">Review the actual files attached to this tender and record a separate Tender Cell decision for each one.</p>
             <div class="table-wrap">
                 <asp:GridView ID="CellRequirementDocumentsGrid" runat="server" AutoGenerateColumns="false"
-                    GridLines="None" DataKeyNames="DocumentId" OnRowCommand="RequirementDocumentGrid_RowCommand"
+                    GridLines="None" CssClass="compact-grid" DataKeyNames="DocumentId" OnRowCommand="RequirementDocumentGrid_RowCommand"
                     EmptyDataText="No tender documents are attached. A tender without required documents cannot be forwarded.">
                     <Columns>
                         <asp:BoundField DataField="DocumentType" HeaderText="Document type" />
@@ -196,7 +196,7 @@
             <h3>Bidder registration and primary review</h3>
             <div class="table-wrap">
                 <asp:GridView ID="PrimaryBidderGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    DataKeyNames="TechnicalBidId,ContractorId" OnRowCommand="PrimaryBidderGrid_RowCommand"
+                    CssClass="compact-grid" DataKeyNames="TechnicalBidId,ContractorId" OnRowCommand="PrimaryBidderGrid_RowCommand"
                     EmptyDataText="No technical bids were received.">
                     <Columns>
                         <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
@@ -220,7 +220,7 @@
             <h3>Submitted technical documents</h3>
             <div class="table-wrap">
                 <asp:GridView ID="PrimaryDocumentGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    DataKeyNames="TechnicalBidDocumentId,ContractorId,DocumentType,IsMissing" OnRowCommand="PrimaryDocumentGrid_RowCommand"
+                    CssClass="compact-grid" DataKeyNames="TechnicalBidDocumentId,ContractorId,DocumentType,IsMissing" OnRowCommand="PrimaryDocumentGrid_RowCommand"
                     EmptyDataText="No technical bid documents were uploaded. Record bidder reviews for missing-document cases.">
                     <Columns>
                         <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
@@ -268,7 +268,7 @@
             <p class="help">Open each submitted application, record a decision for every uploaded document and missing mandatory document, then record the bidder decision. The tender can advance only when every bidder is reviewed.</p>
             <div class="table-wrap">
                 <asp:GridView ID="SecondaryApplicationsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    EmptyDataText="No submitted applications are available for secondary review.">
+                    CssClass="compact-grid" EmptyDataText="No submitted applications are available for secondary review.">
                     <Columns>
                         <asp:HyperLinkField DataTextField="ContractorName" DataNavigateUrlFields="TechnicalBidId"
                             DataNavigateUrlFormatString="ApplicationDetails.aspx?id={0}" HeaderText="Application" />
@@ -301,7 +301,7 @@
             <p class="help">Open a bidder marked Shortfall, select each deficient item, and describe the deficiency and corrective action. A request is not sent until the Junior Engineer approves it.</p>
             <div class="table-wrap">
                 <asp:GridView ID="ShortfallApplicationsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    EmptyDataText="No bidder has a secondary review marked Shortfall.">
+                    CssClass="compact-grid" EmptyDataText="No bidder has a secondary review marked Shortfall.">
                     <Columns>
                         <asp:HyperLinkField DataTextField="ContractorName" DataNavigateUrlFields="TechnicalBidId"
                             DataNavigateUrlFormatString="ApplicationDetails.aspx?id={0}" HeaderText="Application" />
@@ -316,7 +316,7 @@
             <p class="help">Approval starts the fixed three-calendar-day response period. Returning the request sends it back to Tender Cell for correction.</p>
             <div class="table-wrap">
                 <asp:GridView ID="ShortfallItemsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    EmptyDataText="This shortfall does not contain any items.">
+                    CssClass="compact-grid" EmptyDataText="This shortfall does not contain any items.">
                     <Columns>
                         <asp:BoundField DataField="RequiredDocumentType" HeaderText="Requirement" />
                         <asp:BoundField DataField="ShortfallDescription" HeaderText="Deficiency" />
@@ -339,7 +339,7 @@
             <p class="help">Review the latest corrected file for each item. A continued deficiency may be returned while the original deadline remains open; expired requests disqualify that application.</p>
             <div class="table-wrap">
                 <asp:GridView ID="ShortfallClearanceGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    DataKeyNames="ShortfallItemId" OnRowCommand="ShortfallClearanceGrid_RowCommand"
+                    CssClass="compact-grid" DataKeyNames="ShortfallItemId" OnRowCommand="ShortfallClearanceGrid_RowCommand"
                     EmptyDataText="No submitted items are waiting for clearance.">
                     <Columns>
                         <asp:BoundField DataField="RequiredDocumentType" HeaderText="Requirement" />
@@ -379,7 +379,7 @@
             <p class="help">Enter the amount for every technically approved bidder. This entry is available only after Chairman approval.</p>
             <div class="table-wrap">
                 <asp:GridView ID="FinancialEntryGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    DataKeyNames="ContractorId" EmptyDataText="No approved bidders are available for financial opening.">
+                    CssClass="compact-grid" DataKeyNames="ContractorId" EmptyDataText="No approved bidders are available for financial opening.">
                     <Columns>
                         <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
                         <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
@@ -402,7 +402,7 @@
             <h2>Director Auditor financial review</h2>
             <div class="table-wrap">
                 <asp:GridView ID="FinancialReviewGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    EmptyDataText="No opened financial bids are available for review.">
+                    CssClass="compact-grid" EmptyDataText="No opened financial bids are available for review.">
                     <Columns>
                         <asp:BoundField DataField="ContractorName" HeaderText="Contractor" />
                         <asp:BoundField DataField="RegistrationNo" HeaderText="Registration" />
@@ -479,7 +479,7 @@
             <h2>Versioned generated documents</h2>
             <div class="table-wrap">
                 <asp:GridView ID="GeneratedDocumentsGrid" runat="server" AutoGenerateColumns="false" GridLines="None"
-                    EmptyDataText="No generated work order, agreement, or BOQ documents have been recorded.">
+                    CssClass="compact-grid" EmptyDataText="No generated work order, agreement, or BOQ documents have been recorded.">
                     <Columns>
                         <asp:BoundField DataField="DocumentKind" HeaderText="Document" />
                         <asp:BoundField DataField="VersionNumber" HeaderText="Version" />
@@ -493,7 +493,7 @@
         <section class="card">
             <h2>Immutable workflow history</h2>
             <div class="table-wrap">
-                <asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" EmptyDataText="No workflow history has been recorded.">
+                <asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No workflow history has been recorded.">
                     <Columns>
                         <asp:BoundField DataField="ActionAtUtc" HeaderText="Date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                         <asp:BoundField DataField="StageName" HeaderText="Stage" />

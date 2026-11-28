@@ -5,7 +5,7 @@
     <asp:Literal ID="Message" runat="server" />
     <section class="card">
         <div class="table-wrap">
-            <asp:GridView ID="ApprovalGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" EmptyDataText="Nothing is waiting on your approval right now." OnPageIndexChanging="ApprovalGrid_PageIndexChanging">
+            <asp:GridView ID="ApprovalGrid" runat="server" AutoGenerateColumns="false" AllowPaging="true" PageSize="10" GridLines="None" CssClass="compact-grid" EmptyDataText="Nothing is waiting on your approval right now." OnPageIndexChanging="ApprovalGrid_PageIndexChanging">
                 <Columns>
                     <asp:TemplateField HeaderText="Sr. No."><ItemTemplate><%# ApprovalSerialNumber(Container.DataItemIndex) %></ItemTemplate></asp:TemplateField>
                     <asp:HyperLinkField DataTextField="TenderNumber" DataNavigateUrlFields="TenderId" DataNavigateUrlFormatString="TenderDetails.aspx?id={0}" HeaderText="Tender No." />

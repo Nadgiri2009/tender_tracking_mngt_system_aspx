@@ -327,6 +327,19 @@ main.container > .dashboard-statistics { margin-bottom: 1.5rem; }
 .grid-list-pager button:hover:not(:disabled) { border-color: var(--purple); background: #f6edf7; }
 .grid-list-pager button:disabled { opacity: .45; cursor: not-allowed; }
 .grid-list-pager svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.grid-list-search { display: flex; justify-content: flex-end; margin: 0 0 .45rem; }
+.grid-list-search label { display: flex; width: min(100%, 22rem); flex-direction: column; gap: .25rem; color: var(--muted); font-size: .75rem; font-weight: 700; }
+.grid-list-search input { min-width: 0; padding: .45rem .6rem; border-radius: 8px; font-size: .82rem; }
+.grid-list-empty { margin: .45rem 0 0; color: var(--muted); font-size: .82rem; }
+table.compact-grid { min-width: 820px; table-layout: fixed; }
+table.compact-grid th, table.compact-grid td { padding: .42rem .5rem; font-size: .81rem; line-height: 1.35; vertical-align: middle; }
+table.compact-grid th { font-size: .76rem; }
+table.compact-grid td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.compact-grid td input, table.compact-grid td select, table.compact-grid td textarea { max-width: 100%; font-size: .8rem; }
+table.compact-grid td textarea { min-height: 2.7rem; height: 2.7rem; resize: vertical; }
+.application-list-filters { margin-bottom: .75rem; }
+.application-list-filters .field { min-width: min(230px, 100%); margin-bottom: .4rem; }
+.application-list-filters input, .application-list-filters select { padding: .5rem .65rem; border-radius: 9px; }
 .grid-serial-cell { width: 4.5rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row-action-input-icon { display: inline-block; width: 2.25rem; height: 2.25rem; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: 9px; background-color: #fff; background-position: center; background-repeat: no-repeat; background-size: 1.1rem; color: transparent; cursor: pointer; vertical-align: middle; }
 .row-action-input-icon.danger { border-color: #efc3c0; }
@@ -455,7 +468,7 @@ textarea { min-height: 90px; resize: vertical; }
 }
 
 table { width: 100%; min-width: 720px; border-collapse: collapse; }
-th, td { padding: .7rem .75rem; border-bottom: 1px solid #eee7f1; text-align: left; vertical-align: top; }
+th, td { padding: .52rem .6rem; border-bottom: 1px solid #eee7f1; text-align: left; vertical-align: top; }
 th { background: #f4eaf5; color: var(--purple-dark); font-size: .85rem; }
 th a { color: var(--purple-dark); }
 tr:last-child td { border-bottom: 0; }
