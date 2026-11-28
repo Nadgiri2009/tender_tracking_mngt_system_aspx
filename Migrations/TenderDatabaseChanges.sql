@@ -59,8 +59,6 @@ IF COL_LENGTH(N'dbo.Tender', N'TenderDocumentFee') IS NULL
     ALTER TABLE dbo.Tender ADD TenderDocumentFee DECIMAL(18,2) NULL;
 IF COL_LENGTH(N'dbo.Tender', N'ProcessingFee') IS NULL
     ALTER TABLE dbo.Tender ADD ProcessingFee DECIMAL(18,2) NULL;
-IF COL_LENGTH(N'dbo.Tender', N'SecurityDepositAmount') IS NULL
-    ALTER TABLE dbo.Tender ADD SecurityDepositAmount DECIMAL(18,2) NULL;
 IF COL_LENGTH(N'dbo.Tender', N'PublicationScheduledUtc') IS NULL
     ALTER TABLE dbo.Tender ADD PublicationScheduledUtc DATETIME2(0) NULL;
 IF COL_LENGTH(N'dbo.Tender', N'FinancialBidOpeningScheduledUtc') IS NULL
@@ -113,8 +111,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT
     (
         (EMDAmount IS NULL OR EMDAmount >= 0) AND
         (TenderDocumentFee IS NULL OR TenderDocumentFee >= 0) AND
-        (ProcessingFee IS NULL OR ProcessingFee >= 0) AND
-        (SecurityDepositAmount IS NULL OR SecurityDepositAmount >= 0)
+        (ProcessingFee IS NULL OR ProcessingFee >= 0)
     );';
 
 IF OBJECT_ID(N'dbo.TenderRequirements', N'U') IS NULL
@@ -160,7 +157,6 @@ BEGIN
         EMDAmount DECIMAL(18,2) NULL,
         TenderDocumentFee DECIMAL(18,2) NULL,
         ProcessingFee DECIMAL(18,2) NULL,
-        SecurityDepositAmount DECIMAL(18,2) NULL,
         PublicationScheduledUtc DATETIME2(0) NULL,
         SubmissionStartDate DATETIME2 NULL,
         SubmissionDeadline DATETIME2 NULL,
@@ -186,14 +182,14 @@ INSERT INTO dbo.TenderRevisions
     (TenderId,RevisionNumber,ActionName,RevisionReason,TenderNumber,Title,Description,
      EligibilityCriteria,DepartmentId,EstimatedAmount,TenderType,TenderCategory,
      TenderSubcategoryId,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,
-     SecurityDepositAmount,PublicationScheduledUtc,SubmissionStartDate,SubmissionDeadline,
+     PublicationScheduledUtc,SubmissionStartDate,SubmissionDeadline,
      TechnicalBidOpeningScheduledUtc,FinancialBidOpeningScheduledUtc,CurrentStatus,
      ScopeOfWork,TechnicalRequirements,FinancialRequirements,AdditionalConditions,
      TermsAndConditions,RevisedBy)
 SELECT t.TenderId,1,N''Schema baseline'',N''Initial snapshot recorded during tender form schema upgrade.'',
        t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,t.DepartmentId,t.EstimatedAmount,
        t.TenderType,t.TenderCategory,t.TenderSubcategoryId,t.FinancialYear,t.EMDAmount,
-       t.TenderDocumentFee,t.ProcessingFee,t.SecurityDepositAmount,t.PublicationScheduledUtc,
+       t.TenderDocumentFee,t.ProcessingFee,t.PublicationScheduledUtc,
        t.SubmissionStartDate,t.SubmissionDeadline,t.TechnicalBidOpeningScheduledUtc,
        t.FinancialBidOpeningScheduledUtc,t.CurrentStatus,req.ScopeOfWork,req.TechnicalRequirements,
        req.FinancialRequirements,req.AdditionalConditions,req.TermsAndConditions,t.CreatedBy
@@ -582,6 +578,115 @@ BEGIN TRY
         ALTER TABLE dbo.TenderGisLocations WITH CHECK
             ADD CONSTRAINT CK_TenderGisLocations_BoundaryJson
             CHECK(BoundaryCoordinatesJson IS NULL OR ISJSON(BoundaryCoordinatesJson)=1);
+
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+END CATCH;
+GO
+
+/* Retire the obsolete fee without disturbing the remaining tender amounts. */
+SET XACT_ABORT ON;
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    IF EXISTS
+    (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.Tender')
+          AND name=N'CK_Tender_Fees_NonNegative'
+    )
+        ALTER TABLE dbo.Tender DROP CONSTRAINT CK_Tender_Fees_NonNegative;
+
+    DECLARE @TenderObjectId INT=OBJECT_ID(N'dbo.Tender');
+    DECLARE @TenderColumnId INT;
+    SELECT @TenderColumnId=column_id
+    FROM sys.columns
+    WHERE object_id=@TenderObjectId AND name=N'SecurityDepositAmount';
+
+    IF @TenderColumnId IS NOT NULL
+    BEGIN
+        IF EXISTS
+        (
+            SELECT 1 FROM sys.sql_expression_dependencies
+            WHERE referenced_id=@TenderObjectId AND referenced_minor_id=@TenderColumnId
+        )
+        OR EXISTS
+        (
+            SELECT 1 FROM sys.index_columns
+            WHERE object_id=@TenderObjectId AND column_id=@TenderColumnId
+        )
+        OR EXISTS
+        (
+            SELECT 1 FROM sys.foreign_key_columns
+            WHERE (parent_object_id=@TenderObjectId AND parent_column_id=@TenderColumnId)
+               OR (referenced_object_id=@TenderObjectId AND referenced_column_id=@TenderColumnId)
+        )
+        OR EXISTS
+        (
+            SELECT 1 FROM sys.default_constraints
+            WHERE parent_object_id=@TenderObjectId AND parent_column_id=@TenderColumnId
+        )
+            THROW 51090, 'Tender.SecurityDepositAmount has dependent database objects; resolve them before migration.', 1;
+
+        ALTER TABLE dbo.Tender DROP COLUMN SecurityDepositAmount;
+    END;
+
+    DECLARE @RevisionObjectId INT=OBJECT_ID(N'dbo.TenderRevisions');
+    DECLARE @RevisionColumnId INT;
+    SELECT @RevisionColumnId=column_id
+    FROM sys.columns
+    WHERE object_id=@RevisionObjectId AND name=N'SecurityDepositAmount';
+
+    IF @RevisionColumnId IS NOT NULL
+    BEGIN
+        IF EXISTS
+        (
+            SELECT 1 FROM sys.sql_expression_dependencies
+            WHERE referenced_id=@RevisionObjectId AND referenced_minor_id=@RevisionColumnId
+        )
+        OR EXISTS
+        (
+            SELECT 1 FROM sys.index_columns
+            WHERE object_id=@RevisionObjectId AND column_id=@RevisionColumnId
+        )
+        OR EXISTS
+        (
+            SELECT 1 FROM sys.foreign_key_columns
+            WHERE (parent_object_id=@RevisionObjectId AND parent_column_id=@RevisionColumnId)
+               OR (referenced_object_id=@RevisionObjectId AND referenced_column_id=@RevisionColumnId)
+        )
+        OR EXISTS
+        (
+            SELECT 1 FROM sys.default_constraints
+            WHERE parent_object_id=@RevisionObjectId AND parent_column_id=@RevisionColumnId
+        )
+            THROW 51091, 'TenderRevisions.SecurityDepositAmount has dependent database objects; resolve them before migration.', 1;
+
+        ALTER TABLE dbo.TenderRevisions DROP COLUMN SecurityDepositAmount;
+    END;
+
+    IF NOT EXISTS
+    (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.Tender')
+          AND name=N'CK_Tender_Fees_NonNegative'
+    )
+        ALTER TABLE dbo.Tender WITH CHECK ADD CONSTRAINT CK_Tender_Fees_NonNegative CHECK
+        (
+            (EMDAmount IS NULL OR EMDAmount >= 0) AND
+            (TenderDocumentFee IS NULL OR TenderDocumentFee >= 0) AND
+            (ProcessingFee IS NULL OR ProcessingFee >= 0)
+        );
+
+    IF COL_LENGTH(N'dbo.TenderWorkflowHistory',N'PreviousStageName') IS NULL
+        ALTER TABLE dbo.TenderWorkflowHistory ADD PreviousStageName NVARCHAR(100) NULL;
+    IF COL_LENGTH(N'dbo.TenderWorkflowHistory',N'NewStageName') IS NULL
+        ALTER TABLE dbo.TenderWorkflowHistory ADD NewStageName NVARCHAR(100) NULL;
+    IF COL_LENGTH(N'dbo.AuditLog',N'RoleAtAction') IS NULL
+        ALTER TABLE dbo.AuditLog ADD RoleAtAction NVARCHAR(100) NULL;
 
     COMMIT TRANSACTION;
 END TRY

@@ -39,8 +39,13 @@ namespace DepartmentModule.Helpers
             string action, string entityName, int? entityId, string details, string ipAddress)
         {
             using (SqlCommand command = new SqlCommand(
-                @"INSERT INTO dbo.AuditLog (UserId, Action, EntityName, EntityId, Details, IPAddress)
-                  VALUES (@UserId, @Action, @EntityName, @EntityId, @Details, @IPAddress);",
+                @"INSERT INTO dbo.AuditLog
+                    (UserId,Action,EntityName,EntityId,Details,IPAddress,RoleAtAction)
+                  VALUES
+                    (@UserId,@Action,@EntityName,@EntityId,@Details,@IPAddress,
+                     (SELECT TOP (1) COALESCE(r.RoleCode,r.RoleName)
+                      FROM dbo.Users u LEFT JOIN dbo.Roles r ON r.RoleId=u.RoleId
+                      WHERE u.UserId=@UserId));",
                 connection, transaction))
             {
                 AddParameter(command, "@UserId", SqlDbType.Int, userId.HasValue ? (object)userId.Value : null);

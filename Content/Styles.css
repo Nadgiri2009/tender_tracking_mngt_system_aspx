@@ -102,13 +102,16 @@ nav a:hover { color: #fff; text-decoration: underline; text-underline-offset: 4p
 }
 .side-nav-link:hover { background: #ffffff1c; color: #fff; text-decoration: none; }
 .side-nav-link.is-current { background: #ffffff26; color: #fff; box-shadow: inset 3px 0 #ffd9ee; }
-.side-nav-group { min-width: 0; }
-.side-nav-group summary { padding: .7rem .75rem; border-radius: 10px; color: #ffffffc9; cursor: pointer; font-size: .78rem; font-weight: 700; letter-spacing: .035em; list-style: none; text-transform: uppercase; }
-.side-nav-group summary::-webkit-details-marker { display: none; }
-.side-nav-group summary::after { float: right; content: "+"; font-size: 1rem; line-height: 1; }
-.side-nav-group[open] summary::after { content: "−"; }
-.side-nav-group summary:hover { background: #ffffff14; color: #fff; }
-.side-nav-group > .side-nav-link { margin-left: .4rem; padding-left: .65rem; font-size: .86rem; }
+.side-nav-section { display: grid; min-width: 0; gap: .25rem; padding: .35rem 0 .65rem; border-bottom: 1px solid #ffffff24; }
+.side-nav-heading { margin: 0; padding: .55rem .75rem .3rem; color: #ffffffa8; font-size: .7rem; font-weight: 800; letter-spacing: .08em; line-height: 1.35; }
+.side-nav-section > .side-nav-link { padding: .55rem .65rem; font-size: .84rem; }
+.side-nav-more { display: grid; gap: .25rem; padding: .35rem 0 .5rem; border-bottom: 1px solid #ffffff24; }
+.side-nav-more > summary { padding: .6rem .75rem; border-radius: 9px; color: #ffffffdf; font-size: .86rem; font-weight: 700; cursor: pointer; list-style: none; }
+.side-nav-more > summary::-webkit-details-marker { display: none; }
+.side-nav-more > summary::after { float: right; content: "+"; color: #ffffffa8; }
+.side-nav-more[open] > summary::after { content: "-"; }
+.side-nav-more > summary:hover, .side-nav-more[open] > summary { background: #ffffff1c; color: #fff; }
+.side-nav-more > .side-nav-section { margin-left: .35rem; }
 .side-nav-icon { display: inline-flex; width: 1.3rem; height: 1.3rem; flex: 0 0 1.3rem; align-items: center; justify-content: center; margin-right: .55rem; vertical-align: middle; }
 .side-nav-icon svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .sidebar-account { display: grid; gap: .35rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid #ffffff36; }
@@ -1390,4 +1393,89 @@ tr:hover td { background: #fdfafd; }
 }
 @media (max-width: 380px) {
     .tender-detail-grid { grid-template-columns: 1fr; }
+}
+
+.tender-workspace-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+.tender-workspace-layout.has-tender-nav { grid-template-columns: minmax(195px, 225px) minmax(0, 1fr); }
+.tender-workspace-content { min-width: 0; }
+.tender-workspace-nav {
+    position: sticky;
+    top: 1rem;
+    display: grid;
+    gap: .35rem;
+    padding: .8rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 24px #3e11540d;
+}
+.tender-workspace-nav h2 { margin: 0 0 .25rem; color: var(--plum); font-size: .95rem; }
+.pending-task-callout { display: grid; gap: .2rem; padding: .7rem; border: 1px solid #e8d8a8; border-radius: 9px; background: #fffaf0; }
+.pending-task-callout > span { color: #80621d; font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.pending-task-callout a { color: var(--plum); font-size: .85rem; font-weight: 800; }
+.tender-workspace-link {
+    display: grid;
+    gap: .2rem;
+    padding: .65rem .7rem;
+    border: 1px solid #eee9f0;
+    border-radius: 9px;
+    color: var(--plum);
+    font-size: .87rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+.tender-workspace-link:hover { border-color: var(--accent); background: #faf7fb; text-decoration: none; }
+.tender-workspace-link strong { color: var(--muted); font-size: .72rem; font-weight: 600; }
+.tender-workspace-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: .5rem;
+    margin-bottom: 1rem;
+    padding: .75rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+}
+.tender-workspace-summary > div { min-width: 0; padding: .3rem .45rem; }
+.tender-workspace-summary span { display: block; margin-bottom: .2rem; color: var(--muted); font-size: .68rem; font-weight: 700; text-transform: uppercase; }
+.tender-workspace-summary strong { display: block; color: var(--plum); font-size: .82rem; line-height: 1.4; overflow-wrap: anywhere; }
+.tender-takeback { display: grid; gap: .7rem; border-left: 4px solid #b42318; }
+.tender-takeback h2 { margin: 0 0 .25rem; font-size: 1.05rem; }
+.tender-takeback p { margin: 0; }
+.tender-takeback .field { margin: 0; }
+.tender-assignment-summary { padding: .6rem .7rem; border-radius: 8px; background: #f8f6f9; color: var(--plum); font-size: .8rem; line-height: 1.6; overflow-wrap: anywhere; }
+.tender-requirement-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
+.tender-requirement-card {
+    min-width: 0;
+    padding: .75rem;
+    border: 1px solid #eee9f0;
+    border-radius: 10px;
+    background: #fff;
+}
+.tender-requirement-card h3 { display: inline-block; margin: 0 0 .45rem .45rem; color: var(--plum); font-size: .86rem; vertical-align: middle; }
+.requirement-card-icon { display: inline-flex; width: 1.65rem; height: 1.65rem; align-items: center; justify-content: center; border-radius: 7px; background: #f3eaf4; color: var(--purple-dark); font-size: .65rem; font-weight: 800; }
+.requirement-preview { min-height: 2.5rem; margin: 0 0 .4rem; color: var(--muted); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
+.tender-requirement-card details { margin-top: .35rem; }
+.tender-requirement-card details summary { color: var(--purple-dark); cursor: pointer; font-size: .76rem; font-weight: 700; }
+.requirement-full-text { padding-top: .45rem; color: var(--plum); font-size: .8rem; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
+.tender-requirement-card .tender-requirement-attachment { margin: .55rem 0 0; font-size: .76rem; }
+.tender-section-status { display: inline-block; margin-left: .35rem; color: var(--muted); font-size: .72rem; font-weight: 600; }
+.gis-location-map { height: 300px; min-height: 300px; margin: .65rem 0; border: 1px solid var(--border); border-radius: 10px; }
+.gis-location-map[hidden] { display: none; }
+
+@media (max-width: 1100px) {
+    .tender-workspace-layout.has-tender-nav { grid-template-columns: 185px minmax(0, 1fr); }
+    .tender-workspace-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+    .tender-workspace-layout.has-tender-nav { grid-template-columns: 1fr; }
+    .tender-workspace-nav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .tender-workspace-nav h2 { grid-column: 1 / -1; }
+    .tender-requirement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .tender-workspace-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tender-workspace-nav { grid-template-columns: 1fr; }
+    .tender-requirement-grid { grid-template-columns: 1fr; }
+    .tender-takeback .button { width: 100%; }
 }

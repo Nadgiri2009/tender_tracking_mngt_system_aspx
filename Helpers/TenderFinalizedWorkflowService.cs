@@ -111,6 +111,7 @@ namespace DepartmentModule.Helpers
                 if (metadata.HoldStage && !String.Equals(targetStatus, assignment.CurrentStatus, StringComparison.Ordinal))
                     throw new InvalidOperationException("A workflow action cannot hold the stage while changing status.");
 
+                string nextStageName = assignment.StageName;
                 if (!metadata.HoldStage)
                 {
                     using (SqlCommand command = new SqlCommand(
@@ -138,16 +139,21 @@ namespace DepartmentModule.Helpers
                             throw new InvalidOperationException("The workflow assignment changed; refresh and retry.");
                     }
 
-                    CreateNextAssignment(connection, transaction, tenderId, assignment,
+                    nextStageName = CreateNextAssignment(connection, transaction, tenderId, assignment,
                         targetStatus, roleCode, userId, metadata);
+                    if (String.IsNullOrWhiteSpace(nextStageName))
+                        nextStageName = String.Equals(targetStatus, "Completed", StringComparison.Ordinal)
+                            ? "Completed" : assignment.StageName;
                 }
 
                 using (SqlCommand command = new SqlCommand(
                     @"INSERT INTO dbo.TenderWorkflowHistory
                         (TenderId,WorkflowVersion,StageId,PreviousStatus,NewStatus,ActionName,
-                         UserId,RoleId,ActorRoleCode,DepartmentId,Remarks,RelatedDocumentPath)
+                         UserId,RoleId,ActorRoleCode,DepartmentId,Remarks,RelatedDocumentPath,
+                         PreviousStageName,NewStageName)
                       VALUES(@TenderId,2,@StageId,@PreviousStatus,@NewStatus,@ActionName,
-                             @UserId,@RoleId,@ActorRoleCode,@DepartmentId,@Remarks,@RelatedDocumentPath);",
+                             @UserId,@RoleId,@ActorRoleCode,@DepartmentId,@Remarks,@RelatedDocumentPath,
+                             @PreviousStageName,@NewStageName);",
                     connection, transaction))
                 {
                     ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
@@ -165,12 +171,221 @@ namespace DepartmentModule.Helpers
                         String.IsNullOrWhiteSpace(note) ? null : note, 2000);
                     ModuleDb.AddParameter(command, "@RelatedDocumentPath", SqlDbType.NVarChar,
                         metadata.RelatedDocumentPath, 800);
+                    ModuleDb.AddParameter(command, "@PreviousStageName", SqlDbType.NVarChar,
+                        stageName, 100);
+                    ModuleDb.AddParameter(command, "@NewStageName", SqlDbType.NVarChar,
+                        nextStageName, 100);
                     command.ExecuteNonQuery();
                 }
 
                 ModuleDb.AddAudit(connection, transaction, userId, "WorkflowTransition", "Tender",
                     tenderId, assignment.CurrentStatus + " -> " + targetStatus + "; " + stageName,
                     ipAddress);
+                transaction.Commit();
+            }
+        }
+
+        public static void RecallToJe(int tenderId, int userId, int roleId, string roleCode,
+            string remarks, string ipAddress)
+        {
+            string note = (remarks ?? String.Empty).Trim();
+            if (tenderId <= 0 || userId <= 0 || roleId <= 0 ||
+                !IsJuniorEngineer(roleCode) || note.Length == 0 || note.Length > 2000)
+                throw new InvalidOperationException("A JE account and a take-back reason of 1 to 2,000 characters are required.");
+
+            using (SqlConnection connection = ModuleDb.OpenConnection())
+            using (SqlTransaction transaction = connection.BeginTransaction(IsolationLevel.Serializable))
+            {
+                using (SqlCommand command = new SqlCommand(
+                    @"IF NOT EXISTS
+                      (
+                          SELECT 1 FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK)
+                          INNER JOIN dbo.Roles r ON r.RoleId=u.RoleId
+                          WHERE u.UserId=@UserId AND u.RoleId=@RoleId
+                            AND u.IsActive=1 AND u.AccountType=N'Internal'
+                            AND r.IsActive=1 AND r.RoleCode=N'JE'
+                      )
+                          THROW 51060, 'Only an active JE account may take back a tender.', 1;",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                    ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
+                    command.ExecuteNonQuery();
+                }
+
+                int departmentId;
+                long assignmentId;
+                int currentStageId;
+                int currentStageOrder;
+                int currentRoleId;
+                int? currentAssignedUserId;
+                string currentStageName;
+                string previousStatus;
+                string currentPendingStatus;
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT t.CurrentStatus,t.WorkflowVersion,t.DepartmentId,
+                             a.AssignmentId,a.StageId,a.AssignedRoleId,a.AssignedUserId,
+                             s.StageName,s.StageOrder,s.StatusOnPending
+                      FROM dbo.Tender t WITH (UPDLOCK,HOLDLOCK)
+                      INNER JOIN dbo.TenderWorkflowAssignments a WITH (UPDLOCK,HOLDLOCK)
+                        ON a.TenderId=t.TenderId AND a.IsCurrent=1 AND a.DepartmentId=t.DepartmentId
+                      INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                        AND s.WorkflowVersion=2 AND s.IsActive=1
+                      WHERE t.TenderId=@TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0;",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (!reader.Read())
+                            throw new InvalidOperationException("This tender has no active, recallable workflow assignment.");
+                        previousStatus = Convert.ToString(reader["CurrentStatus"]);
+                        if (Convert.ToInt16(reader["WorkflowVersion"], CultureInfo.InvariantCulture) != 2)
+                            throw new InvalidOperationException("Only tenders using the configured version-2 workflow can be recalled.");
+                        departmentId = Convert.ToInt32(reader["DepartmentId"], CultureInfo.InvariantCulture);
+                        assignmentId = Convert.ToInt64(reader["AssignmentId"], CultureInfo.InvariantCulture);
+                        currentStageId = Convert.ToInt32(reader["StageId"], CultureInfo.InvariantCulture);
+                        currentRoleId = Convert.ToInt32(reader["AssignedRoleId"], CultureInfo.InvariantCulture);
+                        currentAssignedUserId = reader["AssignedUserId"] == DBNull.Value
+                            ? (int?)null : Convert.ToInt32(reader["AssignedUserId"], CultureInfo.InvariantCulture);
+                        currentStageName = Convert.ToString(reader["StageName"]);
+                        currentStageOrder = Convert.ToInt32(reader["StageOrder"], CultureInfo.InvariantCulture);
+                        currentPendingStatus = Convert.ToString(reader["StatusOnPending"]);
+                    }
+                }
+
+                int initialStageId;
+                int jeRoleId;
+                int initialStageOrder;
+                string initialStatus;
+                int publishStageOrder;
+                using (SqlCommand command = new SqlCommand(
+                    @"SELECT initialStage.StageId,initialStage.StageOrder,initialStage.StatusOnPending,
+                             initialStage.ApproverRoleId,publishStage.StageOrder AS PublishStageOrder
+                      FROM dbo.WorkflowStages initialStage
+                      INNER JOIN dbo.Roles jeRole ON jeRole.RoleId=initialStage.ApproverRoleId
+                        AND jeRole.RoleCode=N'JE' AND jeRole.IsActive=1
+                      INNER JOIN dbo.WorkflowStages publishStage
+                        ON publishStage.WorkflowVersion=2 AND publishStage.IsActive=1
+                        AND publishStage.StageName=N'Final_JE_PublishTender'
+                      WHERE initialStage.WorkflowVersion=2 AND initialStage.IsActive=1
+                        AND initialStage.StageName=N'Final_JE_SubmitTender';",
+                    connection, transaction))
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        throw new InvalidOperationException("The initial JE and publication workflow stages are not configured.");
+                    initialStageId = Convert.ToInt32(reader["StageId"], CultureInfo.InvariantCulture);
+                    initialStageOrder = Convert.ToInt32(reader["StageOrder"], CultureInfo.InvariantCulture);
+                    initialStatus = Convert.ToString(reader["StatusOnPending"]);
+                    jeRoleId = Convert.ToInt32(reader["ApproverRoleId"], CultureInfo.InvariantCulture);
+                    publishStageOrder = Convert.ToInt32(reader["PublishStageOrder"], CultureInfo.InvariantCulture);
+                }
+
+                if (currentStageName == "Final_JE_SubmitTender" ||
+                    currentStageOrder <= initialStageOrder)
+                    throw new InvalidOperationException("The tender is already at its JE-controlled starting stage.");
+                if (currentStageOrder >= publishStageOrder ||
+                    String.Equals(previousStatus, "Tender Published", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(previousStatus, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                    previousStatus.IndexOf("cancel", StringComparison.OrdinalIgnoreCase) >= 0)
+                    throw new InvalidOperationException("This tender has reached publication or a legally restricted terminal stage and cannot be recalled.");
+                if (!String.Equals(previousStatus, currentPendingStatus, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Tender status and active workflow stage are inconsistent. Refresh and retry.");
+
+                using (SqlCommand command = new SqlCommand(
+                    @"UPDATE dbo.Tender
+                      SET CurrentStatus=@InitialStatus,ModifiedBy=@UserId,ModifiedDate=SYSUTCDATETIME()
+                      WHERE TenderId=@TenderId AND WorkflowVersion=2 AND IsDeleted=0
+                        AND CurrentStatus=@PreviousStatus;",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@InitialStatus", SqlDbType.NVarChar, initialStatus, 100);
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@PreviousStatus", SqlDbType.NVarChar, previousStatus, 100);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("Tender status changed; refresh and retry.");
+                }
+
+                using (SqlCommand command = new SqlCommand(
+                    @"UPDATE dbo.TenderWorkflowAssignments
+                      SET IsCurrent=0,CompletedAtUtc=SYSUTCDATETIME()
+                      WHERE AssignmentId=@AssignmentId AND IsCurrent=1;",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@AssignmentId", SqlDbType.BigInt, assignmentId);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("The active workflow assignment changed; refresh and retry.");
+                }
+
+                using (SqlCommand command = new SqlCommand(
+                    @"INSERT INTO dbo.TenderWorkflowAssignments
+                        (TenderId,StageId,AssignedRoleId,AssignedUserId,DepartmentId,IsCurrent)
+                      VALUES(@TenderId,@StageId,@RoleId,@UserId,@DepartmentId,1);",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@StageId", SqlDbType.Int, initialStageId);
+                    ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, jeRoleId);
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
+                    command.ExecuteNonQuery();
+                }
+
+                using (SqlCommand command = new SqlCommand(
+                    @"INSERT INTO dbo.TenderWorkflowHistory
+                        (TenderId,WorkflowVersion,StageId,PreviousStatus,NewStatus,ActionName,
+                         UserId,RoleId,ActorRoleCode,DepartmentId,Remarks,
+                         PreviousStageName,NewStageName)
+                      VALUES(@TenderId,2,@StageId,@PreviousStatus,@NewStatus,N'TakeBackTender',
+                             @UserId,@RoleId,@RoleCode,@DepartmentId,@Remarks,@PreviousStage,@NewStage);",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@StageId", SqlDbType.Int, currentStageId);
+                    ModuleDb.AddParameter(command, "@PreviousStatus", SqlDbType.NVarChar, previousStatus, 100);
+                    ModuleDb.AddParameter(command, "@NewStatus", SqlDbType.NVarChar, initialStatus, 100);
+                    ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
+                    ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
+                    ModuleDb.AddParameter(command, "@RoleCode", SqlDbType.NVarChar, roleCode, 50);
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
+                    ModuleDb.AddParameter(command, "@Remarks", SqlDbType.NVarChar, note, 2000);
+                    ModuleDb.AddParameter(command, "@PreviousStage", SqlDbType.NVarChar, currentStageName, 100);
+                    ModuleDb.AddParameter(command, "@NewStage", SqlDbType.NVarChar, "Final_JE_SubmitTender", 100);
+                    command.ExecuteNonQuery();
+                }
+
+                string notification = "Tender recalled from " + currentStageName +
+                    " by JE. See workflow history for the reason.";
+                using (SqlCommand command = new SqlCommand(
+                    @"INSERT INTO dbo.TenderNotifications(UserId,TenderId,NotificationType,Message)
+                      SELECT DISTINCT recipient.UserId,@TenderId,N'TenderRecalled',@Message
+                      FROM dbo.Users recipient
+                      WHERE recipient.IsActive=1 AND recipient.AccountType=N'Internal'
+                        AND recipient.UserId<>@ActorId
+                        AND
+                        (
+                            recipient.UserId=@AssignedUserId
+                            OR
+                            (@AssignedUserId IS NULL AND recipient.RoleId=@AssignedRoleId
+                             AND (recipient.DepartmentId IS NULL OR recipient.DepartmentId=@DepartmentId))
+                        );",
+                    connection, transaction))
+                {
+                    ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                    ModuleDb.AddParameter(command, "@ActorId", SqlDbType.Int, userId);
+                    ModuleDb.AddParameter(command, "@AssignedUserId", SqlDbType.Int,
+                        currentAssignedUserId.HasValue ? (object)currentAssignedUserId.Value : null);
+                    ModuleDb.AddParameter(command, "@AssignedRoleId", SqlDbType.Int, currentRoleId);
+                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
+                    ModuleDb.AddParameter(command, "@Message", SqlDbType.NVarChar, notification, 1000);
+                    command.ExecuteNonQuery();
+                }
+
+                ModuleDb.AddAudit(connection, transaction, userId, "TakeBackTender", "Tender", tenderId,
+                    "FromStage=" + currentStageName + "; ToStage=Final_JE_SubmitTender; FromStatus=" +
+                    previousStatus + "; ToStatus=" + initialStatus + "; Reason=" + note, ipAddress);
                 transaction.Commit();
             }
         }
@@ -216,6 +431,109 @@ namespace DepartmentModule.Helpers
                 if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
                     throw new InvalidOperationException("Upload the required tender documents before verification.");
             }
+        }
+
+        public static WorkflowTransitionMetadata EnsureInitialJeSubmissionReady(
+            Page page, SqlConnection connection, SqlTransaction transaction, int tenderId)
+        {
+            List<string> pending = new List<string>();
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT t.Title,t.DepartmentId,
+                         COALESCE(NULLIF(t.TenderMethod,N''),t.TenderType) AS TenderMethod,
+                         t.TenderCategory,t.FinancialYear,t.EstimatedAmount,
+                         (SELECT COUNT(*) FROM dbo.BOQ b WHERE b.TenderId=t.TenderId) AS BOQCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                          WHERE d.TenderId=t.TenderId AND d.IsDeleted=0
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Scope of Work') AS ScopeCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                          WHERE d.TenderId=t.TenderId AND d.IsDeleted=0
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Technical Requirements') AS TechnicalCount,
+                         (SELECT COUNT(*) FROM dbo.TenderDocuments d
+                          LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                          WHERE d.TenderId=t.TenderId AND d.IsDeleted=0
+                            AND COALESCE(dt.TypeName,d.DocumentType)=N'Financial Requirements') AS FinancialCount,
+                         (SELECT COUNT(*) FROM dbo.TenderRequiredBidDocuments r
+                          WHERE r.TenderId=t.TenderId) AS BidDocumentTypeCount
+                  FROM dbo.Tender t
+                  WHERE t.TenderId=@TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0;",
+                connection, transaction))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        throw new InvalidOperationException("The tender is no longer available for JE submission.");
+
+                    if (String.IsNullOrWhiteSpace(Convert.ToString(reader["Title"])))
+                        pending.Add("project title");
+                    if (Convert.ToInt32(reader["DepartmentId"], CultureInfo.InvariantCulture) <= 0)
+                        pending.Add("department");
+                    if (String.IsNullOrWhiteSpace(Convert.ToString(reader["TenderMethod"])))
+                        pending.Add("tender method");
+                    if (String.IsNullOrWhiteSpace(Convert.ToString(reader["TenderCategory"])))
+                        pending.Add("tender category");
+                    if (String.IsNullOrWhiteSpace(Convert.ToString(reader["FinancialYear"])))
+                        pending.Add("budgeting financial year");
+                    if (reader["EstimatedAmount"] == DBNull.Value ||
+                        Convert.ToDecimal(reader["EstimatedAmount"], CultureInfo.InvariantCulture) <= 0)
+                        pending.Add("estimated tender value");
+                    if (Convert.ToInt32(reader["BOQCount"], CultureInfo.InvariantCulture) == 0)
+                        pending.Add("at least one BOQ item");
+                    if (Convert.ToInt32(reader["ScopeCount"], CultureInfo.InvariantCulture) == 0)
+                        pending.Add("Scope of Work document");
+                    if (Convert.ToInt32(reader["TechnicalCount"], CultureInfo.InvariantCulture) == 0)
+                        pending.Add("Technical Requirements document");
+                    if (Convert.ToInt32(reader["FinancialCount"], CultureInfo.InvariantCulture) == 0)
+                        pending.Add("Financial Requirements document");
+                    int bidDocumentTypeCount = Convert.ToInt32(
+                        reader["BidDocumentTypeCount"], CultureInfo.InvariantCulture);
+                    if (bidDocumentTypeCount < 1 || bidDocumentTypeCount > 30)
+                        pending.Add("1 to 30 required bidder document types");
+                }
+            }
+
+            if (pending.Count > 0)
+                throw new InvalidOperationException(
+                    "Cannot forward this tender yet. Complete: " +
+                    String.Join(", ", pending.ToArray()) +
+                    ". The tender remains assigned to JE.");
+
+            DataTable documents = new DataTable();
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT DocumentName,FileName,FilePath,FileExtension,FileSizeBytes
+                  FROM dbo.TenderDocuments
+                  WHERE TenderId=@TenderId AND IsDeleted=0
+                  ORDER BY UploadedDate,DocumentId;",
+                connection, transaction))
+            using (SqlDataAdapter adapter = new SqlDataAdapter(command))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
+                adapter.Fill(documents);
+            }
+
+            if (documents.Rows.Count == 0)
+                throw new InvalidOperationException("Upload the required tender documents before forwarding.");
+
+            foreach (DataRow document in documents.Rows)
+            {
+                string fullPath;
+                string fileError = TenderLifecycleFiles.ValidateStoredTenderDocument(page,
+                    Convert.ToString(document["FilePath"]),
+                    Convert.ToString(document["FileName"]),
+                    Convert.ToString(document["FileExtension"]),
+                    document["FileSizeBytes"] == DBNull.Value
+                        ? (long?)null
+                        : Convert.ToInt64(document["FileSizeBytes"], CultureInfo.InvariantCulture),
+                    out fullPath);
+                if (!String.IsNullOrEmpty(fileError))
+                    throw new InvalidOperationException("Cannot forward: \"" +
+                        Convert.ToString(document["DocumentName"]) + "\" " + fileError);
+            }
+
+            EnsureTenderRequirementDocumentsVerified(connection, transaction, tenderId, "JE");
+            return new WorkflowTransitionMetadata { ActionName = "JeVerifiedAndForwardedToTenderCell" };
         }
 
         public static WorkflowTransitionMetadata CreateTenderDocumentShortfall(SqlConnection connection,
@@ -2389,11 +2707,11 @@ namespace DepartmentModule.Helpers
             }
         }
 
-        private static void CreateNextAssignment(SqlConnection connection, SqlTransaction transaction,
+        private static string CreateNextAssignment(SqlConnection connection, SqlTransaction transaction,
             int tenderId, StageAssignment current, string newStatus, string roleCode, int userId,
             WorkflowTransitionMetadata metadata)
         {
-            if (current.StageName == "Final_JE_CompleteTender") return;
+            if (current.StageName == "Final_JE_CompleteTender") return null;
 
             string nextStageName = null;
             if (current.StageName == "Final_Cell_InitialTenderDocumentVerification" &&
@@ -2470,7 +2788,7 @@ namespace DepartmentModule.Helpers
 
             if (String.IsNullOrWhiteSpace(nextStageName))
             {
-                if (String.Equals(newStatus, "Completed", StringComparison.Ordinal)) return;
+                if (String.Equals(newStatus, "Completed", StringComparison.Ordinal)) return null;
                 throw new InvalidOperationException("The next workflow stage is not configured.");
             }
 
@@ -2527,6 +2845,7 @@ namespace DepartmentModule.Helpers
 
             NotifyWorkflowRole(connection, transaction, tenderId, assignedRoleId,
                 current.DepartmentId, nextStageName);
+            return nextStageName;
         }
 
         private static long? GetCurrentShortfallId(SqlConnection connection,

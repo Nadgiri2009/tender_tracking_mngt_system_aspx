@@ -678,10 +678,14 @@ CREATE TABLE dbo.AuditLog (
     EntityId        INT            NULL,
     Details         NVARCHAR(MAX)  NULL,
     IPAddress       NVARCHAR(50)   NULL,
+    RoleAtAction    NVARCHAR(100)  NULL,
     CreatedDate     DATETIME2      NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_AuditLog_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId)
 );
 END;
+GO
+IF COL_LENGTH(N'dbo.AuditLog',N'RoleAtAction') IS NULL
+    ALTER TABLE dbo.AuditLog ADD RoleAtAction NVARCHAR(100) NULL;
 GO
 IF N'$(InstallMode)'=N'Fresh'
 BEGIN
@@ -1379,11 +1383,17 @@ BEGIN
         ActionAtUtc DATETIME2(0) NOT NULL
             CONSTRAINT DF_TenderWorkflowHistory_ActionAtUtc DEFAULT SYSUTCDATETIME(),
         Remarks NVARCHAR(2000) NULL,
-        RelatedDocumentPath NVARCHAR(800) NULL
+        RelatedDocumentPath NVARCHAR(800) NULL,
+        PreviousStageName NVARCHAR(100) NULL,
+        NewStageName NVARCHAR(100) NULL
     );
     CREATE INDEX IX_TenderWorkflowHistory_Tender
         ON dbo.TenderWorkflowHistory(TenderId,WorkflowHistoryId DESC);
 END;
+IF COL_LENGTH(N'dbo.TenderWorkflowHistory',N'PreviousStageName') IS NULL
+    ALTER TABLE dbo.TenderWorkflowHistory ADD PreviousStageName NVARCHAR(100) NULL;
+IF COL_LENGTH(N'dbo.TenderWorkflowHistory',N'NewStageName') IS NULL
+    ALTER TABLE dbo.TenderWorkflowHistory ADD NewStageName NVARCHAR(100) NULL;
 
 IF OBJECT_ID(N'dbo.TenderVerificationReviews', N'U') IS NULL
 BEGIN

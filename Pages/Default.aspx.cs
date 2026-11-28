@@ -25,54 +25,14 @@ namespace DepartmentModule.Pages
 
         protected void Page_Load(object sender, EventArgs e)
         {
-            if (IsJeAdministrator)
-            {
-                Response.Redirect(ResolveUrl("~/Pages/Admin.aspx"), false);
-                Context.ApplicationInstance.CompleteRequest();
-                return;
-            }
             if (HasAnyRole("Contractor"))
             {
                 Response.Redirect(ResolveUrl("~/Pages/MyApplications.aspx"), false);
                 Context.ApplicationInstance.CompleteRequest();
                 return;
             }
-
-            if (!IsPostBack)
-            {
-                SetFinalWorkflowDashboardCopy();
-                bool isFinalWorkflowRole =
-                    String.Equals(CurrentRoleCode, "TENDER_CELL", StringComparison.OrdinalIgnoreCase) ||
-                    String.Equals(CurrentRoleCode, "CHAIRMAN", StringComparison.OrdinalIgnoreCase) ||
-                    String.Equals(CurrentRoleCode, "DIRECTOR_AUDITOR", StringComparison.OrdinalIgnoreCase);
-                LegacyDashboardPanel.Visible = !isFinalWorkflowRole;
-                FinalWorkflowDashboardPanel.Visible = isFinalWorkflowRole;
-                bool isRespOfficer = HasAnyRole("DepartmentOfficer");
-                NewTenderLink.Visible = HasPermission("tender.create.department") ||
-                    HasPermission("tenders.manage.all") || HasAnyRole("DepartmentOfficer");
-                WorkflowQueueLink.Visible = HasPermission("tender.create.department") ||
-                    HasPermission("tender.publication.manage") || HasPermission("tender.primary.open") ||
-                    HasPermission("tender.primary.verify") || HasPermission("tender.cell.verify") ||
-                    HasPermission("shortfall.create") || HasPermission("shortfall.approve") ||
-                    HasPermission("shortfall.respond.own") || HasPermission("shortfall.clear") ||
-                    HasPermission("financial.open.approve") || HasPermission("financial.open.execute") ||
-                    HasPermission("financial.approve.final") || HasPermission("workorder.manage") ||
-                    HasPermission("agreement.manage");
-                TenderCellDatesLink.Visible =
-                    String.Equals(CurrentRoleCode, "TENDER_CELL", StringComparison.OrdinalIgnoreCase) &&
-                    CurrentDepartmentId.HasValue;
-                BindDepartmentTenderSummary();
-                if (isFinalWorkflowRole)
-                {
-                    LoadFinalWorkflowDashboard();
-                    return;
-                }
-                PendingApprovalsPanel.Visible = !isRespOfficer;
-                LifecycleSummaryPanel.Visible = !HasAnyRole("Contractor");
-                LifecycleReviewSummaryPanel.Visible = HasAnyRole("TenderSection", "TenderCommittee");
-                RecentHeading.Text = isRespOfficer ? "My recent tenders" : "Recently updated tenders";
-                LoadDashboard();
-            }
+            Response.Redirect(ResolveUrl("~/Pages/Tenders.aspx"), false);
+            Context.ApplicationInstance.CompleteRequest();
         }
 
         private void SetFinalWorkflowDashboardCopy()

@@ -20,14 +20,20 @@ namespace DepartmentModule.Pages
 
         protected Literal PageTitle, TenderTitle, TenderNumber, DepartmentName, Description, EligibilityCriteria,
             TenderType, TenderCategory, EstimatedAmount, TenderSubcategory, FinancialYear,
-            EMDAmount, TenderDocumentFee, ProcessingFee, SecurityDepositAmount;
+            EMDAmount, TenderDocumentFee, ProcessingFee;
         protected Literal PublicationDate, SubmissionStartDate, SubmissionDeadline, CreatedBy, CreatedDate,
             CurrentStatus, Message, ApplicationMessage, PublicationPeriod, ExtensionCount,
             PublicationScheduledDate, TechnicalBidOpeningDate, FinancialBidOpeningDate,
             PreBidMeetingDate, PreBidLocation, PreBidDetails,
             ScopeOfWork, TechnicalRequirements, FinancialRequirements, AdditionalConditions, TermsAndConditions;
+        protected Literal ScopeOfWorkPreview, TechnicalRequirementsPreview, FinancialRequirementsPreview,
+            AdditionalConditionsPreview, TermsAndConditionsPreview;
         protected Literal GisLocationName, GisLatitude, GisLongitude, GisSelectedArea,
-            GisBoundaryCoordinatesText, GisBoundaryStartText, GisBoundaryEndText, GisBoundaryLineGeometryText;
+            GisBoundaryCoordinatesText, GisBoundaryStartText, GisBoundaryEndText, GisBoundaryLineGeometryText,
+            DocumentWorkspaceStatus, BoqWorkspaceStatus, GisWorkspaceStatus, WorkspaceTenderNumber,
+            WorkspaceTenderTitle, WorkspaceDepartment, WorkspaceStage, WorkspaceStatus,
+            CurrentAssignmentSummary, BudgetOpinionStatus, BoqSectionStatus;
+        protected HiddenField GisMapGeometryJson;
         protected Literal DocumentShortfallSummary;
         protected GridView BoqGrid, DocumentsGrid, HistoryGrid, ApplicationRequirementsGrid, RevisionHistoryGrid;
         protected GridView BudgetOpinionsGrid;
@@ -42,18 +48,19 @@ namespace DepartmentModule.Pages
         protected Panel BudgetOpinionPanel, BudgetOpinionHistoryPanel, DocumentTypesMissingPanel,
             DocumentFormPanel, DocumentFilePanel;
         protected Panel RevisionHistoryPanel, GisLocationPanel, GisBoundaryPanel, GisBoundaryLinePanel;
+        protected Panel TenderWorkspaceLayout, TenderWorkspaceNav, TakeBackTenderPanel, PendingTaskPanel;
         protected DropDownList DocumentTypeSelect;
         protected TextBox ItemName, ItemDescription, Quantity, Unit, Rate, Remarks,
-            DocumentNameText, DocumentRemarksText;
+            DocumentNameText, DocumentRemarksText, TakeBackReasonText;
         protected TextBox ApprovedBudgetAmount;
         protected FileUpload DocumentFile;
         protected Button AddBoqButton, UploadButton, SubmitWorkflowButton, ApproveButton, RejectButton;
-        protected Button DeleteTenderButton;
+        protected Button DeleteTenderButton, TakeBackTenderButton, ForwardTenderToCellButton;
         protected HiddenField EditingDocumentId, ReplacingDocumentFile;
         protected Literal DocumentFormTitle;
         protected LinkButton ShowDocumentFormButton, CancelDocumentFormButton, RefreshDocumentTypesButton;
         protected HyperLink BidsLink, WorkLink, EditTenderLink, ApplyTenderLink, FinalWorkflowLink,
-            BackToTendersLink, GisImageLink;
+            BackToTendersLink, GisImageLink, PendingTaskLink, WorkflowOverviewLink, ImportantDatesLink;
         protected HyperLink ScopeOfWorkAttachmentViewLink, ScopeOfWorkAttachmentDownloadLink,
             TechnicalRequirementsAttachmentViewLink, TechnicalRequirementsAttachmentDownloadLink,
             FinancialRequirementsAttachmentViewLink, FinancialRequirementsAttachmentDownloadLink;
@@ -78,6 +85,11 @@ namespace DepartmentModule.Pages
             }
             LoadTender();
             if (IsAuthorizedTender &&
+                String.Equals(Request.QueryString["recalled"], "1", StringComparison.Ordinal))
+            {
+                Message.Text = "<div class=\"message success\">Tender recalled to the JE starting stage. Earlier approvals and workflow history were retained.</div>";
+            }
+            else if (IsAuthorizedTender &&
                 String.Equals(Request.QueryString["workflowForwarded"], "1", StringComparison.Ordinal))
             {
                 Message.Text = "<div class=\"message success\">Documents verified and the tender was forwarded to the next team in the configured approval workflow.</div>";
@@ -103,7 +115,7 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"SELECT t.TenderId,t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,t.TenderType,t.TenderCategory,t.EstimatedAmount,t.CurrentStatus,
                                  t.TenderSubcategoryId,sub.SubcategoryName,t.FinancialYear,
-                                 t.EMDAmount,t.TenderDocumentFee,t.ProcessingFee,t.SecurityDepositAmount,
+                                 t.EMDAmount,t.TenderDocumentFee,t.ProcessingFee,
                                  t.PublicationScheduledUtc,t.TechnicalBidOpeningScheduledUtc,t.FinancialBidOpeningScheduledUtc,
                                  t.PreBidMeetingUtc,t.PreBidLocation,t.PreBidDetails,
                                  req.ScopeOfWork,req.TechnicalRequirements,req.FinancialRequirements,
@@ -114,6 +126,7 @@ namespace DepartmentModule.Pages
                                  gis.BoundaryStartLatitude,gis.BoundaryStartLongitude,
                                  gis.BoundaryEndLatitude,gis.BoundaryEndLongitude,
                                  gis.BoundaryLineGeometryJson,
+                                 gis.BoundaryGeometryType,gis.BoundaryGeometryJson,
                                  gis.ImageOriginalFileName AS GisImageOriginalFileName,
                                  t.WorkflowVersion,t.DepartmentId,
                                  CAST(CASE WHEN t.CurrentStatus=N'Draft' AND
@@ -252,7 +265,6 @@ namespace DepartmentModule.Pages
                             EMDAmount.Text = FormatMoney(reader["EMDAmount"]);
                             TenderDocumentFee.Text = FormatMoney(reader["TenderDocumentFee"]);
                             ProcessingFee.Text = FormatMoney(reader["ProcessingFee"]);
-                            SecurityDepositAmount.Text = FormatMoney(reader["SecurityDepositAmount"]);
                             PublicationScheduledDate.Text = FormatIndiaDate(reader["PublicationScheduledUtc"]);
                             TechnicalBidOpeningDate.Text = FormatIndiaDate(reader["TechnicalBidOpeningScheduledUtc"]);
                             FinancialBidOpeningDate.Text = FormatIndiaDate(reader["FinancialBidOpeningScheduledUtc"]);
@@ -264,6 +276,11 @@ namespace DepartmentModule.Pages
                             FinancialRequirements.Text = ModuleDb.Html(reader["FinancialRequirements"]);
                             AdditionalConditions.Text = ModuleDb.Html(reader["AdditionalConditions"]);
                             TermsAndConditions.Text = ModuleDb.Html(reader["TermsAndConditions"]);
+                            ScopeOfWorkPreview.Text = RequirementPreview(reader["ScopeOfWork"]);
+                            TechnicalRequirementsPreview.Text = RequirementPreview(reader["TechnicalRequirements"]);
+                            FinancialRequirementsPreview.Text = RequirementPreview(reader["FinancialRequirements"]);
+                            AdditionalConditionsPreview.Text = RequirementPreview(reader["AdditionalConditions"]);
+                            TermsAndConditionsPreview.Text = RequirementPreview(reader["TermsAndConditions"]);
                             GisLocationName.Text = ModuleDb.Html(reader["GisLocationName"]);
                             GisLatitude.Text = FormatCoordinate(reader["GisLatitude"]);
                             GisLongitude.Text = FormatCoordinate(reader["GisLongitude"]);
@@ -273,6 +290,11 @@ namespace DepartmentModule.Pages
                             GisBoundaryCoordinatesText.Text = ModuleDb.Html(boundaryCoordinates);
                             GisBoundaryPanel.Visible = !String.IsNullOrWhiteSpace(boundaryCoordinates);
                             bool hasLinearBoundary = reader["BoundaryLineGeometryJson"] != DBNull.Value;
+                            string geometryJson = reader["BoundaryGeometryJson"] == DBNull.Value
+                                ? String.Empty : Convert.ToString(reader["BoundaryGeometryJson"]);
+                            if (String.IsNullOrWhiteSpace(geometryJson) && hasLinearBoundary)
+                                geometryJson = Convert.ToString(reader["BoundaryLineGeometryJson"]);
+                            GisMapGeometryJson.Value = geometryJson;
                             GisBoundaryStartText.Text = FormatCoordinate(reader["BoundaryStartLatitude"]) + ", " +
                                 FormatCoordinate(reader["BoundaryStartLongitude"]);
                             GisBoundaryEndText.Text = FormatCoordinate(reader["BoundaryEndLatitude"]) + ", " +
@@ -283,7 +305,8 @@ namespace DepartmentModule.Pages
                             GisLocationPanel.Visible = reader["GisLocationName"] != DBNull.Value ||
                                 reader["GisLatitude"] != DBNull.Value || reader["GisLongitude"] != DBNull.Value ||
                                 reader["SelectedAreaSquareMeters"] != DBNull.Value || reader["GisImagePath"] != DBNull.Value ||
-                                hasLinearBoundary;
+                                hasLinearBoundary || !String.IsNullOrWhiteSpace(geometryJson) ||
+                                !String.IsNullOrWhiteSpace(boundaryCoordinates) || IsJeAdministrator;
                             if (reader["GisImagePath"] != DBNull.Value)
                             {
                                 string gisImageUrl = ResolveUrl("~/Pages/DocumentDownload.aspx?gisId=" +
@@ -321,6 +344,8 @@ namespace DepartmentModule.Pages
                     BindChildTables(connection);
                     BindWorkflowTimeline(connection);
                     BindDocumentShortfallSummary(connection);
+                    BindWorkspaceStatus(connection);
+                    TakeBackTenderPanel.Visible = BindTakeBackSummary(connection);
                 }
                 IsDraft = String.Equals(TenderStatus, "Draft", StringComparison.OrdinalIgnoreCase);
                 bool isBudgetRevision = String.Equals(TenderStatus, "Budget Revision Required", StringComparison.OrdinalIgnoreCase);
@@ -329,7 +354,7 @@ namespace DepartmentModule.Pages
                     : "~/Pages/Tenders.aspx";
                 AuthenticatedWorkflowPanel.Visible = CurrentUserId > 0;
                 RevisionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
-                FinalWorkflowLink.Visible = IsFinalWorkflow && CurrentUserId > 0 &&
+                bool canOpenFinalWorkflow = IsFinalWorkflow && CurrentUserId > 0 &&
                     (HasPermission("tenders.monitor") || HasPermission("tender.create.department") ||
                      HasPermission("tender.cell.verify") || HasPermission("shortfall.respond.own") ||
                      HasPermission("shortfall.approve") || HasPermission("shortfall.clear") ||
@@ -338,16 +363,23 @@ namespace DepartmentModule.Pages
                      HasPermission("agreement.manage") || HasPermission("system.admin"));
                 bool canResumeJeSubmission = IsFinalWorkflow && IsEditableDraft &&
                     HasPermission("tender.create.department");
+                ForwardTenderToCellButton.Visible = canResumeJeSubmission;
+                FinalWorkflowLink.Visible = canOpenFinalWorkflow;
                 FinalWorkflowLink.Text = canResumeJeSubmission
-                    ? "Verify Documents & Forward to Next Team"
+                    ? "Open JE document review"
                     : "Open finalized workflow";
-                FinalWorkflowLink.CssClass = canResumeJeSubmission ? "button" : "button secondary";
+                FinalWorkflowLink.CssClass = "button secondary";
                 FinalWorkflowLink.ToolTip = canResumeJeSubmission
-                    ? "Open the assigned JE review, complete document verification, and forward through the configured next workflow stage."
+                    ? "Open the JE workflow checklist and record document verification decisions."
                     : "Open the tender's workflow stages and history.";
                 FinalWorkflowLink.NavigateUrl = "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
-                BudgetOpinionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
                 bool budgetApprovalPending = String.Equals(TenderStatus, "Budget Approval Pending", StringComparison.OrdinalIgnoreCase);
+                BudgetOpinionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor") &&
+                    (!IsFinalWorkflow || BudgetOpinionsGrid.Rows.Count > 0) &&
+                    (budgetApprovalPending || BudgetOpinionsGrid.Rows.Count > 0);
+                BudgetOpinionStatus.Text = budgetApprovalPending
+                    ? "Pending"
+                    : BudgetOpinionsGrid.Rows.Count > 0 ? "Historical opinions recorded" : "Not required at this stage";
                 BudgetOpinionPanel.Visible = budgetApprovalPending && IsJeAdministrator;
                 if (budgetApprovalPending)
                 {
@@ -434,10 +466,84 @@ namespace DepartmentModule.Pages
             BindGrid(connection, BoqGrid,
                 @"SELECT BOQId,ItemName,Description,Quantity,Unit,Rate,Amount FROM dbo.BOQ WHERE TenderId=@TenderId ORDER BY BOQId;");
             BindTenderDocuments(connection);
-            BindGrid(connection, HistoryGrid,
-                @"SELECT h.ApprovalStage,h.PreviousStatus,h.NewStatus,h.Status,h.RoleAtAction,h.Remarks,h.ApprovalDate,u.FullName AS ActionTakenBy
-                  FROM dbo.ApprovalHistory h INNER JOIN dbo.Users u ON u.UserId=h.ApprovedBy
-                  WHERE h.TenderId=@TenderId ORDER BY h.ApprovalDate;");
+            string historyQuery = IsFinalWorkflow
+                ? @"SELECT history.ApprovalStage,history.PreviousStageName,history.NewStageName,
+                           history.PreviousStatus,history.NewStatus,history.Status,history.ActionTakenBy,
+                           history.RoleAtAction,history.Remarks,history.ApprovalDate,history.ActionSource
+                    FROM
+                    (
+                        SELECT COALESCE(h.PreviousStageName,s.StageName) AS PreviousStageName,
+                               COALESCE(h.NewStageName,s.StageName) AS NewStageName,
+                               s.StageName AS ApprovalStage,h.PreviousStatus,h.NewStatus,
+                               h.ActionName AS Status,actor.FullName AS ActionTakenBy,
+                               COALESCE(h.ActorRoleCode,role.RoleCode,role.RoleName) AS RoleAtAction,
+                               h.Remarks,h.ActionAtUtc AS ApprovalDate,
+                               CASE WHEN h.ActionName IN (N'ExpireShortfall',N'ExpireTenderShortfall')
+                                    THEN N'Automatic' ELSE N'Workflow' END AS ActionSource
+                        FROM dbo.TenderWorkflowHistory h
+                        LEFT JOIN dbo.WorkflowStages s ON s.StageId=h.StageId
+                        INNER JOIN dbo.Users actor ON actor.UserId=h.UserId
+                        LEFT JOIN dbo.Roles role ON role.RoleId=h.RoleId
+                        WHERE h.TenderId=@TenderId AND h.WorkflowVersion=2
+                        UNION ALL
+                        SELECT NULL,NULL,NULL,NULL,NULL,a.Action,actor.FullName,
+                               COALESCE(a.RoleAtAction,role.RoleCode,role.RoleName),a.Details,
+                               a.CreatedDate,
+                               CASE WHEN a.Action LIKE N'Auto%' OR a.Action=N'ExpireTenderShortfall'
+                                    THEN N'Automatic' ELSE N'Manual' END
+                        FROM dbo.AuditLog a
+                        LEFT JOIN dbo.Users actor ON actor.UserId=a.UserId
+                        LEFT JOIN dbo.Roles role ON role.RoleId=actor.RoleId
+                        WHERE a.Action NOT IN (N'WorkflowTransition',N'TakeBackTender')
+                          AND NOT (a.EntityName=N'Tender' AND a.EntityId=@TenderId AND a.Action=N'Create')
+                          AND
+                          (
+                              (a.EntityName=N'Tender' AND a.EntityId=@TenderId)
+                              OR (a.EntityName=N'TenderDocument' AND EXISTS
+                                  (SELECT 1 FROM dbo.TenderDocuments d
+                                   WHERE d.DocumentId=a.EntityId AND d.TenderId=@TenderId))
+                              OR (a.EntityName=N'BOQItem' AND EXISTS
+                                  (SELECT 1 FROM dbo.BOQ b
+                                   WHERE b.BOQId=a.EntityId AND b.TenderId=@TenderId))
+                              OR (a.EntityName=N'TenderGisLocation' AND a.EntityId=@TenderId)
+                          )
+                    ) history
+                    ORDER BY history.ApprovalDate,history.Status;"
+                : @"SELECT history.ApprovalStage,history.PreviousStageName,history.NewStageName,
+                           history.PreviousStatus,history.NewStatus,history.Status,history.ActionTakenBy,
+                           history.RoleAtAction,history.Remarks,history.ApprovalDate,history.ActionSource
+                    FROM
+                    (
+                        SELECT NULL AS PreviousStageName,h.ApprovalStage AS NewStageName,
+                               h.ApprovalStage,h.PreviousStatus,h.NewStatus,h.Status,actor.FullName AS ActionTakenBy,
+                               h.RoleAtAction,h.Remarks,h.ApprovalDate,N'Workflow' AS ActionSource
+                        FROM dbo.ApprovalHistory h
+                        INNER JOIN dbo.Users actor ON actor.UserId=h.ApprovedBy
+                        WHERE h.TenderId=@TenderId
+                        UNION ALL
+                        SELECT NULL,NULL,NULL,NULL,NULL,a.Action,actor.FullName,
+                               COALESCE(a.RoleAtAction,role.RoleCode,role.RoleName),a.Details,a.CreatedDate,
+                               CASE WHEN a.Action LIKE N'Auto%' OR a.Action=N'ExpireTenderShortfall'
+                                    THEN N'Automatic' ELSE N'Manual' END
+                        FROM dbo.AuditLog a
+                        LEFT JOIN dbo.Users actor ON actor.UserId=a.UserId
+                        LEFT JOIN dbo.Roles role ON role.RoleId=actor.RoleId
+                        WHERE a.Action NOT IN
+                            (N'Submitted',N'Approved',N'Rejected',N'WorkflowTransition',N'TakeBackTender')
+                          AND
+                          (
+                              (a.EntityName=N'Tender' AND a.EntityId=@TenderId)
+                              OR (a.EntityName=N'TenderDocument' AND EXISTS
+                                  (SELECT 1 FROM dbo.TenderDocuments d
+                                   WHERE d.DocumentId=a.EntityId AND d.TenderId=@TenderId))
+                              OR (a.EntityName=N'BOQItem' AND EXISTS
+                                  (SELECT 1 FROM dbo.BOQ b
+                                   WHERE b.BOQId=a.EntityId AND b.TenderId=@TenderId))
+                              OR (a.EntityName=N'TenderGisLocation' AND a.EntityId=@TenderId)
+                          )
+                    ) history
+                    ORDER BY history.ApprovalDate,history.Status;";
+            BindGrid(connection, HistoryGrid, historyQuery);
             BindGrid(connection, RevisionHistoryGrid,
                 @"SELECT r.RevisionNumber,r.ActionName,r.RevisionReason,r.RevisedAtUtc,u.FullName AS RevisedBy
                   FROM dbo.TenderRevisions r INNER JOIN dbo.Users u ON u.UserId=r.RevisedBy
@@ -453,6 +559,286 @@ namespace DepartmentModule.Pages
                 BindGrid(connection, ApplicationRequirementsGrid,
                     @"SELECT DocumentType,Description,IsMandatory,AllowedExtensions,MaxFileSizeBytes
                       FROM dbo.TenderRequiredBidDocuments WHERE TenderId=@TenderId ORDER BY DocumentType;");
+            }
+        }
+
+        private void BindWorkspaceStatus(SqlConnection connection)
+        {
+            WorkspaceTenderNumber.Text = TenderNumber.Text;
+            WorkspaceTenderTitle.Text = TenderTitle.Text;
+            WorkspaceDepartment.Text = DepartmentName.Text;
+            WorkspaceStage.Text = TrackerCurrentStage.Text;
+            WorkspaceStatus.Text = CurrentStatus.Text;
+            TenderWorkspaceNav.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
+            TenderWorkspaceLayout.CssClass = TenderWorkspaceNav.Visible
+                ? "tender-workspace-layout has-tender-nav"
+                : "tender-workspace-layout";
+            WorkflowOverviewLink.Text = "Workflow, approvals & history";
+            WorkflowOverviewLink.NavigateUrl = "~/Pages/TenderWorkflow.aspx?id=" +
+                TenderId.ToString(CultureInfo.InvariantCulture);
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT COUNT(d.DocumentId) AS DocumentCount,
+                         COALESCE(SUM(CASE WHEN COALESCE(latest.VerificationStatus,
+                             CASE WHEN d.VerifiedAtUtc IS NOT NULL THEN d.VerificationStatus END)=N'Verified'
+                             THEN 1 ELSE 0 END),0) AS VerifiedCount,
+                         COALESCE(MAX(CASE WHEN COALESCE(dt.TypeName,d.DocumentType)=N'Scope of Work'
+                             THEN 1 ELSE 0 END),0) AS HasScopeOfWork,
+                         COALESCE(MAX(CASE WHEN COALESCE(dt.TypeName,d.DocumentType)=N'Technical Requirements'
+                             THEN 1 ELSE 0 END),0) AS HasTechnicalRequirements,
+                         COALESCE(MAX(CASE WHEN COALESCE(dt.TypeName,d.DocumentType)=N'Financial Requirements'
+                             THEN 1 ELSE 0 END),0) AS HasFinancialRequirements
+                  FROM dbo.TenderDocuments d
+                  LEFT JOIN dbo.DocumentTypes dt ON dt.DocumentTypeId=d.DocumentTypeId
+                  OUTER APPLY
+                  (
+                      SELECT TOP (1) h.VerificationStatus
+                      FROM dbo.TenderRequirementVerificationHistory h
+                      WHERE h.TenderId=d.TenderId AND h.DocumentId=d.DocumentId
+                        AND h.ReviewStage=N'JE' AND h.DocumentRevision=d.DocumentRevision
+                      ORDER BY h.ReviewedAtUtc DESC,h.VerificationHistoryId DESC
+                  ) latest
+                  WHERE d.TenderId=@TenderId AND d.IsDeleted=0;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        throw new InvalidOperationException("Tender document status could not be calculated.");
+                    int documentCount = Convert.ToInt32(reader["DocumentCount"], CultureInfo.InvariantCulture);
+                    int verifiedCount = Convert.ToInt32(reader["VerifiedCount"], CultureInfo.InvariantCulture);
+                    int presentRequired = Convert.ToInt32(reader["HasScopeOfWork"], CultureInfo.InvariantCulture) +
+                        Convert.ToInt32(reader["HasTechnicalRequirements"], CultureInfo.InvariantCulture) +
+                        Convert.ToInt32(reader["HasFinancialRequirements"], CultureInfo.InvariantCulture);
+                    int missingRequired = 3 - presentRequired;
+                    string status = documentCount == 0 || missingRequired > 0
+                        ? "Pending · " + missingRequired.ToString(CultureInfo.InvariantCulture) + " required"
+                        : verifiedCount == documentCount ? "Verified"
+                        : "Uploaded · " + verifiedCount.ToString(CultureInfo.InvariantCulture) + "/" +
+                          documentCount.ToString(CultureInfo.InvariantCulture) + " verified";
+                    DocumentWorkspaceStatus.Text = HttpUtility.HtmlEncode(status);
+                }
+            }
+
+            int boqCount;
+            using (SqlCommand command = new SqlCommand(
+                "SELECT COUNT(1) FROM dbo.BOQ WHERE TenderId=@TenderId;", connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                boqCount = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+            }
+            BoqWorkspaceStatus.Text = boqCount == 0
+                ? "Pending"
+                : "Recorded · " + boqCount.ToString(CultureInfo.InvariantCulture) + " items";
+            BoqSectionStatus.Text = HttpUtility.HtmlEncode(BoqWorkspaceStatus.Text);
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT TOP (1) COALESCE(BoundaryGeometryType,
+                             CASE WHEN BoundaryLineGeometryJson IS NOT NULL THEN N'LineString' END) AS BoundaryGeometryType,
+                         CASE WHEN (BoundaryGeometryJson IS NOT NULL AND ISJSON(BoundaryGeometryJson)=1)
+                                   OR (BoundaryLineGeometryJson IS NOT NULL AND ISJSON(BoundaryLineGeometryJson)=1)
+                              THEN 1 ELSE 0 END AS HasValidGeometry
+                  FROM dbo.TenderGisLocations WHERE TenderId=@TenderId;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read() || Convert.ToInt32(reader["HasValidGeometry"], CultureInfo.InvariantCulture) != 1)
+                    {
+                        GisWorkspaceStatus.Text = "Pending";
+                    }
+                    else
+                    {
+                        string type = reader["BoundaryGeometryType"] == DBNull.Value
+                            ? String.Empty : Convert.ToString(reader["BoundaryGeometryType"]);
+                        string gisStatus = String.Equals(type, "Polygon", StringComparison.OrdinalIgnoreCase)
+                            ? "Completed · polygon"
+                            : String.Equals(type, "LineString", StringComparison.OrdinalIgnoreCase)
+                                ? "Completed · 2 points" : "Completed";
+                        GisWorkspaceStatus.Text = HttpUtility.HtmlEncode(gisStatus);
+                    }
+                }
+            }
+
+            BindPendingWorkflowTask(connection);
+        }
+
+        private void BindPendingWorkflowTask(SqlConnection connection)
+        {
+            PendingTaskPanel.Visible = false;
+            ImportantDatesLink.Visible = false;
+            if (!TenderWorkspaceNav.Visible || !IsAuthorizedTender)
+                return;
+
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT TOP (1) stage.StageName,assignment.AssignedRoleId,
+                         assignment.AssignedUserId,assignment.DepartmentId
+                  FROM dbo.Tender t
+                  INNER JOIN dbo.TenderWorkflowAssignments assignment
+                    ON assignment.TenderId=t.TenderId AND assignment.IsCurrent=1
+                  INNER JOIN dbo.WorkflowStages stage
+                    ON stage.StageId=assignment.StageId AND stage.WorkflowVersion=2
+                  WHERE t.TenderId=@TenderId AND t.WorkflowVersion=2
+                  ORDER BY assignment.AssignedAtUtc DESC,assignment.AssignmentId DESC;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read())
+                        return;
+
+                    string stageName = Convert.ToString(reader["StageName"]);
+                    int assignedRoleId = Convert.ToInt32(reader["AssignedRoleId"], CultureInfo.InvariantCulture);
+                    object assignedUserId = reader["AssignedUserId"];
+                    int assignedDepartmentId = reader["DepartmentId"] == DBNull.Value
+                        ? 0
+                        : Convert.ToInt32(reader["DepartmentId"], CultureInfo.InvariantCulture);
+                    TenderPendingTaskInfo task = TenderPendingTaskCatalog.Find(stageName);
+                    if (task == null || !HasPermission(task.PermissionKey) || assignedRoleId != CurrentRoleId ||
+                        (assignedUserId != DBNull.Value &&
+                         Convert.ToInt32(assignedUserId, CultureInfo.InvariantCulture) != CurrentUserId) ||
+                        (task.PermissionKey == "tender.create.department" &&
+                         (!CurrentDepartmentId.HasValue || assignedDepartmentId != CurrentDepartmentId.Value)))
+                        return;
+
+                    string label = task.Label;
+                    string url = task.GetUrl(TenderId);
+                    if (String.Equals(stageName, "Final_JE_SubmitTender", StringComparison.Ordinal))
+                    {
+                        if (!DocumentWorkspaceStatus.Text.StartsWith("Verified", StringComparison.OrdinalIgnoreCase))
+                        {
+                            label = "Documents";
+                            url = "~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture) +
+                                "#tender-documents-section";
+                        }
+                        else if (BoqWorkspaceStatus.Text.StartsWith("Pending", StringComparison.OrdinalIgnoreCase))
+                        {
+                            label = "BOQ";
+                            url = "~/Pages/TenderDetails.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture) +
+                                "#tender-boq-section";
+                        }
+                        else if (GisWorkspaceStatus.Text.StartsWith("Pending", StringComparison.OrdinalIgnoreCase))
+                        {
+                            label = "GIS Map";
+                            url = "~/Pages/TenderForm.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture) +
+                                "&step=3";
+                        }
+                    }
+
+                    PendingTaskLink.Text = label;
+                    PendingTaskLink.NavigateUrl = ResolveUrl(url);
+                    PendingTaskPanel.Visible = true;
+                    if (String.Equals(stageName, "Final_Cell_InitialTenderDocumentVerification", StringComparison.Ordinal) &&
+                        HasPermission("tender.cell.verify"))
+                    {
+                        ImportantDatesLink.Text = "Important dates";
+                        ImportantDatesLink.NavigateUrl = ResolveUrl("~/Pages/TenderCellDates.aspx?id=" +
+                            TenderId.ToString(CultureInfo.InvariantCulture));
+                        ImportantDatesLink.Visible = true;
+                    }
+                }
+            }
+        }
+
+        private bool BindTakeBackSummary(SqlConnection connection)
+        {
+            if (!IsJeAdministrator || !IsFinalWorkflow) return false;
+            using (SqlCommand command = new SqlCommand(
+                @"SELECT s.StageName,s.StageOrder,s.StatusOnPending,t.CurrentStatus,
+                         role.RoleName,assigned.FullName AS AssignedOfficer,d.DepartmentName,
+                         initialStage.StageOrder AS InitialStageOrder,
+                         publishStage.StageOrder AS PublishStageOrder
+                  FROM dbo.Tender t
+                  INNER JOIN dbo.TenderWorkflowAssignments a
+                    ON a.TenderId=t.TenderId AND a.IsCurrent=1
+                  INNER JOIN dbo.WorkflowStages s ON s.StageId=a.StageId
+                  INNER JOIN dbo.Roles role ON role.RoleId=a.AssignedRoleId
+                  LEFT JOIN dbo.Users assigned ON assigned.UserId=a.AssignedUserId
+                  INNER JOIN dbo.Departments d ON d.DepartmentId=t.DepartmentId
+                  INNER JOIN dbo.WorkflowStages initialStage
+                    ON initialStage.WorkflowVersion=2 AND initialStage.IsActive=1
+                    AND initialStage.StageName=N'Final_JE_SubmitTender'
+                  INNER JOIN dbo.WorkflowStages publishStage
+                    ON publishStage.WorkflowVersion=2 AND publishStage.IsActive=1
+                    AND publishStage.StageName=N'Final_JE_PublishTender'
+                  WHERE t.TenderId=@TenderId AND t.WorkflowVersion=2 AND t.IsDeleted=0;",
+                connection))
+            {
+                ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (!reader.Read()) return false;
+                    string stage = Convert.ToString(reader["StageName"]);
+                    string status = Convert.ToString(reader["CurrentStatus"]);
+                    int stageOrder = Convert.ToInt32(reader["StageOrder"], CultureInfo.InvariantCulture);
+                    int initialOrder = Convert.ToInt32(reader["InitialStageOrder"], CultureInfo.InvariantCulture);
+                    int publishOrder = Convert.ToInt32(reader["PublishStageOrder"], CultureInfo.InvariantCulture);
+                    bool terminal = String.Equals(status, "Tender Published", StringComparison.OrdinalIgnoreCase) ||
+                        String.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                        status.IndexOf("cancel", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (stageOrder <= initialOrder || stageOrder >= publishOrder || terminal ||
+                        !String.Equals(status, Convert.ToString(reader["StatusOnPending"]), StringComparison.Ordinal))
+                        return false;
+
+                    string assignedOfficer = reader["AssignedOfficer"] == DBNull.Value
+                        ? "role queue" : Convert.ToString(reader["AssignedOfficer"]);
+                    CurrentAssignmentSummary.Text =
+                        "<p class=\"tender-assignment-summary\"><strong>Current stage:</strong> " +
+                        HttpUtility.HtmlEncode(stage) + " &nbsp; <strong>Assigned team:</strong> " +
+                        HttpUtility.HtmlEncode(Convert.ToString(reader["RoleName"])) + " — " +
+                        HttpUtility.HtmlEncode(Convert.ToString(reader["DepartmentName"])) +
+                        " &nbsp; <strong>Assigned officer:</strong> " +
+                        HttpUtility.HtmlEncode(assignedOfficer) + "</p>";
+                    return true;
+                }
+            }
+        }
+
+        private static string RequirementPreview(object value)
+        {
+            string text = value == null || value == DBNull.Value
+                ? String.Empty : Convert.ToString(value).Trim();
+            if (text.Length == 0) return "Not provided";
+            text = text.Replace("\r", " ").Replace("\n", " ");
+            if (text.Length > 145) text = text.Substring(0, 142).TrimEnd() + "...";
+            return HttpUtility.HtmlEncode(text);
+        }
+
+        protected void TakeBackTenderButton_Click(object sender, EventArgs e)
+        {
+            if (!RequireTenderAccess()) return;
+            if (!IsJeAdministrator)
+            {
+                ShowError("Only JE can take a tender back from another workflow team.");
+                return;
+            }
+
+            string reason = (TakeBackReasonText.Text ?? String.Empty).Trim();
+            if (reason.Length == 0 || reason.Length > 2000)
+            {
+                ShowError("Enter a take-back reason of 1 to 2,000 characters.");
+                return;
+            }
+
+            try
+            {
+                TenderFinalizedWorkflowService.RecallToJe(TenderId, CurrentUserId, CurrentRoleId,
+                    CurrentRoleCode, reason, Request.UserHostAddress);
+                Response.Redirect("~/Pages/TenderDetails.aspx?id=" +
+                    TenderId.ToString(CultureInfo.InvariantCulture) + "&recalled=1", false);
+                Context.ApplicationInstance.CompleteRequest();
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "JE tender take-back failed.", ex);
+                ShowError("The tender could not be taken back. Refresh the page and retry.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowError(ex.Message);
             }
         }
 
@@ -1840,6 +2226,41 @@ namespace DepartmentModule.Pages
 
             return (IsJeAdministrator || HasAnyRole("DepartmentOfficer")) &&
                 (IsDraft || String.Equals(TenderStatus, "Budget Revision Required", StringComparison.OrdinalIgnoreCase));
+        }
+
+        protected void ForwardTenderToCellButton_Click(object sender, EventArgs e)
+        {
+            if (!RequireTenderAccess()) return;
+            if (!IsJeAdministrator || !IsFinalWorkflow || !IsEditableDraft ||
+                !HasPermission("tender.create.department"))
+            {
+                ShowError("Only the assigned JE can forward a tender from its initial workflow stage.");
+                return;
+            }
+
+            try
+            {
+                TenderFinalizedWorkflowService.Transition(TenderId, CurrentUserId, CurrentRoleId,
+                    CurrentRoleCode, CurrentDepartmentId, "Final_JE_SubmitTender",
+                    "Pending Tender Cell Verification", String.Empty, null,
+                    "tender.create.department", Request.UserHostAddress,
+                    (connection, transaction, departmentId, previousStatus, newStatus) =>
+                        TenderFinalizedWorkflowService.EnsureInitialJeSubmissionReady(
+                            this, connection, transaction, TenderId));
+
+                Response.Redirect("~/Pages/TenderDetails.aspx?id=" +
+                    TenderId.ToString(CultureInfo.InvariantCulture) + "&workflowForwarded=1", false);
+                Context.ApplicationInstance.CompleteRequest();
+            }
+            catch (SqlException ex)
+            {
+                Trace.Warn("DepartmentModule", "JE could not forward the tender to Tender Cell.", ex);
+                ShowError("The tender could not be forwarded. Please retry or contact support.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowError(ex.Message);
+            }
         }
 
         private void ShowError(string text)

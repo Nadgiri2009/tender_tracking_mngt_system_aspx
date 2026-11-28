@@ -179,7 +179,13 @@ namespace DepartmentModule.Pages
                         BindTenderCatalog(connection, FinancialYearSelect, "SELECT FinancialYear FROM dbo.FinancialYears WHERE IsActive=1 ORDER BY StartDate DESC;", "Select Budgeting Financial Year");
                     }
 
-                    if (isEditing) LoadTenderForEdit();
+                    if (isEditing)
+                    {
+                        LoadTenderForEdit();
+                        if (!VerificationOnly && IsJeAdministrator &&
+                            String.Equals(Request.QueryString["step"], "3", StringComparison.Ordinal))
+                            WizardCurrentStep.Value = "3";
+                    }
                     else LoadRequirementDocuments();
                 }
                 catch (SqlException ex)
@@ -1723,6 +1729,13 @@ namespace DepartmentModule.Pages
                 if (command.ExecuteNonQuery() != 1)
                     throw new InvalidOperationException("The tender GIS location could not be saved.");
             }
+
+            string gisChangeDetails = "GeometryType=" +
+                (String.IsNullOrWhiteSpace(boundaryGeometryType) ? "Not set" : boundaryGeometryType) +
+                "; Image=" + (image != null ? "uploaded" : removeImage ? "removed" : "unchanged");
+            ModuleDb.AddAudit(connection, transaction, CurrentUserId,
+                exists ? "Update" : "Create", "TenderGisLocation", tenderId,
+                gisChangeDetails, Request.UserHostAddress);
         }
 
         private void SaveAdministrativeApprovals(SqlConnection connection, SqlTransaction transaction,
@@ -2211,8 +2224,9 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"INSERT INTO dbo.TenderWorkflowHistory
                             (TenderId,WorkflowVersion,StageId,PreviousStatus,NewStatus,ActionName,
-                             UserId,RoleId,DepartmentId,Remarks)
-                          VALUES(@TenderId,2,@StageId,NULL,N'Draft',N'Created',@UserId,@RoleId,@DepartmentId,@Remarks);",
+                             UserId,RoleId,DepartmentId,Remarks,PreviousStageName,NewStageName)
+                          VALUES(@TenderId,2,@StageId,NULL,N'Draft',N'Created',@UserId,@RoleId,@DepartmentId,
+                                 @Remarks,NULL,N'Final_JE_SubmitTender');",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, tenderId);
@@ -2619,7 +2633,7 @@ namespace DepartmentModule.Pages
                     (TenderId,RevisionNumber,ActionName,RevisionReason,TenderNumber,Title,Description,
                      EligibilityCriteria,DepartmentId,EstimatedAmount,TenderType,TenderMethod,TenderCategory,
                      TenderCategoryId,TenderSubcategoryId,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,
-                     SecurityDepositAmount,PublicationScheduledUtc,SubmissionStartDate,SubmissionDeadline,
+                     PublicationScheduledUtc,SubmissionStartDate,SubmissionDeadline,
                      TechnicalBidOpeningScheduledUtc,FinancialBidOpeningScheduledUtc,CurrentStatus,
                      ScopeOfWork,TechnicalRequirements,FinancialRequirements,AdditionalConditions,
                      TermsAndConditions,RevisedBy)
@@ -2629,7 +2643,7 @@ namespace DepartmentModule.Pages
                          @Action,@Reason,t.TenderNumber,t.Title,t.Description,t.EligibilityCriteria,
                          t.DepartmentId,t.EstimatedAmount,t.TenderType,t.TenderMethod,t.TenderCategory,
                          t.TenderCategoryId,t.TenderSubcategoryId,t.FinancialYear,t.EMDAmount,t.TenderDocumentFee,t.ProcessingFee,
-                         t.SecurityDepositAmount,t.PublicationScheduledUtc,t.SubmissionStartDate,t.SubmissionDeadline,
+                         t.PublicationScheduledUtc,t.SubmissionStartDate,t.SubmissionDeadline,
                          t.TechnicalBidOpeningScheduledUtc,t.FinancialBidOpeningScheduledUtc,t.CurrentStatus,
                          req.ScopeOfWork,req.TechnicalRequirements,req.FinancialRequirements,
                          req.AdditionalConditions,req.TermsAndConditions,@UserId

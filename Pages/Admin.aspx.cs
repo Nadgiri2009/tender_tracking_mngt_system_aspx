@@ -25,7 +25,8 @@ namespace DepartmentModule.Pages
         protected void Page_Load(object sender, EventArgs e)
         {
             if (!RequireJeAdministrator()) return;
-            if (!IsPostBack) LoadDashboard();
+            Response.Redirect(ResolveUrl("~/Pages/Tenders.aspx"), false);
+            Context.ApplicationInstance.CompleteRequest();
         }
 
         private void LoadDashboard()

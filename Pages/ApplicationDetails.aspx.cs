@@ -247,7 +247,7 @@ namespace DepartmentModule.Pages
                 }
             }
             return ContractorApplicationService.CanInternalUserView(connection, ApplicationId,
-                CurrentUserId, CurrentRoleId, CurrentRoleCode, CurrentDepartmentId);
+                CurrentUserId, CurrentRoleId, CurrentRoleCode);
         }
 
         private void BindRequirements(DataTable requirements, int applicationId)

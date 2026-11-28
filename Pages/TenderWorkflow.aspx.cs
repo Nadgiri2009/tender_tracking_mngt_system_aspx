@@ -210,6 +210,10 @@ namespace DepartmentModule.Pages
                          N'Final_Cell_InitialTenderDocumentVerification',N'Final_JE_CorrectTenderDocuments',
                          N'Final_Cell_CompleteSecondaryVerification',N'Final_Cell_ClearShortfall')";
                     break;
+                case "document-verification":
+                    filter = @" AND s.StageName IN
+                        (N'Final_Cell_InitialTenderDocumentVerification',N'Final_JE_CorrectTenderDocuments')";
+                    break;
                 case "shortfall":
                     filter = @" AND s.StageName IN
                         (N'Final_Cell_CreateShortfall',N'Final_JE_ApproveShortfall',
@@ -2032,9 +2036,9 @@ namespace DepartmentModule.Pages
                     using (SqlCommand command = new SqlCommand(
                         @"INSERT INTO dbo.TenderWorkflowHistory
                             (TenderId,WorkflowVersion,StageId,PreviousStatus,NewStatus,ActionName,
-                             UserId,RoleId,DepartmentId,Remarks)
+                             UserId,RoleId,DepartmentId,Remarks,PreviousStageName,NewStageName)
                           VALUES(@TenderId,2,@StageId,@PreviousStatus,@NewStatus,@ActionName,
-                                 @UserId,@RoleId,@DepartmentId,@Remarks);",
+                                 @UserId,@RoleId,@DepartmentId,@Remarks,@PreviousStage,@NewStage);",
                         connection, transaction))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -2046,6 +2050,8 @@ namespace DepartmentModule.Pages
                         ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
                         AddText(command, "@Remarks", SqlDbType.NVarChar, remarks, 2000);
+                        AddText(command, "@PreviousStage", SqlDbType.NVarChar, expectedStageName, 100);
+                        AddText(command, "@NewStage", SqlDbType.NVarChar, nextStageName, 100);
                         command.ExecuteNonQuery();
                     }
                     ModuleDb.AddAudit(connection, transaction, CurrentUserId, "WorkflowTransition", "Tender",

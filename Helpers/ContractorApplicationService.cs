@@ -437,7 +437,7 @@ namespace DepartmentModule.Helpers
         }
 
         public static bool CanInternalUserView(SqlConnection connection, int applicationId,
-            int userId, int roleId, string roleCode, int? departmentId)
+            int userId, int roleId, string roleCode)
         {
             bool isJe = IsJuniorEngineer(roleCode);
             bool isTenderCell = IsTenderCell(roleCode);
@@ -447,8 +447,7 @@ namespace DepartmentModule.Helpers
                   FROM dbo.TechnicalBid b
                   INNER JOIN dbo.Tender t ON t.TenderId=b.TenderId AND t.IsDeleted=0
                   WHERE b.TechnicalBidId=@ApplicationId
-                    AND ((@IsJE=1 AND @DepartmentId IS NOT NULL AND t.DepartmentId=@DepartmentId)
-                         OR (@IsCell=1 AND EXISTS
+                    AND (@IsJE=1 OR (@IsCell=1 AND EXISTS
                          (
                              SELECT 1 FROM dbo.TenderWorkflowAssignments a
                              WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
@@ -460,8 +459,6 @@ namespace DepartmentModule.Helpers
                 ModuleDb.AddParameter(command, "@ApplicationId", SqlDbType.Int, applicationId);
                 ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit, isJe);
                 ModuleDb.AddParameter(command, "@IsCell", SqlDbType.Bit, isTenderCell);
-                ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
-                    departmentId.HasValue ? (object)departmentId.Value : null);
                 ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, roleId);
                 ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, userId);
                 return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == 1;

@@ -70,6 +70,7 @@
     <Compile Include="Helpers\ContractorApplicationRules.cs" />
     <Compile Include="Helpers\ContractorApplicationService.cs" />
     <Compile Include="Helpers\TenderFinalizedWorkflowService.cs" />
+    <Compile Include="Helpers\TenderPendingTaskCatalog.cs" />
     <Compile Include="Helpers\TenderDocumentGenerator.cs" />
     <Compile Include="Helpers\TenderLifecycleFiles.cs" />
     <Compile Include="Helpers\TenderDateRules.cs" />

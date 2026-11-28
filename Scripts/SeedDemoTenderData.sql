@@ -149,7 +149,7 @@ BEGIN TRY
         CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,IsDeleted,TenderCategory,WorkflowVersion,
         BudgetInformation,TechnicalSanctionNumber,TechnicalSanctionAuthority,TechnicalSanctionDate,
         PreBidMeetingUtc,PreBidLocation,PreBidDetails,TechnicalBidOpeningScheduledUtc,
-        EligibilityCriteria,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,SecurityDepositAmount,
+        EligibilityCriteria,FinancialYear,EMDAmount,TenderDocumentFee,ProcessingFee,
         PublicationScheduledUtc,FinancialBidOpeningScheduledUtc,TenderCategoryId,TenderMethod,
         WizardCurrentStep,WizardCompletedStepsMask
     )
@@ -163,7 +163,7 @@ BEGIN TRY
         DATEADD(DAY,5,@Now),N'DEMO project site',N'Demonstration pre-bid details only.',
         DATEADD(DAY,30,@Now),N'DEMO eligibility criteria; verify all real requirements before procurement.',
         @FinancialYear,CONVERT(decimal(18,2),d.EstimatedAmount * 0.02),500.00,100.00,
-        CONVERT(decimal(18,2),d.EstimatedAmount * 0.05),DATEADD(DAY,-7,@Now),
+        DATEADD(DAY,-7,@Now),
         DATEADD(DAY,32,@Now),@TenderCategoryId,N'Online',0,127
     FROM @Seeds d
     INNER JOIN dbo.Departments dep ON dep.DepartmentName = d.DepartmentName AND dep.IsActive = 1

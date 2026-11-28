@@ -1,5 +1,8 @@
 <%@ Page Title="Tender Details" Language="C#" MasterPageFile="~/Pages/Site.Master" AutoEventWireup="true" CodeBehind="TenderDetails.aspx.cs" Inherits="DepartmentModule.Pages.TenderDetails" %>
 <asp:Content ID="Title" ContentPlaceHolderID="TitleContent" runat="server"><asp:Literal ID="PageTitle" runat="server" /></asp:Content>
+<asp:Content ID="GISHead" ContentPlaceHolderID="HeadContent" runat="server">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</asp:Content>
 <asp:Content ID="Main" ContentPlaceHolderID="MainContent" runat="server">
     <div class="page-heading">
         <div><h1><asp:Literal ID="TenderTitle" runat="server" /></h1>
@@ -7,6 +10,10 @@
         <div class="row">
             <asp:HyperLink ID="ApplyTenderLink" runat="server" CssClass="button" Visible="false">Apply for this tender</asp:HyperLink>
             <asp:HyperLink ID="FinalWorkflowLink" runat="server" NavigateUrl="~/Pages/TenderWorkflow.aspx" CssClass="button secondary" Visible="false">Open finalized workflow</asp:HyperLink>
+            <asp:Button ID="ForwardTenderToCellButton" runat="server"
+                Text="Verify Documents &amp; Forward to Next Team" CssClass="button" Visible="false"
+                CausesValidation="false" OnClick="ForwardTenderToCellButton_Click"
+                OnClientClick="return window.confirm('Forward this verified tender to Tender Cell?');" />
             <asp:HyperLink ID="EditTenderLink" runat="server" CssClass="button secondary" Visible="false">Edit draft</asp:HyperLink>
             <asp:Button ID="DeleteTenderButton" runat="server" Text="Delete draft" CssClass="button danger" Visible="false"
                 OnClick="DeleteTenderButton_Click" OnClientClick="return confirm('Remove this initial-stage draft from active tender records? Its workflow and audit history will be retained.');" />
@@ -15,6 +22,47 @@
     </div>
     <asp:Literal ID="ApplicationMessage" runat="server" />
     <asp:Literal ID="Message" runat="server" />
+    <asp:Panel ID="TenderWorkspaceLayout" runat="server" CssClass="tender-workspace-layout">
+        <asp:Panel ID="TenderWorkspaceNav" runat="server" CssClass="tender-workspace-nav" Visible="false">
+            <h2>Selected tender</h2>
+            <asp:Panel ID="PendingTaskPanel" runat="server" CssClass="pending-task-callout" Visible="false">
+                <span>Pending action</span>
+                <asp:HyperLink ID="PendingTaskLink" runat="server" />
+            </asp:Panel>
+            <a href="#tender-documents-section" class="tender-workspace-link">
+                <span>Document</span><strong><asp:Literal ID="DocumentWorkspaceStatus" runat="server" /></strong>
+            </a>
+            <a href="#tender-boq-section" class="tender-workspace-link">
+                <span>BOQ</span><strong><asp:Literal ID="BoqWorkspaceStatus" runat="server" /></strong>
+            </a>
+            <a href="#GisLocationPanel" class="tender-workspace-link">
+                <span>GIS Map</span><strong><asp:Literal ID="GisWorkspaceStatus" runat="server" /></strong>
+            </a>
+            <asp:HyperLink ID="ImportantDatesLink" runat="server" CssClass="tender-workspace-link" Visible="false" />
+            <asp:HyperLink ID="WorkflowOverviewLink" runat="server" CssClass="tender-workspace-link" />
+        </asp:Panel>
+        <div class="tender-workspace-content">
+            <section class="tender-workspace-summary" aria-label="Tender summary">
+                <div><span>Tender reference</span><strong><asp:Literal ID="WorkspaceTenderNumber" runat="server" /></strong></div>
+                <div><span>Tender title</span><strong><asp:Literal ID="WorkspaceTenderTitle" runat="server" /></strong></div>
+                <div><span>Department</span><strong><asp:Literal ID="WorkspaceDepartment" runat="server" /></strong></div>
+                <div><span>Current workflow stage</span><strong><asp:Literal ID="WorkspaceStage" runat="server" /></strong></div>
+                <div><span>Overall tender status</span><strong><asp:Literal ID="WorkspaceStatus" runat="server" /></strong></div>
+            </section>
+            <asp:Panel ID="TakeBackTenderPanel" runat="server" CssClass="card tender-takeback" Visible="false">
+                <div>
+                    <h2>Take Back Tender</h2>
+                    <p class="help">This returns the tender to JE's initial stage. Existing approvals and workflow history remain unchanged.</p>
+                    <asp:Literal ID="CurrentAssignmentSummary" runat="server" />
+                </div>
+                <div class="field">
+                    <label for="TakeBackReasonText">Reason / remarks (required)</label>
+                    <asp:TextBox ID="TakeBackReasonText" runat="server" TextMode="MultiLine" Rows="2" MaxLength="2000" />
+                </div>
+                <asp:Button ID="TakeBackTenderButton" runat="server" Text="Take Back Tender"
+                    CssClass="button danger" CausesValidation="false" OnClick="TakeBackTenderButton_Click"
+                    OnClientClick="return window.confirm('Take this tender back from the assigned team and return it to JE? Previous approvals and history will be retained.');" />
+            </asp:Panel>
     <section class="card tender-workflow-tracker" aria-labelledby="workflowTrackerHeading">
         <div class="workflow-tracker-heading">
             <div>
@@ -89,7 +137,6 @@
             <div><dt>EMD</dt><dd><asp:Literal ID="EMDAmount" runat="server" /></dd></div>
             <div><dt>Tender document fee</dt><dd><asp:Literal ID="TenderDocumentFee" runat="server" /></dd></div>
             <div><dt>Processing fee</dt><dd><asp:Literal ID="ProcessingFee" runat="server" /></dd></div>
-            <div><dt>Security deposit</dt><dd><asp:Literal ID="SecurityDepositAmount" runat="server" /></dd></div>
             <div><dt>Planned publication</dt><dd><asp:Literal ID="PublicationScheduledDate" runat="server" /></dd></div>
             <div><dt>Publication Date</dt><dd><asp:Literal ID="PublicationDate" runat="server" /></dd></div>
             <div><dt>Approved publication period (IST)</dt><dd><asp:Literal ID="PublicationPeriod" runat="server" /></dd></div>
@@ -105,40 +152,67 @@
             <div><dt>Created Date</dt><dd><asp:Literal ID="CreatedDate" runat="server" /></dd></div>
         </dl>
     </section>
-    <section class="card">
-        <h2>Tender requirements and conditions</h2>
-        <p><strong>Scope of work</strong><br /><asp:Literal ID="ScopeOfWork" runat="server" /></p>
-        <asp:Panel ID="ScopeOfWorkAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
-            <asp:Literal ID="ScopeOfWorkAttachmentStatus" runat="server" Text="No file attached." />
-            <asp:HyperLink ID="ScopeOfWorkAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
-            <asp:HyperLink ID="ScopeOfWorkAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
-                ToolTip="Download Scope of Work document" aria-label="Download Scope of Work document">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
-            </asp:HyperLink>
-        </asp:Panel>
-        <p><strong>Technical requirements</strong><br /><asp:Literal ID="TechnicalRequirements" runat="server" /></p>
-        <asp:Panel ID="TechnicalRequirementsAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
-            <asp:Literal ID="TechnicalRequirementsAttachmentStatus" runat="server" Text="No file attached." />
-            <asp:HyperLink ID="TechnicalRequirementsAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
-            <asp:HyperLink ID="TechnicalRequirementsAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
-                ToolTip="Download Technical Requirements document" aria-label="Download Technical Requirements document">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
-            </asp:HyperLink>
-        </asp:Panel>
-        <p><strong>Financial requirements</strong><br /><asp:Literal ID="FinancialRequirements" runat="server" /></p>
-        <asp:Panel ID="FinancialRequirementsAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
-            <asp:Literal ID="FinancialRequirementsAttachmentStatus" runat="server" Text="No file attached." />
-            <asp:HyperLink ID="FinancialRequirementsAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
-            <asp:HyperLink ID="FinancialRequirementsAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
-                ToolTip="Download Financial Requirements document" aria-label="Download Financial Requirements document">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
-            </asp:HyperLink>
-        </asp:Panel>
-        <p><strong>Additional conditions</strong><br /><asp:Literal ID="AdditionalConditions" runat="server" /></p>
-        <p><strong>Terms and conditions</strong><br /><asp:Literal ID="TermsAndConditions" runat="server" /></p>
+    <section class="card tender-requirements">
+        <div class="tender-details-heading">
+            <div><span class="role-section-kicker">TENDER REQUIREMENTS</span><h2>Tender requirements and conditions</h2></div>
+        </div>
+        <div class="tender-requirement-grid">
+            <article class="tender-requirement-card">
+                <span class="requirement-card-icon" aria-hidden="true">01</span><h3>Scope of work</h3>
+                <p class="requirement-preview"><asp:Literal ID="ScopeOfWorkPreview" runat="server" /></p>
+                <details><summary>Full scope details</summary><div class="requirement-full-text"><asp:Literal ID="ScopeOfWork" runat="server" /></div></details>
+                <asp:Panel ID="ScopeOfWorkAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
+                    <asp:Literal ID="ScopeOfWorkAttachmentStatus" runat="server" Text="No file attached." />
+                    <asp:HyperLink ID="ScopeOfWorkAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+                    <asp:HyperLink ID="ScopeOfWorkAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
+                        ToolTip="Download Scope of Work document" aria-label="Download Scope of Work document">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+                    </asp:HyperLink>
+                </asp:Panel>
+            </article>
+            <article class="tender-requirement-card">
+                <span class="requirement-card-icon" aria-hidden="true">02</span><h3>Technical requirements</h3>
+                <p class="requirement-preview"><asp:Literal ID="TechnicalRequirementsPreview" runat="server" /></p>
+                <details><summary>Full technical details</summary><div class="requirement-full-text"><asp:Literal ID="TechnicalRequirements" runat="server" /></div></details>
+                <asp:Panel ID="TechnicalRequirementsAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
+                    <asp:Literal ID="TechnicalRequirementsAttachmentStatus" runat="server" Text="No file attached." />
+                    <asp:HyperLink ID="TechnicalRequirementsAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+                    <asp:HyperLink ID="TechnicalRequirementsAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
+                        ToolTip="Download Technical Requirements document" aria-label="Download Technical Requirements document">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+                    </asp:HyperLink>
+                </asp:Panel>
+            </article>
+            <article class="tender-requirement-card">
+                <span class="requirement-card-icon" aria-hidden="true">03</span><h3>Financial requirements</h3>
+                <p class="requirement-preview"><asp:Literal ID="FinancialRequirementsPreview" runat="server" /></p>
+                <details><summary>Full financial details</summary><div class="requirement-full-text"><asp:Literal ID="FinancialRequirements" runat="server" /></div></details>
+                <asp:Panel ID="FinancialRequirementsAttachmentPanel" runat="server" CssClass="tender-requirement-attachment">
+                    <asp:Literal ID="FinancialRequirementsAttachmentStatus" runat="server" Text="No file attached." />
+                    <asp:HyperLink ID="FinancialRequirementsAttachmentViewLink" runat="server" Target="_blank" rel="noopener" Visible="false" />
+                    <asp:HyperLink ID="FinancialRequirementsAttachmentDownloadLink" runat="server" CssClass="icon-action" Visible="false"
+                        ToolTip="Download Financial Requirements document" aria-label="Download Financial Requirements document">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 17v3h16v-3" /></svg>
+                    </asp:HyperLink>
+                </asp:Panel>
+            </article>
+            <article class="tender-requirement-card">
+                <span class="requirement-card-icon" aria-hidden="true">04</span><h3>Additional conditions</h3>
+                <p class="requirement-preview"><asp:Literal ID="AdditionalConditionsPreview" runat="server" /></p>
+                <details><summary>Full condition details</summary><div class="requirement-full-text"><asp:Literal ID="AdditionalConditions" runat="server" /></div></details>
+            </article>
+            <article class="tender-requirement-card">
+                <span class="requirement-card-icon" aria-hidden="true">05</span><h3>Terms and conditions</h3>
+                <p class="requirement-preview"><asp:Literal ID="TermsAndConditionsPreview" runat="server" /></p>
+                <details><summary>Full terms</summary><div class="requirement-full-text"><asp:Literal ID="TermsAndConditions" runat="server" /></div></details>
+            </article>
+        </div>
     </section>
-    <asp:Panel ID="GisLocationPanel" runat="server" CssClass="card" Visible="false">
-        <h2>GIS location details</h2>
+    <asp:Panel ID="GisLocationPanel" runat="server" CssClass="card" Visible="false" ClientIDMode="Static">
+        <h2>GIS Map and location details</h2>
+        <asp:HiddenField ID="GisMapGeometryJson" runat="server" ClientIDMode="Static" />
+        <div id="TenderSavedGisMap" class="gis-location-map" role="img" aria-label="Saved tender GIS boundary map"></div>
+        <p id="TenderSavedGisMapStatus" class="help" role="status" aria-live="polite"></p>
         <p><strong>Location</strong><br /><asp:Literal ID="GisLocationName" runat="server" /></p>
         <div class="row">
             <p><strong>Centroid latitude</strong><br /><asp:Literal ID="GisLatitude" runat="server" /></p>
@@ -182,7 +256,7 @@
         </div>
     </asp:Panel>
     <section id="tender-boq-section" class="card">
-        <h2>Bill of Quantities</h2>
+        <h2>Bill of Quantities <span class="tender-section-status"><asp:Literal ID="BoqSectionStatus" runat="server" /></span></h2>
         <div class="table-wrap">
             <asp:GridView ID="BoqGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No BOQ items added yet." OnRowCommand="BoqGrid_RowCommand">
                 <Columns>
@@ -373,12 +447,14 @@
             <p class="help">Workflow status changes are validated against the current status and the signed-in role before being saved.</p>
         </section>
         <asp:Panel ID="BudgetOpinionHistoryPanel" runat="server" CssClass="card">
-            <h2>Financial budget-opinion history</h2>
-            <div class="table-wrap"><asp:GridView ID="BudgetOpinionsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No budget opinions have been recorded.">
+            <h2>Financial budget-opinion history <span class="tender-section-status"><asp:Literal ID="BudgetOpinionStatus" runat="server" /></span></h2>
+            <div class="table-wrap"><asp:GridView ID="BudgetOpinionsGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="Status: Pending — the JE budget opinion has not been submitted.">
                 <Columns>
-                    <asp:BoundField DataField="Opinion" HeaderText="Opinion" />
+                    <asp:TemplateField HeaderText="Status"><ItemTemplate>
+                        <%# String.Equals(Convert.ToString(Eval("Opinion")), "Positive", StringComparison.OrdinalIgnoreCase) ? "Approved" : "Rejected" %>
+                    </ItemTemplate></asp:TemplateField>
                     <asp:BoundField DataField="ApprovedAmount" HeaderText="Approved amount" DataFormatString="₹{0:N2}" NullDisplayText="—" />
-                    <asp:BoundField DataField="ActionTakenBy" HeaderText="Approved by" />
+                    <asp:BoundField DataField="ActionTakenBy" HeaderText="Responsible officer" />
                     <asp:BoundField DataField="OpinionAtUtc" HeaderText="Date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                     <asp:BoundField DataField="Remarks" HeaderText="Remarks" />
                 </Columns>
@@ -391,16 +467,64 @@
             </div>
             <div class="table-wrap"><asp:GridView ID="HistoryGrid" runat="server" AutoGenerateColumns="false" GridLines="None" CssClass="compact-grid" EmptyDataText="No workflow actions have been recorded.">
                 <Columns>
-                    <asp:BoundField DataField="ApprovalStage" HeaderText="Stage" />
+                    <asp:BoundField DataField="PreviousStageName" HeaderText="Previous stage" NullDisplayText="—" />
+                    <asp:BoundField DataField="NewStageName" HeaderText="New stage" NullDisplayText="—" />
                     <asp:BoundField DataField="PreviousStatus" HeaderText="Previous status" />
                     <asp:BoundField DataField="NewStatus" HeaderText="New status" />
                     <asp:BoundField DataField="Status" HeaderText="Action" />
                     <asp:BoundField DataField="ActionTakenBy" HeaderText="Action taken by" />
                     <asp:BoundField DataField="RoleAtAction" HeaderText="Role" />
+                    <asp:BoundField DataField="ActionSource" HeaderText="Source" />
                     <asp:BoundField DataField="Remarks" HeaderText="Remarks" />
                     <asp:BoundField DataField="ApprovalDate" HeaderText="Date" DataFormatString="{0:dd MMM yyyy HH:mm}" />
                 </Columns>
             </asp:GridView></div>
         </section>
     </asp:Panel>
+        </div>
+    </asp:Panel>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="text/javascript">
+        (function () {
+            var mapElement = document.getElementById("TenderSavedGisMap");
+            var geometryField = document.getElementById("GisMapGeometryJson");
+            var status = document.getElementById("TenderSavedGisMapStatus");
+            if (!mapElement || !geometryField || !status) return;
+            if (!window.L) {
+                mapElement.hidden = true;
+                status.textContent = "The map library could not be loaded. Saved geometry is still available below.";
+                return;
+            }
+            if (!geometryField.value) {
+                mapElement.hidden = true;
+                status.textContent = "No saved GIS boundary is available for this tender.";
+                return;
+            }
+            try {
+                var geometry = JSON.parse(geometryField.value);
+                var map = L.map(mapElement, { scrollWheelZoom: false });
+                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 19,
+                    attribution: "&copy; OpenStreetMap contributors"
+                }).addTo(map);
+                var feature = geometry.type === "Feature" ? geometry : {
+                    type: "Feature",
+                    properties: {},
+                    geometry: geometry
+                };
+                var boundary = L.geoJSON(feature, {
+                    style: { color: "#6d2c68", weight: 3, fillOpacity: 0.18 },
+                    pointToLayer: function (item, latlng) {
+                        return L.circleMarker(latlng, { radius: 6, color: "#6d2c68", fillOpacity: 0.85 });
+                    }
+                }).addTo(map);
+                if (boundary.getBounds().isValid()) map.fitBounds(boundary.getBounds(), { padding: [20, 20] });
+                else map.setView([17.6599, 75.9064], 12);
+                status.textContent = "Saved GIS geometry is shown on the map.";
+            } catch (error) {
+                mapElement.hidden = true;
+                status.textContent = "The saved GIS geometry could not be displayed. Contact support.";
+            }
+        }());
+    </script>
 </asp:Content>

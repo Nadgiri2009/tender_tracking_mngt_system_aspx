@@ -9,7 +9,7 @@ namespace DepartmentModule.Pages
 {
     public partial class Applications : ModulePage
     {
-        protected Literal Message;
+        protected Literal Message, ApplicationsScopeText;
         protected GridView ApplicationsGrid, NotificationsGrid;
         protected HyperLink WorkflowLink;
         protected TextBox ApplicationSearchText;
@@ -18,9 +18,12 @@ namespace DepartmentModule.Pages
 
         protected void Page_Init(object sender, EventArgs e)
         {
-            bool isJe = HasAnyRole("Junior Engineer (JE)");
+            bool isJe = IsJeAdministrator;
             if (!RequireRoles("Junior Engineer (JE)", "Tender Cell")) return;
             if (!RequirePermission(isJe ? "tender.primary.verify" : "tender.cell.verify")) return;
+            ApplicationsScopeText.Text = isJe
+                ? "All applications across every tender, including drafts."
+                : "Applications for tenders currently assigned to your role and department.";
             BindApplications();
         }
 
@@ -65,7 +68,7 @@ namespace DepartmentModule.Pages
                           WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
                           ORDER BY a.AssignmentId DESC
                       ) currentStage
-                      WHERE COALESCE(latest.NewStatus,b.Status)<>N'Draft'
+                      WHERE (@IsJE=1 OR COALESCE(latest.NewStatus,b.Status)<>N'Draft')
                         AND (@ApplicationStatus=N'' OR COALESCE(latest.NewStatus,b.Status)=@ApplicationStatus)
                         AND (@SearchPattern IS NULL
                              OR t.TenderNumber LIKE @SearchPattern OR t.Title LIKE @SearchPattern
@@ -74,22 +77,23 @@ namespace DepartmentModule.Pages
                              OR CONVERT(nvarchar(20),b.TechnicalBidId) LIKE @SearchPattern
                              OR (N'TAPP-' + CONVERT(nvarchar(4),YEAR(b.SubmittedDate)) + N'-' +
                                  RIGHT(N'000000' + CONVERT(nvarchar(20),b.TechnicalBidId),6)) LIKE @SearchPattern)
-                        AND EXISTS
+                        AND
                         (
-                            SELECT 1 FROM dbo.TenderWorkflowAssignments a
-                            WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
-                              AND a.AssignedRoleId=@RoleId
-                              AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                              AND a.DepartmentId=t.DepartmentId
-                              AND (@IsJE=0 OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))
+                            @IsJE=1
+                            OR EXISTS
+                            (
+                                SELECT 1 FROM dbo.TenderWorkflowAssignments a
+                                WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
+                                  AND a.AssignedRoleId=@RoleId
+                                  AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
+                                  AND a.DepartmentId=t.DepartmentId
+                            )
                         )
                       ORDER BY b.SubmittedDate DESC,b.TechnicalBidId DESC;", connection))
                 {
                     ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                     ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                    ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit, HasAnyRole("Junior Engineer (JE)"));
-                    ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
-                        CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
+                    ModuleDb.AddParameter(command, "@IsJE", SqlDbType.Bit, IsJeAdministrator);
                     string search = (ApplicationSearchText.Text ?? String.Empty).Trim();
                     ModuleDb.AddParameter(command, "@SearchPattern", SqlDbType.NVarChar,
                         search.Length == 0 ? null : "%" + search + "%", 240);
@@ -105,7 +109,7 @@ namespace DepartmentModule.Pages
             }
             catch (SqlException ex)
             {
-                Trace.Warn("DepartmentModule", "Assigned contractor applications could not be loaded.", ex);
+                Trace.Warn("DepartmentModule", "Authorized contractor applications could not be loaded.", ex);
                 Message.Text = "<div class=\"message\">The application queue could not be loaded. Please retry or contact support.</div>";
             }
         }
