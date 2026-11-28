@@ -2204,7 +2204,7 @@ namespace DepartmentModule.Pages
                         ModuleDb.AddParameter(command, "@StageId", SqlDbType.Int, initialStageId);
                         ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, jeRoleId);
                         ModuleDb.AddParameter(command, "@AssignedUserId", SqlDbType.Int,
-                            HasAnyRole("Junior Engineer (JE)") ? (object)CurrentUserId : null);
+                            IsJeAdministrator ? (object)CurrentUserId : null);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int, departmentId);
                         command.ExecuteNonQuery();
                     }

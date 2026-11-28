@@ -163,7 +163,7 @@ namespace DepartmentModule.Pages
                                         OR
                                         (@IsContractor=0
                                          AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                                         AND (@IsDepartmentScopedRole=0 OR
+                                         AND (@IsDepartmentScopedRole=0 OR a.AssignedUserId=@UserId OR
                                               (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId)))
                                     )
                                 )
@@ -180,7 +180,7 @@ namespace DepartmentModule.Pages
                     ModuleDb.AddParameter(command, "@IsTenderCell", SqlDbType.Bit, IsTenderCell);
                     ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                     ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                    ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit, false);
+                    ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit, IsJeAdministrator);
                     ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                         CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
                     using (SqlDataAdapter adapter = new SqlDataAdapter(command))
@@ -271,7 +271,7 @@ namespace DepartmentModule.Pages
                                  (a.AssignedRoleId=@RoleId AND
                                   ((@IsContractor=1 AND a.AssignedUserId=@UserId)
                                    OR (@IsContractor=0 AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                                       AND (@IsDepartmentScopedRole=0 OR
+                                       AND (@IsDepartmentScopedRole=0 OR a.AssignedUserId=@UserId OR
                                             (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))))));", connection))
                     {
                         ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
@@ -279,7 +279,7 @@ namespace DepartmentModule.Pages
                         ModuleDb.AddParameter(command, "@IsContractor", SqlDbType.Bit, HasAnyRole("ExternalBidder"));
                         ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                         ModuleDb.AddParameter(command, "@UserId", SqlDbType.Int, CurrentUserId);
-                        ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit, false);
+                        ModuleDb.AddParameter(command, "@IsDepartmentScopedRole", SqlDbType.Bit, IsJeAdministrator);
                         ModuleDb.AddParameter(command, "@DepartmentId", SqlDbType.Int,
                             CurrentDepartmentId.HasValue ? (object)CurrentDepartmentId.Value : null);
                         using (SqlDataReader reader = command.ExecuteReader())
@@ -301,12 +301,14 @@ namespace DepartmentModule.Pages
                             CurrentShortfallId = reader["ShortfallId"] == DBNull.Value
                                 ? (long?)null : Convert.ToInt64(reader["ShortfallId"], CultureInfo.InvariantCulture);
                             bool assignedToCurrentRole = Convert.ToInt32(reader["AssignedRoleId"]) == CurrentRoleId;
-                            bool assignedToCurrentUser = reader["AssignedUserId"] == DBNull.Value ||
+                            bool hasExplicitCurrentUserAssignment = reader["AssignedUserId"] != DBNull.Value &&
                                 Convert.ToInt32(reader["AssignedUserId"]) == CurrentUserId;
+                            bool assignedToCurrentUser = reader["AssignedUserId"] == DBNull.Value ||
+                                hasExplicitCurrentUserAssignment;
                             bool assignedToCurrentDepartment = CurrentDepartmentId.HasValue &&
                                 Convert.ToInt32(reader["DepartmentId"]) == CurrentDepartmentId.Value;
                             bool canAct = assignedToCurrentRole && assignedToCurrentUser &&
-                                (IsJeAdministrator || !HasAnyRole("Junior Engineer (JE)") ||
+                                (!IsJeAdministrator || hasExplicitCurrentUserAssignment ||
                                  assignedToCurrentDepartment);
                             SubmitDraftPanel.Visible = canAct && stageName == "Final_JE_SubmitTender" &&
                                 HasPermission("tender.create.department");
@@ -993,10 +995,12 @@ namespace DepartmentModule.Pages
                         }
                     }
 
+                    bool explicitlyAssignedToCurrentUser = assignedUserId.HasValue &&
+                        assignedUserId.Value == CurrentUserId;
                     if (assignedRoleId != CurrentRoleId ||
-                        (assignedUserId.HasValue && assignedUserId.Value != CurrentUserId) ||
-                        (isJeReview && (!CurrentDepartmentId.HasValue ||
-                            CurrentDepartmentId.Value != departmentId)))
+                        (assignedUserId.HasValue && !explicitlyAssignedToCurrentUser) ||
+                        (isJeReview && !explicitlyAssignedToCurrentUser &&
+                            (!CurrentDepartmentId.HasValue || CurrentDepartmentId.Value != departmentId)))
                         throw new InvalidOperationException("The tender is not assigned to your role, user, or department.");
 
                     if (status == "Verified")
@@ -1504,7 +1508,8 @@ namespace DepartmentModule.Pages
                         AND a.AssignedRoleId=@RoleId AND s.StageName=@StageName
                         AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
                         AND a.ShortfallId IS NOT NULL
-                        AND (@IsJE=0 OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId));";
+                        AND (@IsJE=0 OR a.AssignedUserId=@UserId
+                             OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId));";
                 ModuleDb.AddParameter(command, "@TenderId", SqlDbType.Int, TenderId);
                 ModuleDb.AddParameter(command, "@RoleId", SqlDbType.Int, CurrentRoleId);
                 ModuleDb.AddParameter(command, "@StageName", SqlDbType.NVarChar, stageName, 80);
@@ -1907,9 +1912,11 @@ namespace DepartmentModule.Pages
                             stageId = Convert.ToInt32(reader["StageId"]);
                         }
                     }
+                    bool explicitlyAssignedToCurrentUser = assignedUserId.HasValue &&
+                        assignedUserId.Value == CurrentUserId;
                     if (assignedRoleId != CurrentRoleId ||
-                        (assignedUserId.HasValue && assignedUserId.Value != CurrentUserId) ||
-                        (HasAnyRole("Junior Engineer (JE)") &&
+                        (assignedUserId.HasValue && !explicitlyAssignedToCurrentUser) ||
+                        (IsJeAdministrator && !explicitlyAssignedToCurrentUser &&
                          (!CurrentDepartmentId.HasValue || CurrentDepartmentId.Value != departmentId)))
                         throw new InvalidOperationException("The tender is not assigned to your role, user, or department.");
 
@@ -2094,7 +2101,7 @@ namespace DepartmentModule.Pages
                         AND s.StageName=@StageName AND t.CurrentStatus=s.StatusOnPending
                         AND a.AssignedRoleId=@RoleId
                         AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                        AND (@Role<>N'Junior Engineer (JE)'
+                        AND (@Role<>N'Junior Engineer (JE)' OR a.AssignedUserId=@UserId
                              OR (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId
                                  AND t.DepartmentId=@DepartmentId));",
                     connection, transaction))

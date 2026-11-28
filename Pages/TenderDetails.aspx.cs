@@ -123,8 +123,10 @@ namespace DepartmentModule.Pages
                                            INNER JOIN dbo.WorkflowStages ws ON ws.StageId=a.StageId
                                            WHERE a.TenderId=t.TenderId AND a.IsCurrent=1
                                              AND ws.StageName=N'Final_JE_SubmitTender'
-                                             AND @DepartmentId IS NOT NULL
-                                             AND a.DepartmentId=@DepartmentId)))
+                                             AND a.AssignedRoleId=@RoleId
+                                             AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@CurrentUserId)
+                                             AND (a.AssignedUserId=@CurrentUserId OR
+                                                  (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId)))))
                                      THEN 1 ELSE 0 END AS bit) AS IsEditableDraft,
                                  CAST(CASE WHEN t.WorkflowVersion=2
                                       AND t.CurrentStatus=N'Pending JE Document Correction'
@@ -142,8 +144,9 @@ namespace DepartmentModule.Pages
                                             AND (correctionAssignment.AssignedUserId IS NULL
                                                  OR correctionAssignment.AssignedUserId=@CurrentUserId)
                                             AND correctionAssignment.DepartmentId=t.DepartmentId
-                                            AND @DepartmentId IS NOT NULL
-                                            AND correctionAssignment.DepartmentId=@DepartmentId
+                                            AND (correctionAssignment.AssignedUserId=@CurrentUserId OR
+                                                 (@DepartmentId IS NOT NULL
+                                                  AND correctionAssignment.DepartmentId=@DepartmentId))
                                             AND correctionStage.StageName=N'Final_JE_CorrectTenderDocuments'
                                             AND documentShortfall.ResolutionStatus=N'Open'
                                             AND documentShortfall.DeadlineAtUtc>=SYSUTCDATETIME()
@@ -199,7 +202,8 @@ namespace DepartmentModule.Pages
                                             AND assigned.AssignedRoleId=@RoleId
                                             AND (assigned.AssignedUserId IS NULL OR assigned.AssignedUserId=@CurrentUserId)
                                             AND assigned.DepartmentId=t.DepartmentId
-                                            AND (@DepartmentId IS NULL OR assigned.DepartmentId=@DepartmentId)))
+                                            AND (assigned.AssignedUserId=@CurrentUserId OR @DepartmentId IS NULL
+                                                 OR assigned.DepartmentId=@DepartmentId)))
                                      OR (t.WorkflowVersion=2 AND @CanMonitor=1
                                          AND @DepartmentId IS NOT NULL AND t.DepartmentId=@DepartmentId)
                                      OR (t.WorkflowVersion=2 AND EXISTS
@@ -228,6 +232,7 @@ namespace DepartmentModule.Pages
                         {
                             if (!reader.Read())
                             {
+                                reader.Close();
                                 DenyTenderAccess(connection);
                                 return;
                             }
@@ -334,11 +339,11 @@ namespace DepartmentModule.Pages
                 bool canResumeJeSubmission = IsFinalWorkflow && IsEditableDraft &&
                     HasPermission("tender.create.department");
                 FinalWorkflowLink.Text = canResumeJeSubmission
-                    ? "Resume JE review and forward to Tender Cell"
+                    ? "Verify Documents & Forward to Next Team"
                     : "Open finalized workflow";
                 FinalWorkflowLink.CssClass = canResumeJeSubmission ? "button" : "button secondary";
                 FinalWorkflowLink.ToolTip = canResumeJeSubmission
-                    ? "Resume the JE readiness checklist. The forwarding action is available after the required checks."
+                    ? "Open the assigned JE review, complete document verification, and forward through the configured next workflow stage."
                     : "Open the tender's workflow stages and history.";
                 FinalWorkflowLink.NavigateUrl = "~/Pages/TenderWorkflow.aspx?id=" + TenderId.ToString(CultureInfo.InvariantCulture);
                 BudgetOpinionHistoryPanel.Visible = CurrentUserId > 0 && !HasAnyRole("Contractor");
@@ -1381,7 +1386,8 @@ namespace DepartmentModule.Pages
                     AND t.CurrentStatus=N'Pending JE Document Correction'
                     AND a.AssignedRoleId=@RoleId
                     AND (a.AssignedUserId IS NULL OR a.AssignedUserId=@UserId)
-                    AND @DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId
+                    AND (a.AssignedUserId=@UserId OR
+                         (@DepartmentId IS NOT NULL AND a.DepartmentId=@DepartmentId))
                     AND s.StageName=N'Final_JE_CorrectTenderDocuments'
                     AND sf.ResolutionStatus=N'Open'
                     AND sf.DeadlineAtUtc>=SYSUTCDATETIME();", connection, transaction))
@@ -1829,8 +1835,7 @@ namespace DepartmentModule.Pages
             {
                 if (!IsDraft) return false;
                 if (HasPermission("tenders.manage.all")) return true;
-                return HasPermission("tender.create.department") && CurrentDepartmentId.HasValue &&
-                    CurrentDepartmentId.Value == TenderDepartmentId;
+                return HasPermission("tender.create.department") && IsEditableDraft;
             }
 
             return (IsJeAdministrator || HasAnyRole("DepartmentOfficer")) &&
